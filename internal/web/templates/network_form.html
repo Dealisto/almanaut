@@ -1,0 +1,15 @@
+{{define "content"}}
+<h1>{{.Heading}}</h1>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+<form class="stack" method="post" action="{{.Action}}">
+  <label>Name<input name="name" value="{{.Network.Name}}" required></label>
+  <label>CIDR<input name="cidr" value="{{.Network.CIDR}}" placeholder="10.0.0.0/24" required></label>
+  <label>VLAN<input name="vlan" value="{{.Network.VLAN}}"></label>
+  <label>Gateway<input name="gateway" value="{{.Network.Gateway}}"></label>
+  <label>Notes<textarea name="notes">{{.Network.Notes}}</textarea></label>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
+    <a class="btn" href="/networks">Cancel</a>
+  </div>
+</form>
+{{end}}

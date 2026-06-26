@@ -22,7 +22,7 @@ func newTestServer(t *testing.T) http.Handler {
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return New(store.NewHostRepo(db))
+	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db))
 }
 
 func TestCreateAndListHost(t *testing.T) {
@@ -143,5 +143,79 @@ func TestPagesUseSharedLayout(t *testing.T) {
 		if !strings.Contains(body, "prefers-color-scheme") {
 			t.Errorf("GET %s: missing dark-mode CSS", path)
 		}
+	}
+}
+
+func TestCreateAndListService(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := url.Values{"name": {"jellyfin"}, "kind": {"container"}, "url": {"http://10.0.0.20:8096"}, "ports": {"8096"}}
+	req := httptest.NewRequest(http.MethodPost, "/services", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /services = %d, want 303", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/services", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /services = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "jellyfin") || !strings.Contains(body, "Almanaut") {
+		t.Errorf("GET /services missing service or layout")
+	}
+}
+
+func TestCreateServiceInvalidShowsError(t *testing.T) {
+	srv := newTestServer(t)
+	form := url.Values{"name": {""}, "kind": {"container"}}
+	req := httptest.NewRequest(http.MethodPost, "/services", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid POST /services = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "name is required") {
+		t.Error("invalid POST /services missing validation error")
+	}
+}
+
+func TestCreateAndListNetwork(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := url.Values{"name": {"lan"}, "cidr": {"10.0.0.0/24"}, "gateway": {"10.0.0.1"}}
+	req := httptest.NewRequest(http.MethodPost, "/networks", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /networks = %d, want 303", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/networks", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "10.0.0.0/24") {
+		t.Error("GET /networks missing created network")
+	}
+}
+
+func TestCreateNetworkInvalidShowsError(t *testing.T) {
+	srv := newTestServer(t)
+	form := url.Values{"name": {"lan"}, "cidr": {"not-a-cidr"}}
+	req := httptest.NewRequest(http.MethodPost, "/networks", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid POST /networks = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "invalid CIDR") {
+		t.Error("invalid POST /networks missing CIDR validation error")
 	}
 }

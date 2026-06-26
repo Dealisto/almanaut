@@ -1,0 +1,31 @@
+{{define "content"}}
+<h1>Services</h1>
+<div class="toolbar"><a class="btn btn-primary" href="/services/new">+ New service</a></div>
+{{if .Services}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Kind</th><th>URL</th><th>Ports</th><th>Category</th><th></th></tr></thead>
+  <tbody>
+  {{range .Services}}
+    <tr>
+      <td>{{.Name}}</td>
+      <td>{{.Kind}}</td>
+      <td>{{.URL}}</td>
+      <td>{{.Ports}}</td>
+      <td>{{.Category}}</td>
+      <td>
+        <a class="btn" href="/services/{{.ID}}/edit">Edit</a>
+        <form class="form-inline" method="post" action="/services/{{.ID}}/delete"
+              onsubmit="return confirm('Delete this service?');">
+          <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No services yet.</div></div>
+{{end}}
+{{end}}

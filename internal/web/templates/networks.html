@@ -1,0 +1,30 @@
+{{define "content"}}
+<h1>Networks</h1>
+<div class="toolbar"><a class="btn btn-primary" href="/networks/new">+ New network</a></div>
+{{if .Networks}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>CIDR</th><th>VLAN</th><th>Gateway</th><th></th></tr></thead>
+  <tbody>
+  {{range .Networks}}
+    <tr>
+      <td>{{.Name}}</td>
+      <td>{{.CIDR}}</td>
+      <td>{{.VLAN}}</td>
+      <td>{{.Gateway}}</td>
+      <td>
+        <a class="btn" href="/networks/{{.ID}}/edit">Edit</a>
+        <form class="form-inline" method="post" action="/networks/{{.ID}}/delete"
+              onsubmit="return confirm('Delete this network?');">
+          <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No networks yet.</div></div>
+{{end}}
+{{end}}
