@@ -1,0 +1,17 @@
+<!doctype html>
+<title>Almanaut — New host</title>
+<h1>New host</h1>
+{{if .Error}}<p style="color:red">{{.Error}}</p>{{end}}
+<form method="post" action="/hosts">
+  <p>Name: <input name="name" value="{{.Host.Name}}" required></p>
+  <p>Type:
+    <select name="type">
+      {{range .Types}}<option value="{{.}}" {{if eq . $.Host.Type}}selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </p>
+  <p>OS: <input name="os" value="{{.Host.OS}}"></p>
+  <p>IPs (comma-separated): <input name="ips" value="{{range $i, $ip := .Host.IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}"></p>
+  <p>Status: <input name="status" value="{{.Host.Status}}"></p>
+  <p>Notes:<br><textarea name="notes">{{.Host.Notes}}</textarea></p>
+  <p><button type="submit">Create</button> <a href="/hosts">Cancel</a></p>
+</form>

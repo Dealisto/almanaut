@@ -15,3 +15,6 @@
 .DS_Store
 .idea/
 .vscode/
+
+# Local agent scratch (progress ledger, task briefs/reports)
+.superpowers/
