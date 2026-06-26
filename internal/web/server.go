@@ -23,18 +23,36 @@ type hostFormData struct {
 	Types []string
 }
 
-// New builds the HTTP handler with all routes wired to repo.
-func New(repo *store.HostRepo) http.Handler {
+type servicesPageData struct {
+	Title    string
+	Services []domain.Service
+}
+
+type serviceFormData struct {
+	Title, Heading, Action, SubmitLabel, Error string
+	Service domain.Service
+	Kinds   []string
+}
+
+// New builds the HTTP handler with all routes wired to the given repos.
+func New(hosts *store.HostRepo, services *store.ServiceRepo) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
 	})
-	r.Get("/hosts", listHosts(repo))
+	r.Get("/hosts", listHosts(hosts))
 	r.Get("/hosts/new", newHostForm())
-	r.Post("/hosts", createHost(repo))
-	r.Get("/hosts/{id}/edit", editHostForm(repo))
-	r.Post("/hosts/{id}", updateHost(repo))
-	r.Post("/hosts/{id}/delete", deleteHost(repo))
+	r.Post("/hosts", createHost(hosts))
+	r.Get("/hosts/{id}/edit", editHostForm(hosts))
+	r.Post("/hosts/{id}", updateHost(hosts))
+	r.Post("/hosts/{id}/delete", deleteHost(hosts))
+
+	r.Get("/services", listServices(services))
+	r.Get("/services/new", newServiceForm())
+	r.Post("/services", createService(services))
+	r.Get("/services/{id}/edit", editServiceForm(services))
+	r.Post("/services/{id}", updateService(services))
+	r.Post("/services/{id}/delete", deleteService(services))
 	return r
 }
 
@@ -169,6 +187,113 @@ func deleteHost(repo *store.HostRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
+	}
+}
+
+func listServices(repo *store.ServiceRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		services, err := repo.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		render(w, "services.html", servicesPageData{Title: "Services", Services: services})
+	}
+}
+
+func newServiceForm() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		render(w, "service_form.html", serviceFormData{
+			Title: "New service", Heading: "New service", Action: "/services",
+			SubmitLabel: "Create", Service: domain.Service{Kind: "container"}, Kinds: domain.ServiceKinds,
+		})
+	}
+}
+
+func serviceFromForm(req *http.Request) domain.Service {
+	return domain.Service{
+		Name:     strings.TrimSpace(req.FormValue("name")),
+		Kind:     req.FormValue("kind"),
+		URL:      req.FormValue("url"),
+		Ports:    req.FormValue("ports"),
+		Category: req.FormValue("category"),
+		Notes:    req.FormValue("notes"),
+	}
+}
+
+func createService(repo *store.ServiceRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		svc := serviceFromForm(req)
+		if err := svc.Validate(); err != nil {
+			render(w, "service_form.html", serviceFormData{
+				Title: "New service", Heading: "New service", Action: "/services",
+				SubmitLabel: "Create", Service: svc, Kinds: domain.ServiceKinds, Error: err.Error(),
+			})
+			return
+		}
+		if _, err := repo.Create(svc); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/services", http.StatusSeeOther)
+	}
+}
+
+func editServiceForm(repo *store.ServiceRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		svc, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "service not found", http.StatusNotFound)
+			return
+		}
+		render(w, "service_form.html", serviceFormData{
+			Title: "Edit service", Heading: "Edit service", Action: fmt.Sprintf("/services/%d", id),
+			SubmitLabel: "Save", Service: svc, Kinds: domain.ServiceKinds,
+		})
+	}
+}
+
+func updateService(repo *store.ServiceRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		svc := serviceFromForm(req)
+		svc.ID = id
+		if err := svc.Validate(); err != nil {
+			render(w, "service_form.html", serviceFormData{
+				Title: "Edit service", Heading: "Edit service", Action: fmt.Sprintf("/services/%d", id),
+				SubmitLabel: "Save", Service: svc, Kinds: domain.ServiceKinds, Error: err.Error(),
+			})
+			return
+		}
+		if err := repo.Update(svc); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/services", http.StatusSeeOther)
+	}
+}
+
+func deleteService(repo *store.ServiceRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/services", http.StatusSeeOther)
 	}
 }
 
