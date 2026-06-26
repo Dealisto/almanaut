@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/almanaut/almanaut/internal/config"
-	"github.com/almanaut/almanaut/internal/store"
-	"github.com/almanaut/almanaut/internal/web"
+	"github.com/Dealisto/almanaut/internal/config"
+	"github.com/Dealisto/almanaut/internal/store"
+	"github.com/Dealisto/almanaut/internal/web"
 )
 
 func main() {

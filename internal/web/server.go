@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/almanaut/almanaut/internal/domain"
-	"github.com/almanaut/almanaut/internal/store"
+	"github.com/Dealisto/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 

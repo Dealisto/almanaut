@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/almanaut/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/domain"
 )
 
 func newTestRepo(t *testing.T) *HostRepo {

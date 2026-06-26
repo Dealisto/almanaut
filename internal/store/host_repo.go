@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/almanaut/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/domain"
 )
 
 // HostRepo persists Host entities in SQLite.

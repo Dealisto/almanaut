@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/almanaut/almanaut/internal/store"
+	"github.com/Dealisto/almanaut/internal/store"
 )
 
 func newTestServer(t *testing.T) http.Handler {

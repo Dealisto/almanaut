@@ -1,4 +1,4 @@
-module github.com/almanaut/almanaut
+module github.com/Dealisto/almanaut
 
 go 1.26.4
 
