@@ -67,14 +67,18 @@ func Migrate(db *sql.DB, dbPath string) error {
 			return fmt.Errorf("begin tx for %s: %w", f, err)
 		}
 		if _, err := tx.Exec(string(sqlBytes)); err != nil {
-			tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				return fmt.Errorf("apply %s: %w (rollback failed: %v)", f, err, rbErr)
+			}
 			return fmt.Errorf("apply %s: %w", f, err)
 		}
 		if _, err := tx.Exec(
 			`INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`,
 			f, time.Now().UTC().Format(time.RFC3339),
 		); err != nil {
-			tx.Rollback()
+			if rbErr := tx.Rollback(); rbErr != nil {
+				return fmt.Errorf("record %s: %w (rollback failed: %v)", f, err, rbErr)
+			}
 			return fmt.Errorf("record %s: %w", f, err)
 		}
 		if err := tx.Commit(); err != nil {
@@ -94,7 +98,7 @@ func appliedVersions(db *sql.DB) (map[string]bool, error) {
 	for rows.Next() {
 		var v string
 		if err := rows.Scan(&v); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan migration version: %w", err)
 		}
 		applied[v] = true
 	}
@@ -104,7 +108,9 @@ func appliedVersions(db *sql.DB) (map[string]bool, error) {
 // backupDatabase writes a consistent copy of the database using
 // SQLite's VACUUM INTO, which is safe while the DB is open.
 func backupDatabase(db *sql.DB, dbPath string) error {
-	backup := fmt.Sprintf("%s.backup-%s", dbPath, time.Now().UTC().Format("20060102-150405"))
-	_, err := db.Exec(`VACUUM INTO ?`, backup)
-	return err
+	backup := fmt.Sprintf("%s.backup-%s", dbPath, time.Now().UTC().Format("20060102-150405.000000000"))
+	if _, err := db.Exec(`VACUUM INTO ?`, backup); err != nil {
+		return fmt.Errorf("VACUUM INTO %q: %w", backup, err)
+	}
+	return nil
 }
