@@ -2,6 +2,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -31,6 +32,8 @@ func New(repo *store.HostRepo) http.Handler {
 	r.Get("/hosts", listHosts(repo))
 	r.Get("/hosts/new", newHostForm())
 	r.Post("/hosts", createHost(repo))
+	r.Get("/hosts/{id}/edit", editHostForm(repo))
+	r.Post("/hosts/{id}", updateHost(repo))
 	r.Post("/hosts/{id}/delete", deleteHost(repo))
 	return r
 }
@@ -82,6 +85,65 @@ func createHost(repo *store.HostRepo) http.HandlerFunc {
 			return
 		}
 		if _, err := repo.Create(host); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
+	}
+}
+
+func editHostForm(repo *store.HostRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		host, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "host not found", http.StatusNotFound)
+			return
+		}
+		render(w, "host_form.html", hostFormData{
+			Title:       "Edit host",
+			Heading:     "Edit host",
+			Action:      fmt.Sprintf("/hosts/%d", id),
+			SubmitLabel: "Save",
+			Host:        host,
+			Types:       domain.HostTypes,
+		})
+	}
+}
+
+func updateHost(repo *store.HostRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		host := domain.Host{
+			ID:     id,
+			Name:   strings.TrimSpace(req.FormValue("name")),
+			Type:   req.FormValue("type"),
+			OS:     req.FormValue("os"),
+			Status: req.FormValue("status"),
+			Notes:  req.FormValue("notes"),
+			IPs:    parseIPs(req.FormValue("ips")),
+		}
+		if err := host.Validate(); err != nil {
+			render(w, "host_form.html", hostFormData{
+				Title:       "Edit host",
+				Heading:     "Edit host",
+				Action:      fmt.Sprintf("/hosts/%d", id),
+				SubmitLabel: "Save",
+				Host:        host,
+				Types:       domain.HostTypes,
+				Error:       err.Error(),
+			})
+			return
+		}
+		if err := repo.Update(host); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

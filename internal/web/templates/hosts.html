@@ -14,6 +14,7 @@
       <td>{{range $i, $ip := .IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}</td>
       <td>{{.Status}}</td>
       <td>
+        <a class="btn" href="/hosts/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/hosts/{{.ID}}/delete"
               onsubmit="return confirm('Delete this host?');">
           <button class="btn btn-danger" type="submit">Delete</button>

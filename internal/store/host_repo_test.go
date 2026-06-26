@@ -61,3 +61,27 @@ func TestHostRepoCreateGetListDelete(t *testing.T) {
 		t.Fatalf("List len after delete = %d, want 0", len(list))
 	}
 }
+
+func TestHostRepoUpdate(t *testing.T) {
+	repo := newTestRepo(t)
+	id, err := repo.Create(domain.Host{Name: "old", Type: "vm", IPs: []string{"10.0.0.1"}})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	err = repo.Update(domain.Host{
+		ID: id, Name: "new", Type: "lxc", OS: "Debian 12", IPs: []string{"10.0.0.2"},
+	})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	got, err := repo.Get(id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Name != "new" || got.Type != "lxc" || got.OS != "Debian 12" {
+		t.Errorf("Update not applied: %+v", got)
+	}
+	if len(got.IPs) != 1 || got.IPs[0] != "10.0.0.2" {
+		t.Errorf("IPs = %v, want [10.0.0.2]", got.IPs)
+	}
+}
