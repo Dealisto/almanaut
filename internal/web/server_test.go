@@ -69,30 +69,49 @@ func TestEditAndUpdateHost(t *testing.T) {
 	srv := newTestServer(t)
 
 	// Seed one host (gets id 1 in a fresh DB).
-	create := url.Values{"name": {"web01"}, "type": {"vm"}, "ips": {"10.0.0.5"}}
+	create := url.Values{
+		"name": {"web01"}, "type": {"vm"}, "ips": {"10.0.0.5"},
+		"cpu": {"4 cores"}, "ram": {"16GB"}, "disk": {"500GB"},
+	}
 	req := httptest.NewRequest(http.MethodPost, "/hosts", strings.NewReader(create.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	srv.ServeHTTP(httptest.NewRecorder(), req)
 
-	// Edit form is prefilled with the existing values.
+	// Edit form is prefilled with the existing values, including the spec fields.
 	req = httptest.NewRequest(http.MethodGet, "/hosts/1/edit", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /hosts/1/edit = %d, want 200", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "web01") {
+	editBody := rec.Body.String()
+	if !strings.Contains(editBody, "web01") {
 		t.Error("edit form not prefilled with existing host")
 	}
+	if !strings.Contains(editBody, "16GB") {
+		t.Error("edit form not prefilled with CPU/RAM/Disk spec values")
+	}
 
-	// Update changes the values.
-	upd := url.Values{"name": {"web99"}, "type": {"lxc"}, "ips": {"10.0.0.6"}}
+	// Update changes the values, including a spec field.
+	upd := url.Values{
+		"name": {"web99"}, "type": {"lxc"}, "ips": {"10.0.0.6"},
+		"cpu": {"8 cores"}, "ram": {"32GB"}, "disk": {"1TB"},
+	}
 	req = httptest.NewRequest(http.MethodPost, "/hosts/1", strings.NewReader(upd.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST /hosts/1 = %d, want 303", rec.Code)
+	}
+
+	// The edit form reflects the updated spec value (proving the round-trip).
+	req = httptest.NewRequest(http.MethodGet, "/hosts/1/edit", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	editBody = rec.Body.String()
+	if !strings.Contains(editBody, "32GB") || strings.Contains(editBody, "16GB") {
+		t.Errorf("edit form did not reflect updated spec value")
 	}
 
 	// List reflects the update.

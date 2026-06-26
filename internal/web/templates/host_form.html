@@ -9,6 +9,9 @@
     </select>
   </label>
   <label>OS<input name="os" value="{{.Host.OS}}"></label>
+  <label>CPU<input name="cpu" value="{{.Host.CPU}}"></label>
+  <label>RAM<input name="ram" value="{{.Host.RAM}}"></label>
+  <label>Disk<input name="disk" value="{{.Host.Disk}}"></label>
   <label>IPs (comma-separated)<input name="ips" value="{{range $i, $ip := .Host.IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}"></label>
   <label>Status<input name="status" value="{{.Host.Status}}"></label>
   <label>Notes<textarea name="notes">{{.Host.Notes}}</textarea></label>
