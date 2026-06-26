@@ -22,7 +22,7 @@ func newTestServer(t *testing.T) http.Handler {
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db))
+	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db))
 }
 
 func TestCreateAndListHost(t *testing.T) {
@@ -217,5 +217,40 @@ func TestCreateNetworkInvalidShowsError(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "invalid CIDR") {
 		t.Error("invalid POST /networks missing CIDR validation error")
+	}
+}
+
+func TestCreateAndListDomain(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := url.Values{"fqdn": {"jellyfin.example.com"}, "provider": {"Cloudflare"}}
+	req := httptest.NewRequest(http.MethodPost, "/domains", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /domains = %d, want 303", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/domains", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "jellyfin.example.com") {
+		t.Errorf("GET /domains missing created domain (code %d)", rec.Code)
+	}
+}
+
+func TestCreateDomainInvalidShowsError(t *testing.T) {
+	srv := newTestServer(t)
+	form := url.Values{"fqdn": {"localhost"}}
+	req := httptest.NewRequest(http.MethodPost, "/domains", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid POST /domains = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "invalid FQDN") {
+		t.Error("invalid POST /domains missing FQDN validation error")
 	}
 }

@@ -44,8 +44,18 @@ type networkFormData struct {
 	Network domain.Network
 }
 
+type domainsPageData struct {
+	Title   string
+	Domains []domain.Domain
+}
+
+type domainFormData struct {
+	Title, Heading, Action, SubmitLabel, Error string
+	Domain domain.Domain
+}
+
 // New builds the HTTP handler with all routes wired to the given repos.
-func New(hosts *store.HostRepo, services *store.ServiceRepo, networks *store.NetworkRepo) http.Handler {
+func New(hosts *store.HostRepo, services *store.ServiceRepo, networks *store.NetworkRepo, domains *store.DomainRepo) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
@@ -70,6 +80,13 @@ func New(hosts *store.HostRepo, services *store.ServiceRepo, networks *store.Net
 	r.Get("/networks/{id}/edit", editNetworkForm(networks))
 	r.Post("/networks/{id}", updateNetwork(networks))
 	r.Post("/networks/{id}/delete", deleteNetwork(networks))
+
+	r.Get("/domains", listDomains(domains))
+	r.Get("/domains/new", newDomainForm())
+	r.Post("/domains", createDomain(domains))
+	r.Get("/domains/{id}/edit", editDomainForm(domains))
+	r.Post("/domains/{id}", updateDomain(domains))
+	r.Post("/domains/{id}/delete", deleteDomain(domains))
 	return r
 }
 
@@ -416,6 +433,109 @@ func deleteNetwork(repo *store.NetworkRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/networks", http.StatusSeeOther)
+	}
+}
+
+func listDomains(repo *store.DomainRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		domains, err := repo.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		render(w, "domains.html", domainsPageData{Title: "Domains", Domains: domains})
+	}
+}
+
+func newDomainForm() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		render(w, "domain_form.html", domainFormData{
+			Title: "New domain", Heading: "New domain", Action: "/domains", SubmitLabel: "Create",
+		})
+	}
+}
+
+func domainFromForm(req *http.Request) domain.Domain {
+	return domain.Domain{
+		FQDN:     strings.TrimSpace(req.FormValue("fqdn")),
+		Provider: strings.TrimSpace(req.FormValue("provider")),
+		Notes:    req.FormValue("notes"),
+	}
+}
+
+func createDomain(repo *store.DomainRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		d := domainFromForm(req)
+		if err := d.Validate(); err != nil {
+			render(w, "domain_form.html", domainFormData{
+				Title: "New domain", Heading: "New domain", Action: "/domains",
+				SubmitLabel: "Create", Domain: d, Error: err.Error(),
+			})
+			return
+		}
+		if _, err := repo.Create(d); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/domains", http.StatusSeeOther)
+	}
+}
+
+func editDomainForm(repo *store.DomainRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		d, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "domain not found", http.StatusNotFound)
+			return
+		}
+		render(w, "domain_form.html", domainFormData{
+			Title: "Edit domain", Heading: "Edit domain", Action: fmt.Sprintf("/domains/%d", id),
+			SubmitLabel: "Save", Domain: d,
+		})
+	}
+}
+
+func updateDomain(repo *store.DomainRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		d := domainFromForm(req)
+		d.ID = id
+		if err := d.Validate(); err != nil {
+			render(w, "domain_form.html", domainFormData{
+				Title: "Edit domain", Heading: "Edit domain", Action: fmt.Sprintf("/domains/%d", id),
+				SubmitLabel: "Save", Domain: d, Error: err.Error(),
+			})
+			return
+		}
+		if err := repo.Update(d); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/domains", http.StatusSeeOther)
+	}
+}
+
+func deleteDomain(repo *store.DomainRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/domains", http.StatusSeeOther)
 	}
 }
 
