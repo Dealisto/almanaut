@@ -1,0 +1,66 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Almanaut</title>
+<style>
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --text:#1b1f24; --muted:#5b6470;
+  --border:#dfe3e8; --accent:#2f6feb; --accent-text:#ffffff;
+  --danger:#c0392b; --row-alt:#fafbfc;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0d1117; --surface:#161b22; --text:#e6edf3; --muted:#9198a1;
+    --border:#30363d; --accent:#4d8dfb; --accent-text:#ffffff;
+    --danger:#f0816f; --row-alt:#1b2129;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+header.app{background:var(--surface);border-bottom:1px solid var(--border)}
+header.app .wrap{max-width:960px;margin:0 auto;padding:14px 20px;
+  display:flex;align-items:center;gap:16px}
+header.app .brand{font-weight:700;font-size:1.2rem;color:var(--text)}
+header.app nav a{color:var(--muted);margin-right:14px}
+main{max-width:960px;margin:0 auto;padding:24px 20px}
+h1{margin:0 0 16px;font-size:1.5rem}
+.btn{display:inline-block;padding:7px 13px;border-radius:6px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);cursor:pointer;font-size:.95rem;line-height:1.2}
+.btn:hover{text-decoration:none;border-color:var(--accent)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-text)}
+.btn-danger{color:var(--danger)}
+.toolbar{margin-bottom:16px}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+th{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+tbody tr:nth-child(even){background:var(--row-alt)}
+tbody tr:last-child td{border-bottom:0}
+td .btn{margin-right:6px}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+form.stack{max-width:540px;background:var(--surface);border:1px solid var(--border);
+  border-radius:8px;padding:20px}
+form.stack label{display:block;margin-bottom:14px;font-size:.85rem;color:var(--muted)}
+form.stack input,form.stack select,form.stack textarea{display:block;width:100%;margin-top:6px;
+  padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);
+  color:var(--text);font:inherit}
+form.stack textarea{min-height:84px;resize:vertical}
+.error{background:rgba(192,57,43,.12);color:var(--danger);border:1px solid var(--danger);
+  padding:10px 14px;border-radius:6px;margin-bottom:16px}
+.actions{display:flex;gap:10px;align-items:center;margin-top:4px}
+.form-inline{display:inline}
+</style>
+</head>
+<body>
+<header class="app"><div class="wrap">
+  <span class="brand">Almanaut</span>
+  <nav><a href="/hosts">Hosts</a></nav>
+</div></header>
+<main>{{template "content" .}}</main>
+</body>
+</html>{{end}}

@@ -64,3 +64,84 @@ func TestCreateHostInvalidShowsError(t *testing.T) {
 		t.Errorf("invalid POST body missing validation error")
 	}
 }
+
+func TestEditAndUpdateHost(t *testing.T) {
+	srv := newTestServer(t)
+
+	// Seed one host (gets id 1 in a fresh DB).
+	create := url.Values{
+		"name": {"web01"}, "type": {"vm"}, "ips": {"10.0.0.5"},
+		"cpu": {"4 cores"}, "ram": {"16GB"}, "disk": {"500GB"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/hosts", strings.NewReader(create.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	srv.ServeHTTP(httptest.NewRecorder(), req)
+
+	// Edit form is prefilled with the existing values, including the spec fields.
+	req = httptest.NewRequest(http.MethodGet, "/hosts/1/edit", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /hosts/1/edit = %d, want 200", rec.Code)
+	}
+	editBody := rec.Body.String()
+	if !strings.Contains(editBody, "web01") {
+		t.Error("edit form not prefilled with existing host")
+	}
+	if !strings.Contains(editBody, "16GB") {
+		t.Error("edit form not prefilled with CPU/RAM/Disk spec values")
+	}
+
+	// Update changes the values, including a spec field.
+	upd := url.Values{
+		"name": {"web99"}, "type": {"lxc"}, "ips": {"10.0.0.6"},
+		"cpu": {"8 cores"}, "ram": {"32GB"}, "disk": {"1TB"},
+	}
+	req = httptest.NewRequest(http.MethodPost, "/hosts/1", strings.NewReader(upd.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /hosts/1 = %d, want 303", rec.Code)
+	}
+
+	// The edit form reflects the updated spec value (proving the round-trip).
+	req = httptest.NewRequest(http.MethodGet, "/hosts/1/edit", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	editBody = rec.Body.String()
+	if !strings.Contains(editBody, "32GB") || strings.Contains(editBody, "16GB") {
+		t.Errorf("edit form did not reflect updated spec value")
+	}
+
+	// List reflects the update.
+	req = httptest.NewRequest(http.MethodGet, "/hosts", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, "web99") || strings.Contains(body, "web01") {
+		t.Errorf("list did not reflect update")
+	}
+}
+
+func TestPagesUseSharedLayout(t *testing.T) {
+	srv := newTestServer(t)
+	for _, path := range []string{"/hosts", "/hosts/new"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200", path, rec.Code)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, "Almanaut") {
+			t.Errorf("GET %s: missing layout brand 'Almanaut'", path)
+		}
+		if !strings.Contains(body, "<style") {
+			t.Errorf("GET %s: missing embedded stylesheet", path)
+		}
+		if !strings.Contains(body, "prefers-color-scheme") {
+			t.Errorf("GET %s: missing dark-mode CSS", path)
+		}
+	}
+}

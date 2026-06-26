@@ -38,6 +38,26 @@ func (r *HostRepo) Create(h domain.Host) (int64, error) {
 	return res.LastInsertId()
 }
 
+// Update overwrites the host with h.ID with the values in h.
+func (r *HostRepo) Update(h domain.Host) error {
+	if h.IPs == nil {
+		h.IPs = []string{}
+	}
+	ips, err := json.Marshal(h.IPs)
+	if err != nil {
+		return fmt.Errorf("marshal ips: %w", err)
+	}
+	_, err = r.db.Exec(
+		`UPDATE hosts SET name=?, type=?, os=?, cpu=?, ram=?, disk=?, status=?, ips=?, notes=?
+		 WHERE id=?`,
+		h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(ips), h.Notes, h.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("update host: %w", err)
+	}
+	return nil
+}
+
 // Get returns the host with the given id.
 func (r *HostRepo) Get(id int64) (domain.Host, error) {
 	row := r.db.QueryRow(
