@@ -1,0 +1,28 @@
+{{define "content"}}
+<h1>Domains</h1>
+<div class="toolbar"><a class="btn btn-primary" href="/domains/new">+ New domain</a></div>
+{{if .Domains}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>FQDN</th><th>Provider</th><th></th></tr></thead>
+  <tbody>
+  {{range .Domains}}
+    <tr>
+      <td>{{.FQDN}}</td>
+      <td>{{.Provider}}</td>
+      <td>
+        <a class="btn" href="/domains/{{.ID}}/edit">Edit</a>
+        <form class="form-inline" method="post" action="/domains/{{.ID}}/delete"
+              onsubmit="return confirm('Delete this domain?');">
+          <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No domains yet.</div></div>
+{{end}}
+{{end}}

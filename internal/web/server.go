@@ -44,8 +44,38 @@ type networkFormData struct {
 	Network domain.Network
 }
 
+type domainsPageData struct {
+	Title   string
+	Domains []domain.Domain
+}
+
+type domainFormData struct {
+	Title, Heading, Action, SubmitLabel, Error string
+	Domain domain.Domain
+}
+
+type certificatesPageData struct {
+	Title        string
+	Certificates []domain.Certificate
+}
+
+type certificateFormData struct {
+	Title, Heading, Action, SubmitLabel, Error string
+	Certificate domain.Certificate
+}
+
+type backupsPageData struct {
+	Title   string
+	Backups []domain.Backup
+}
+
+type backupFormData struct {
+	Title, Heading, Action, SubmitLabel, Error string
+	Backup domain.Backup
+}
+
 // New builds the HTTP handler with all routes wired to the given repos.
-func New(hosts *store.HostRepo, services *store.ServiceRepo, networks *store.NetworkRepo) http.Handler {
+func New(hosts *store.HostRepo, services *store.ServiceRepo, networks *store.NetworkRepo, domains *store.DomainRepo, certificates *store.CertificateRepo, backups *store.BackupRepo) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
@@ -70,6 +100,27 @@ func New(hosts *store.HostRepo, services *store.ServiceRepo, networks *store.Net
 	r.Get("/networks/{id}/edit", editNetworkForm(networks))
 	r.Post("/networks/{id}", updateNetwork(networks))
 	r.Post("/networks/{id}/delete", deleteNetwork(networks))
+
+	r.Get("/domains", listDomains(domains))
+	r.Get("/domains/new", newDomainForm())
+	r.Post("/domains", createDomain(domains))
+	r.Get("/domains/{id}/edit", editDomainForm(domains))
+	r.Post("/domains/{id}", updateDomain(domains))
+	r.Post("/domains/{id}/delete", deleteDomain(domains))
+
+	r.Get("/certificates", listCertificates(certificates))
+	r.Get("/certificates/new", newCertificateForm())
+	r.Post("/certificates", createCertificate(certificates))
+	r.Get("/certificates/{id}/edit", editCertificateForm(certificates))
+	r.Post("/certificates/{id}", updateCertificate(certificates))
+	r.Post("/certificates/{id}/delete", deleteCertificate(certificates))
+
+	r.Get("/backups", listBackups(backups))
+	r.Get("/backups/new", newBackupForm())
+	r.Post("/backups", createBackup(backups))
+	r.Get("/backups/{id}/edit", editBackupForm(backups))
+	r.Post("/backups/{id}", updateBackup(backups))
+	r.Post("/backups/{id}/delete", deleteBackup(backups))
 	return r
 }
 
@@ -416,6 +467,319 @@ func deleteNetwork(repo *store.NetworkRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/networks", http.StatusSeeOther)
+	}
+}
+
+func listDomains(repo *store.DomainRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		domains, err := repo.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		render(w, "domains.html", domainsPageData{Title: "Domains", Domains: domains})
+	}
+}
+
+func newDomainForm() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		render(w, "domain_form.html", domainFormData{
+			Title: "New domain", Heading: "New domain", Action: "/domains", SubmitLabel: "Create",
+		})
+	}
+}
+
+func domainFromForm(req *http.Request) domain.Domain {
+	return domain.Domain{
+		FQDN:     strings.TrimSpace(req.FormValue("fqdn")),
+		Provider: strings.TrimSpace(req.FormValue("provider")),
+		Notes:    req.FormValue("notes"),
+	}
+}
+
+func createDomain(repo *store.DomainRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		d := domainFromForm(req)
+		if err := d.Validate(); err != nil {
+			render(w, "domain_form.html", domainFormData{
+				Title: "New domain", Heading: "New domain", Action: "/domains",
+				SubmitLabel: "Create", Domain: d, Error: err.Error(),
+			})
+			return
+		}
+		if _, err := repo.Create(d); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/domains", http.StatusSeeOther)
+	}
+}
+
+func editDomainForm(repo *store.DomainRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		d, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "domain not found", http.StatusNotFound)
+			return
+		}
+		render(w, "domain_form.html", domainFormData{
+			Title: "Edit domain", Heading: "Edit domain", Action: fmt.Sprintf("/domains/%d", id),
+			SubmitLabel: "Save", Domain: d,
+		})
+	}
+}
+
+func updateDomain(repo *store.DomainRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		d := domainFromForm(req)
+		d.ID = id
+		if err := d.Validate(); err != nil {
+			render(w, "domain_form.html", domainFormData{
+				Title: "Edit domain", Heading: "Edit domain", Action: fmt.Sprintf("/domains/%d", id),
+				SubmitLabel: "Save", Domain: d, Error: err.Error(),
+			})
+			return
+		}
+		if err := repo.Update(d); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/domains", http.StatusSeeOther)
+	}
+}
+
+func deleteDomain(repo *store.DomainRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/domains", http.StatusSeeOther)
+	}
+}
+
+func listCertificates(repo *store.CertificateRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		certs, err := repo.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		render(w, "certificates.html", certificatesPageData{Title: "Certificates", Certificates: certs})
+	}
+}
+
+func newCertificateForm() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		render(w, "certificate_form.html", certificateFormData{
+			Title: "New certificate", Heading: "New certificate", Action: "/certificates", SubmitLabel: "Create",
+		})
+	}
+}
+
+func certificateFromForm(req *http.Request) domain.Certificate {
+	return domain.Certificate{
+		Subject:   strings.TrimSpace(req.FormValue("subject")),
+		Issuer:    strings.TrimSpace(req.FormValue("issuer")),
+		ExpiresOn: strings.TrimSpace(req.FormValue("expires_on")),
+		AutoRenew: req.FormValue("auto_renew") == "on",
+		Notes:     req.FormValue("notes"),
+	}
+}
+
+func createCertificate(repo *store.CertificateRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		c := certificateFromForm(req)
+		if err := c.Validate(); err != nil {
+			render(w, "certificate_form.html", certificateFormData{
+				Title: "New certificate", Heading: "New certificate", Action: "/certificates",
+				SubmitLabel: "Create", Certificate: c, Error: err.Error(),
+			})
+			return
+		}
+		if _, err := repo.Create(c); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/certificates", http.StatusSeeOther)
+	}
+}
+
+func editCertificateForm(repo *store.CertificateRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		c, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "certificate not found", http.StatusNotFound)
+			return
+		}
+		render(w, "certificate_form.html", certificateFormData{
+			Title: "Edit certificate", Heading: "Edit certificate", Action: fmt.Sprintf("/certificates/%d", id),
+			SubmitLabel: "Save", Certificate: c,
+		})
+	}
+}
+
+func updateCertificate(repo *store.CertificateRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		c := certificateFromForm(req)
+		c.ID = id
+		if err := c.Validate(); err != nil {
+			render(w, "certificate_form.html", certificateFormData{
+				Title: "Edit certificate", Heading: "Edit certificate", Action: fmt.Sprintf("/certificates/%d", id),
+				SubmitLabel: "Save", Certificate: c, Error: err.Error(),
+			})
+			return
+		}
+		if err := repo.Update(c); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/certificates", http.StatusSeeOther)
+	}
+}
+
+func deleteCertificate(repo *store.CertificateRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/certificates", http.StatusSeeOther)
+	}
+}
+
+func listBackups(repo *store.BackupRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		backups, err := repo.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		render(w, "backups.html", backupsPageData{Title: "Backups", Backups: backups})
+	}
+}
+
+func newBackupForm() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		render(w, "backup_form.html", backupFormData{
+			Title: "New backup", Heading: "New backup", Action: "/backups", SubmitLabel: "Create",
+		})
+	}
+}
+
+func backupFromForm(req *http.Request) domain.Backup {
+	return domain.Backup{
+		Source:      strings.TrimSpace(req.FormValue("source")),
+		Destination: strings.TrimSpace(req.FormValue("destination")),
+		Frequency:   strings.TrimSpace(req.FormValue("frequency")),
+		LastRun:     strings.TrimSpace(req.FormValue("last_run")),
+		Notes:       req.FormValue("notes"),
+	}
+}
+
+func createBackup(repo *store.BackupRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		b := backupFromForm(req)
+		if err := b.Validate(); err != nil {
+			render(w, "backup_form.html", backupFormData{
+				Title: "New backup", Heading: "New backup", Action: "/backups",
+				SubmitLabel: "Create", Backup: b, Error: err.Error(),
+			})
+			return
+		}
+		if _, err := repo.Create(b); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/backups", http.StatusSeeOther)
+	}
+}
+
+func editBackupForm(repo *store.BackupRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		b, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "backup not found", http.StatusNotFound)
+			return
+		}
+		render(w, "backup_form.html", backupFormData{
+			Title: "Edit backup", Heading: "Edit backup", Action: fmt.Sprintf("/backups/%d", id),
+			SubmitLabel: "Save", Backup: b,
+		})
+	}
+}
+
+func updateBackup(repo *store.BackupRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		b := backupFromForm(req)
+		b.ID = id
+		if err := b.Validate(); err != nil {
+			render(w, "backup_form.html", backupFormData{
+				Title: "Edit backup", Heading: "Edit backup", Action: fmt.Sprintf("/backups/%d", id),
+				SubmitLabel: "Save", Backup: b, Error: err.Error(),
+			})
+			return
+		}
+		if err := repo.Update(b); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/backups", http.StatusSeeOther)
+	}
+}
+
+func deleteBackup(repo *store.BackupRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/backups", http.StatusSeeOther)
 	}
 }
 

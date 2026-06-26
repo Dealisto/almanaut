@@ -22,7 +22,7 @@ func newTestServer(t *testing.T) http.Handler {
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db))
+	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db))
 }
 
 func TestCreateAndListHost(t *testing.T) {
@@ -217,5 +217,111 @@ func TestCreateNetworkInvalidShowsError(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "invalid CIDR") {
 		t.Error("invalid POST /networks missing CIDR validation error")
+	}
+}
+
+func TestCreateAndListDomain(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := url.Values{"fqdn": {"jellyfin.example.com"}, "provider": {"Cloudflare"}}
+	req := httptest.NewRequest(http.MethodPost, "/domains", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /domains = %d, want 303", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/domains", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "jellyfin.example.com") {
+		t.Errorf("GET /domains missing created domain (code %d)", rec.Code)
+	}
+}
+
+func TestCreateDomainInvalidShowsError(t *testing.T) {
+	srv := newTestServer(t)
+	form := url.Values{"fqdn": {"localhost"}}
+	req := httptest.NewRequest(http.MethodPost, "/domains", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid POST /domains = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "invalid FQDN") {
+		t.Error("invalid POST /domains missing FQDN validation error")
+	}
+}
+
+func TestCreateAndListCertificate(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := url.Values{"subject": {"*.example.com"}, "issuer": {"Let's Encrypt"}, "expires_on": {"2027-01-15"}, "auto_renew": {"on"}}
+	req := httptest.NewRequest(http.MethodPost, "/certificates", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /certificates = %d, want 303", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/certificates", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, "*.example.com") || !strings.Contains(body, "2027-01-15") {
+		t.Error("GET /certificates missing created certificate")
+	}
+}
+
+func TestCreateCertificateInvalidShowsError(t *testing.T) {
+	srv := newTestServer(t)
+	form := url.Values{"subject": {"x"}, "expires_on": {"nope"}}
+	req := httptest.NewRequest(http.MethodPost, "/certificates", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid POST /certificates = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "expiry date must be") {
+		t.Error("invalid POST /certificates missing date validation error")
+	}
+}
+
+func TestCreateAndListBackup(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := url.Values{"source": {"nextcloud-data"}, "destination": {"Backblaze B2"}, "frequency": {"daily"}, "last_run": {"2026-06-20"}}
+	req := httptest.NewRequest(http.MethodPost, "/backups", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /backups = %d, want 303", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/backups", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "nextcloud-data") {
+		t.Error("GET /backups missing created backup")
+	}
+}
+
+func TestCreateBackupInvalidShowsError(t *testing.T) {
+	srv := newTestServer(t)
+	form := url.Values{"source": {"x"}, "last_run": {"nope"}}
+	req := httptest.NewRequest(http.MethodPost, "/backups", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid POST /backups = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "last run must be") {
+		t.Error("invalid POST /backups missing date validation error")
 	}
 }

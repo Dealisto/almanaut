@@ -1,0 +1,30 @@
+{{define "content"}}
+<h1>Backups</h1>
+<div class="toolbar"><a class="btn btn-primary" href="/backups/new">+ New backup</a></div>
+{{if .Backups}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Source</th><th>Destination</th><th>Frequency</th><th>Last run</th><th></th></tr></thead>
+  <tbody>
+  {{range .Backups}}
+    <tr>
+      <td>{{.Source}}</td>
+      <td>{{.Destination}}</td>
+      <td>{{.Frequency}}</td>
+      <td>{{.LastRun}}</td>
+      <td>
+        <a class="btn" href="/backups/{{.ID}}/edit">Edit</a>
+        <form class="form-inline" method="post" action="/backups/{{.ID}}/delete"
+              onsubmit="return confirm('Delete this backup?');">
+          <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No backups yet.</div></div>
+{{end}}
+{{end}}
