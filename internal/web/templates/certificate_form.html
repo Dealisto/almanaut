@@ -1,0 +1,15 @@
+{{define "content"}}
+<h1>{{.Heading}}</h1>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+<form class="stack" method="post" action="{{.Action}}">
+  <label>Subject<input name="subject" value="{{.Certificate.Subject}}" placeholder="*.example.com" required></label>
+  <label>Issuer<input name="issuer" value="{{.Certificate.Issuer}}" placeholder="Let's Encrypt"></label>
+  <label>Expires on<input type="date" name="expires_on" value="{{.Certificate.ExpiresOn}}" required></label>
+  <label><input type="checkbox" name="auto_renew" {{if .Certificate.AutoRenew}}checked{{end}}> Auto-renew</label>
+  <label>Notes<textarea name="notes">{{.Certificate.Notes}}</textarea></label>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
+    <a class="btn" href="/certificates">Cancel</a>
+  </div>
+</form>
+{{end}}

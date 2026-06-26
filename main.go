@@ -32,7 +32,7 @@ func main() {
 		log.Fatalf("migrate database: %v", err)
 	}
 
-	handler := web.New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db))
+	handler := web.New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db))
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           handler,

@@ -22,7 +22,7 @@ func newTestServer(t *testing.T) http.Handler {
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db))
+	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db))
 }
 
 func TestCreateAndListHost(t *testing.T) {
@@ -252,5 +252,41 @@ func TestCreateDomainInvalidShowsError(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "invalid FQDN") {
 		t.Error("invalid POST /domains missing FQDN validation error")
+	}
+}
+
+func TestCreateAndListCertificate(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := url.Values{"subject": {"*.example.com"}, "issuer": {"Let's Encrypt"}, "expires_on": {"2027-01-15"}, "auto_renew": {"on"}}
+	req := httptest.NewRequest(http.MethodPost, "/certificates", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /certificates = %d, want 303", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/certificates", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, "*.example.com") || !strings.Contains(body, "2027-01-15") {
+		t.Error("GET /certificates missing created certificate")
+	}
+}
+
+func TestCreateCertificateInvalidShowsError(t *testing.T) {
+	srv := newTestServer(t)
+	form := url.Values{"subject": {"x"}, "expires_on": {"nope"}}
+	req := httptest.NewRequest(http.MethodPost, "/certificates", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid POST /certificates = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "expiry date must be") {
+		t.Error("invalid POST /certificates missing date validation error")
 	}
 }
