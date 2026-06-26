@@ -22,7 +22,7 @@ func newTestServer(t *testing.T) http.Handler {
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db))
+	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db))
 }
 
 func TestCreateAndListHost(t *testing.T) {
@@ -288,5 +288,40 @@ func TestCreateCertificateInvalidShowsError(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "expiry date must be") {
 		t.Error("invalid POST /certificates missing date validation error")
+	}
+}
+
+func TestCreateAndListBackup(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := url.Values{"source": {"nextcloud-data"}, "destination": {"Backblaze B2"}, "frequency": {"daily"}, "last_run": {"2026-06-20"}}
+	req := httptest.NewRequest(http.MethodPost, "/backups", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /backups = %d, want 303", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/backups", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "nextcloud-data") {
+		t.Error("GET /backups missing created backup")
+	}
+}
+
+func TestCreateBackupInvalidShowsError(t *testing.T) {
+	srv := newTestServer(t)
+	form := url.Values{"source": {"x"}, "last_run": {"nope"}}
+	req := httptest.NewRequest(http.MethodPost, "/backups", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid POST /backups = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "last run must be") {
+		t.Error("invalid POST /backups missing date validation error")
 	}
 }
