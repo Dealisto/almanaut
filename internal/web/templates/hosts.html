@@ -1,13 +1,12 @@
-<!doctype html>
-<title>Almanaut — Hosts</title>
+{{define "content"}}
 <h1>Hosts</h1>
-<p><a href="/hosts/new">+ New host</a></p>
-<table border="1" cellpadding="6">
-  <thead>
-    <tr><th>Name</th><th>Type</th><th>OS</th><th>IPs</th><th>Status</th><th></th></tr>
-  </thead>
+<div class="toolbar"><a class="btn btn-primary" href="/hosts/new">+ New host</a></div>
+{{if .Hosts}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Type</th><th>OS</th><th>IPs</th><th>Status</th><th></th></tr></thead>
   <tbody>
-    {{range .Hosts}}
+  {{range .Hosts}}
     <tr>
       <td>{{.Name}}</td>
       <td>{{.Type}}</td>
@@ -15,14 +14,17 @@
       <td>{{range $i, $ip := .IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}</td>
       <td>{{.Status}}</td>
       <td>
-        <form method="post" action="/hosts/{{.ID}}/delete"
+        <form class="form-inline" method="post" action="/hosts/{{.ID}}/delete"
               onsubmit="return confirm('Delete this host?');">
-          <button type="submit">Delete</button>
+          <button class="btn btn-danger" type="submit">Delete</button>
         </form>
       </td>
     </tr>
-    {{else}}
-    <tr><td colspan="6"><em>No hosts yet.</em></td></tr>
-    {{end}}
+  {{end}}
   </tbody>
 </table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No hosts yet.</div></div>
+{{end}}
+{{end}}

@@ -64,3 +64,25 @@ func TestCreateHostInvalidShowsError(t *testing.T) {
 		t.Errorf("invalid POST body missing validation error")
 	}
 }
+
+func TestPagesUseSharedLayout(t *testing.T) {
+	srv := newTestServer(t)
+	for _, path := range []string{"/hosts", "/hosts/new"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200", path, rec.Code)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, "Almanaut") {
+			t.Errorf("GET %s: missing layout brand 'Almanaut'", path)
+		}
+		if !strings.Contains(body, "<style") {
+			t.Errorf("GET %s: missing embedded stylesheet", path)
+		}
+		if !strings.Contains(body, "prefers-color-scheme") {
+			t.Errorf("GET %s: missing dark-mode CSS", path)
+		}
+	}
+}

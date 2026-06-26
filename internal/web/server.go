@@ -11,6 +11,17 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+type hostsPageData struct {
+	Title string
+	Hosts []domain.Host
+}
+
+type hostFormData struct {
+	Title, Heading, Action, SubmitLabel, Error string
+	Host  domain.Host
+	Types []string
+}
+
 // New builds the HTTP handler with all routes wired to repo.
 func New(repo *store.HostRepo) http.Handler {
 	r := chi.NewRouter()
@@ -31,16 +42,19 @@ func listHosts(repo *store.HostRepo) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		render(w, "hosts.html", map[string]any{"Hosts": hosts})
+		render(w, "hosts.html", hostsPageData{Title: "Hosts", Hosts: hosts})
 	}
 }
 
 func newHostForm() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "host_new.html", map[string]any{
-			"Host":  domain.Host{Type: "physical"},
-			"Types": domain.HostTypes,
-			"Error": "",
+		render(w, "host_form.html", hostFormData{
+			Title:       "New host",
+			Heading:     "New host",
+			Action:      "/hosts",
+			SubmitLabel: "Create",
+			Host:        domain.Host{Type: "physical"},
+			Types:       domain.HostTypes,
 		})
 	}
 }
@@ -56,9 +70,14 @@ func createHost(repo *store.HostRepo) http.HandlerFunc {
 			IPs:    parseIPs(req.FormValue("ips")),
 		}
 		if err := host.Validate(); err != nil {
-			w.WriteHeader(http.StatusOK)
-			render(w, "host_new.html", map[string]any{
-				"Host": host, "Types": domain.HostTypes, "Error": err.Error(),
+			render(w, "host_form.html", hostFormData{
+				Title:       "New host",
+				Heading:     "New host",
+				Action:      "/hosts",
+				SubmitLabel: "Create",
+				Host:        host,
+				Types:       domain.HostTypes,
+				Error:       err.Error(),
 			})
 			return
 		}
