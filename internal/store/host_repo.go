@@ -20,6 +20,9 @@ func NewHostRepo(db *sql.DB) *HostRepo {
 
 // Create inserts h and returns its new ID.
 func (r *HostRepo) Create(h domain.Host) (int64, error) {
+	if h.IPs == nil {
+		h.IPs = []string{}
+	}
 	ips, err := json.Marshal(h.IPs)
 	if err != nil {
 		return 0, fmt.Errorf("marshal ips: %w", err)

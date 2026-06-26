@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/almanaut/almanaut/internal/config"
 	"github.com/almanaut/almanaut/internal/store"
@@ -32,8 +33,16 @@ func main() {
 	}
 
 	handler := web.New(store.NewHostRepo(db))
+	srv := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 	log.Printf("Almanaut listening on %s (data: %s)", cfg.Addr, cfg.DataDir)
-	if err := http.ListenAndServe(cfg.Addr, handler); err != nil {
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("server: %v", err)
 	}
 }
