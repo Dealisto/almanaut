@@ -34,8 +34,18 @@ type serviceFormData struct {
 	Kinds   []string
 }
 
+type networksPageData struct {
+	Title    string
+	Networks []domain.Network
+}
+
+type networkFormData struct {
+	Title, Heading, Action, SubmitLabel, Error string
+	Network domain.Network
+}
+
 // New builds the HTTP handler with all routes wired to the given repos.
-func New(hosts *store.HostRepo, services *store.ServiceRepo) http.Handler {
+func New(hosts *store.HostRepo, services *store.ServiceRepo, networks *store.NetworkRepo) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
@@ -53,6 +63,13 @@ func New(hosts *store.HostRepo, services *store.ServiceRepo) http.Handler {
 	r.Get("/services/{id}/edit", editServiceForm(services))
 	r.Post("/services/{id}", updateService(services))
 	r.Post("/services/{id}/delete", deleteService(services))
+
+	r.Get("/networks", listNetworks(networks))
+	r.Get("/networks/new", newNetworkForm())
+	r.Post("/networks", createNetwork(networks))
+	r.Get("/networks/{id}/edit", editNetworkForm(networks))
+	r.Post("/networks/{id}", updateNetwork(networks))
+	r.Post("/networks/{id}/delete", deleteNetwork(networks))
 	return r
 }
 
@@ -294,6 +311,111 @@ func deleteService(repo *store.ServiceRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/services", http.StatusSeeOther)
+	}
+}
+
+func listNetworks(repo *store.NetworkRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		networks, err := repo.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		render(w, "networks.html", networksPageData{Title: "Networks", Networks: networks})
+	}
+}
+
+func newNetworkForm() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		render(w, "network_form.html", networkFormData{
+			Title: "New network", Heading: "New network", Action: "/networks", SubmitLabel: "Create",
+		})
+	}
+}
+
+func networkFromForm(req *http.Request) domain.Network {
+	return domain.Network{
+		Name:    strings.TrimSpace(req.FormValue("name")),
+		CIDR:    strings.TrimSpace(req.FormValue("cidr")),
+		VLAN:    req.FormValue("vlan"),
+		Gateway: strings.TrimSpace(req.FormValue("gateway")),
+		Notes:   req.FormValue("notes"),
+	}
+}
+
+func createNetwork(repo *store.NetworkRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		n := networkFromForm(req)
+		if err := n.Validate(); err != nil {
+			render(w, "network_form.html", networkFormData{
+				Title: "New network", Heading: "New network", Action: "/networks",
+				SubmitLabel: "Create", Network: n, Error: err.Error(),
+			})
+			return
+		}
+		if _, err := repo.Create(n); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/networks", http.StatusSeeOther)
+	}
+}
+
+func editNetworkForm(repo *store.NetworkRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		n, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "network not found", http.StatusNotFound)
+			return
+		}
+		render(w, "network_form.html", networkFormData{
+			Title: "Edit network", Heading: "Edit network", Action: fmt.Sprintf("/networks/%d", id),
+			SubmitLabel: "Save", Network: n,
+		})
+	}
+}
+
+func updateNetwork(repo *store.NetworkRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		n := networkFromForm(req)
+		n.ID = id
+		if err := n.Validate(); err != nil {
+			render(w, "network_form.html", networkFormData{
+				Title: "Edit network", Heading: "Edit network", Action: fmt.Sprintf("/networks/%d", id),
+				SubmitLabel: "Save", Network: n, Error: err.Error(),
+			})
+			return
+		}
+		if err := repo.Update(n); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/networks", http.StatusSeeOther)
+	}
+}
+
+func deleteNetwork(repo *store.NetworkRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/networks", http.StatusSeeOther)
 	}
 }
 
