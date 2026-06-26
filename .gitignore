@@ -1,0 +1,17 @@
+# Go
+/almanaut
+/almanaut.exe
+*.test
+*.out
+/dist/
+
+# Local data / SQLite
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
