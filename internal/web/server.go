@@ -100,7 +100,7 @@ func New(
 	r.Get("/hosts/{id}", showHost(hosts, cat, tags, relationships))
 	r.Get("/hosts/{id}/edit", editHostForm(hosts))
 	r.Post("/hosts/{id}", updateHost(hosts))
-	r.Post("/hosts/{id}/delete", deleteHost(hosts))
+	r.Post("/hosts/{id}/delete", deleteHost(hosts, relationships, tags))
 	r.Post("/tags", addTag(tags))
 	r.Post("/tags/delete", removeTag(tags))
 	r.Get("/tags", tagsOverview(tags, cat))
@@ -111,7 +111,7 @@ func New(
 	r.Get("/services/{id}", showService(services, cat, tags, relationships))
 	r.Get("/services/{id}/edit", editServiceForm(services))
 	r.Post("/services/{id}", updateService(services))
-	r.Post("/services/{id}/delete", deleteService(services))
+	r.Post("/services/{id}/delete", deleteService(services, relationships, tags))
 
 	r.Get("/networks", listNetworks(networks))
 	r.Get("/networks/new", newNetworkForm())
@@ -119,7 +119,7 @@ func New(
 	r.Get("/networks/{id}", showNetwork(networks, cat, tags, relationships))
 	r.Get("/networks/{id}/edit", editNetworkForm(networks))
 	r.Post("/networks/{id}", updateNetwork(networks))
-	r.Post("/networks/{id}/delete", deleteNetwork(networks))
+	r.Post("/networks/{id}/delete", deleteNetwork(networks, relationships, tags))
 
 	r.Get("/domains", listDomains(domains))
 	r.Get("/domains/new", newDomainForm())
@@ -127,7 +127,7 @@ func New(
 	r.Get("/domains/{id}", showDomain(domains, cat, tags, relationships))
 	r.Get("/domains/{id}/edit", editDomainForm(domains))
 	r.Post("/domains/{id}", updateDomain(domains))
-	r.Post("/domains/{id}/delete", deleteDomain(domains))
+	r.Post("/domains/{id}/delete", deleteDomain(domains, relationships, tags))
 
 	r.Get("/certificates", listCertificates(certificates))
 	r.Get("/certificates/new", newCertificateForm())
@@ -135,7 +135,7 @@ func New(
 	r.Get("/certificates/{id}", showCertificate(certificates, cat, tags, relationships))
 	r.Get("/certificates/{id}/edit", editCertificateForm(certificates))
 	r.Post("/certificates/{id}", updateCertificate(certificates))
-	r.Post("/certificates/{id}/delete", deleteCertificate(certificates))
+	r.Post("/certificates/{id}/delete", deleteCertificate(certificates, relationships, tags))
 
 	r.Get("/backups", listBackups(backups))
 	r.Get("/backups/new", newBackupForm())
@@ -143,7 +143,7 @@ func New(
 	r.Get("/backups/{id}", showBackup(backups, cat, tags, relationships))
 	r.Get("/backups/{id}/edit", editBackupForm(backups))
 	r.Post("/backups/{id}", updateBackup(backups))
-	r.Post("/backups/{id}/delete", deleteBackup(backups))
+	r.Post("/backups/{id}/delete", deleteBackup(backups, relationships, tags))
 
 	r.Get("/relationships", listRelationships(relationships, cat))
 	r.Post("/relationships", createRelationship(relationships, cat))
@@ -443,7 +443,7 @@ func updateHost(repo *store.HostRepo) http.HandlerFunc {
 	}
 }
 
-func deleteHost(repo *store.HostRepo) http.HandlerFunc {
+func deleteHost(repo *store.HostRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
 		if err != nil {
@@ -451,6 +451,14 @@ func deleteHost(repo *store.HostRepo) http.HandlerFunc {
 			return
 		}
 		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := rels.DeleteByEntity("host", id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := tags.DeleteByEntity("host", id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -550,7 +558,7 @@ func updateService(repo *store.ServiceRepo) http.HandlerFunc {
 	}
 }
 
-func deleteService(repo *store.ServiceRepo) http.HandlerFunc {
+func deleteService(repo *store.ServiceRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
 		if err != nil {
@@ -558,6 +566,14 @@ func deleteService(repo *store.ServiceRepo) http.HandlerFunc {
 			return
 		}
 		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := rels.DeleteByEntity("service", id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := tags.DeleteByEntity("service", id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -655,7 +671,7 @@ func updateNetwork(repo *store.NetworkRepo) http.HandlerFunc {
 	}
 }
 
-func deleteNetwork(repo *store.NetworkRepo) http.HandlerFunc {
+func deleteNetwork(repo *store.NetworkRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
 		if err != nil {
@@ -663,6 +679,14 @@ func deleteNetwork(repo *store.NetworkRepo) http.HandlerFunc {
 			return
 		}
 		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := rels.DeleteByEntity("network", id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := tags.DeleteByEntity("network", id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -758,7 +782,7 @@ func updateDomain(repo *store.DomainRepo) http.HandlerFunc {
 	}
 }
 
-func deleteDomain(repo *store.DomainRepo) http.HandlerFunc {
+func deleteDomain(repo *store.DomainRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
 		if err != nil {
@@ -766,6 +790,14 @@ func deleteDomain(repo *store.DomainRepo) http.HandlerFunc {
 			return
 		}
 		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := rels.DeleteByEntity("domain", id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := tags.DeleteByEntity("domain", id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -863,7 +895,7 @@ func updateCertificate(repo *store.CertificateRepo) http.HandlerFunc {
 	}
 }
 
-func deleteCertificate(repo *store.CertificateRepo) http.HandlerFunc {
+func deleteCertificate(repo *store.CertificateRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
 		if err != nil {
@@ -871,6 +903,14 @@ func deleteCertificate(repo *store.CertificateRepo) http.HandlerFunc {
 			return
 		}
 		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := rels.DeleteByEntity("certificate", id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := tags.DeleteByEntity("certificate", id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -968,7 +1008,7 @@ func updateBackup(repo *store.BackupRepo) http.HandlerFunc {
 	}
 }
 
-func deleteBackup(repo *store.BackupRepo) http.HandlerFunc {
+func deleteBackup(repo *store.BackupRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
 		if err != nil {
@@ -976,6 +1016,14 @@ func deleteBackup(repo *store.BackupRepo) http.HandlerFunc {
 			return
 		}
 		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := rels.DeleteByEntity("backup", id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := tags.DeleteByEntity("backup", id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
