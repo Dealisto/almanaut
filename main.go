@@ -73,13 +73,13 @@ func main() {
 		log.Fatalf("server: %v", err)
 	case <-ctx.Done():
 		stop() // restore default signal handling so a second signal force-quits
-		log.Println("shutting down…")
+		log.Println("shutting down...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			log.Printf("graceful shutdown failed: %v", err)
 		} else {
 			log.Println("stopped")
 		}
+		cancel()
 	}
 }
