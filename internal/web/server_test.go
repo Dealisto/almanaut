@@ -612,3 +612,57 @@ func TestNetworkDetailPage(t *testing.T) {
 		t.Error("notes not rendered as Markdown")
 	}
 }
+
+func TestGlobalSearch(t *testing.T) {
+	srv := newTestServer(t)
+	// host:1 — matches by name, by note content, and by IP; also carries a tag.
+	postForm(t, srv, "/hosts", url.Values{
+		"name": {"proxmox"}, "type": {"physical"},
+		"notes": {"runs the media stack"}, "ips": {"10.0.0.5"},
+	})
+	postForm(t, srv, "/tags", url.Values{"entity_type": {"host"}, "entity_id": {"1"}, "tag": {"critical"}})
+	// service:1 — distinct entity, matched by name.
+	postForm(t, srv, "/services", url.Values{"name": {"jellyfin"}, "kind": {"container"}})
+
+	get := func(q string) (int, string) {
+		req := httptest.NewRequest(http.MethodGet, "/search?q="+url.QueryEscape(q), nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+
+	// name match → host links to its detail page, under a Hosts heading
+	if code, body := get("proxmox"); code != http.StatusOK ||
+		!strings.Contains(body, "/hosts/1") || !strings.Contains(body, "Hosts") {
+		t.Errorf("search proxmox: code=%d body=%q", code, body)
+	}
+	// note-content match
+	if _, body := get("media"); !strings.Contains(body, "/hosts/1") {
+		t.Error("search by note content failed")
+	}
+	// IP match
+	if _, body := get("10.0.0.5"); !strings.Contains(body, "/hosts/1") {
+		t.Error("search by IP failed")
+	}
+	// tag match pulls in the entity
+	if _, body := get("critical"); !strings.Contains(body, "/hosts/1") {
+		t.Error("search by tag failed")
+	}
+	// distinct entity type
+	if _, body := get("jellyfin"); !strings.Contains(body, "/services/1") {
+		t.Error("search service failed")
+	}
+	// dedupe: "proxmox" matches both the name AND (separately) we tag it "proxmox"
+	postForm(t, srv, "/tags", url.Values{"entity_type": {"host"}, "entity_id": {"1"}, "tag": {"proxmox"}})
+	if _, body := get("proxmox"); strings.Count(body, `href="/hosts/1"`) != 1 {
+		t.Errorf("expected host:1 once, got %d", strings.Count(body, `href="/hosts/1"`))
+	}
+	// empty query → prompt, no results rows
+	if code, body := get(""); code != http.StatusOK || !strings.Contains(body, "Type a query") {
+		t.Errorf("empty query: code=%d body=%q", code, body)
+	}
+	// no match → explicit empty state
+	if _, body := get("zzzznope"); !strings.Contains(body, "No results") {
+		t.Error("no-match state missing")
+	}
+}

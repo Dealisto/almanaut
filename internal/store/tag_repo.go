@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 )
@@ -98,6 +99,30 @@ func (r *TagRepo) ListByName(name string) ([]domain.Tag, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query tags by name: %w", err)
+	}
+	defer rows.Close()
+	tags := []domain.Tag{}
+	for rows.Next() {
+		var t domain.Tag
+		if err := rows.Scan(&t.ID, &t.EntityType, &t.EntityID, &t.Name); err != nil {
+			return nil, fmt.Errorf("scan tag: %w", err)
+		}
+		tags = append(tags, t)
+	}
+	return tags, rows.Err()
+}
+
+// Search returns tag rows whose name contains q (case-insensitive substring),
+// ordered by entity_type then entity_id. Tag names are stored lowercase, so the
+// query is lowercased and matched with instr (no LIKE wildcards to escape).
+func (r *TagRepo) Search(q string) ([]domain.Tag, error) {
+	rows, err := r.db.Query(
+		`SELECT id, entity_type, entity_id, name FROM tags
+		 WHERE instr(name, ?) > 0 ORDER BY entity_type, entity_id`,
+		strings.ToLower(strings.TrimSpace(q)),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("search tags: %w", err)
 	}
 	defer rows.Close()
 	tags := []domain.Tag{}

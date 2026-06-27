@@ -99,3 +99,34 @@ func TestTagRepoCountsAndListByName(t *testing.T) {
 		t.Errorf("unexpected order: %+v", tagged)
 	}
 }
+
+func TestTagRepoSearch(t *testing.T) {
+	repo := newTagRepo(t)
+	if err := repo.Add(domain.Tag{EntityType: "host", EntityID: 1, Name: "critical"}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if err := repo.Add(domain.Tag{EntityType: "service", EntityID: 2, Name: "media"}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	// substring match
+	got, err := repo.Search("crit")
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "critical" {
+		t.Fatalf("Search(crit) = %+v, want one 'critical'", got)
+	}
+
+	// case-insensitive (tags are stored lowercase; query is lowercased)
+	got, _ = repo.Search("MEDIA")
+	if len(got) != 1 || got[0].Name != "media" {
+		t.Fatalf("Search(MEDIA) = %+v, want one 'media'", got)
+	}
+
+	// no match
+	got, _ = repo.Search("xyz")
+	if len(got) != 0 {
+		t.Fatalf("Search(xyz) = %+v, want none", got)
+	}
+}

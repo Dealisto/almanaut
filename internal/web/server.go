@@ -150,6 +150,7 @@ func New(
 	r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
 	r.Get("/impact", impactView(relationships, cat))
 	r.Get("/checks", healthChecks(services, certificates, relationships))
+	r.Get("/search", searchEntities(cat, tags))
 	return r
 }
 
