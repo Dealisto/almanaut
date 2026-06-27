@@ -2,8 +2,6 @@ package store
 
 import (
 	"testing"
-
-	"github.com/Dealisto/almanaut/internal/domain"
 )
 
 func TestImpact(t *testing.T) {
@@ -32,9 +30,3 @@ func TestImpact(t *testing.T) {
 	}
 }
 
-func mustCreateRel(t *testing.T, repo *RelationshipRepo, ft string, fid int64, tt string, tid int64, kind string) {
-	t.Helper()
-	if _, err := repo.Create(domain.Relationship{FromType: ft, FromID: fid, ToType: tt, ToID: tid, Kind: kind}); err != nil {
-		t.Fatalf("Create rel: %v", err)
-	}
-}
