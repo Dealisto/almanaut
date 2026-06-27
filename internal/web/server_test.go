@@ -256,6 +256,28 @@ func TestCreateDomainInvalidShowsError(t *testing.T) {
 	}
 }
 
+func TestDomainDetailPage(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/domains", url.Values{
+		"fqdn": {"example.com"}, "provider": {"cloudflare"},
+		"notes": {"renews **yearly**"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/domains/1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /domains/1 = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "example.com") {
+		t.Error("detail page missing FQDN")
+	}
+	if !strings.Contains(body, "cloudflare") {
+		t.Error("detail page missing provider")
+	}
+}
+
 func TestCreateAndListCertificate(t *testing.T) {
 	srv := newTestServer(t)
 

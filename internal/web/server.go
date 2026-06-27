@@ -123,6 +123,7 @@ func New(
 	r.Get("/domains", listDomains(domains))
 	r.Get("/domains/new", newDomainForm())
 	r.Post("/domains", createDomain(domains))
+	r.Get("/domains/{id}", showDomain(domains, cat, tags, relationships))
 	r.Get("/domains/{id}/edit", editDomainForm(domains))
 	r.Post("/domains/{id}", updateDomain(domains))
 	r.Post("/domains/{id}/delete", deleteDomain(domains))
@@ -1049,6 +1050,26 @@ func showNetwork(repo *store.NetworkRepo, cat entityCatalog, tags *store.TagRepo
 		}
 		renderDetail(w, cat, tags, rels, "network", id,
 			"Network: "+n.Name, n.Notes, fmt.Sprintf("/networks/%d/edit", id), fields)
+	}
+}
+
+func showDomain(repo *store.DomainRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		d, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "domain not found", http.StatusNotFound)
+			return
+		}
+		fields := []fieldRow{
+			{"Provider", d.Provider},
+		}
+		renderDetail(w, cat, tags, rels, "domain", id,
+			"Domain: "+d.FQDN, d.Notes, fmt.Sprintf("/domains/%d/edit", id), fields)
 	}
 }
 
