@@ -130,3 +130,25 @@ func TestTagRepoSearch(t *testing.T) {
 		t.Fatalf("Search(xyz) = %+v, want none", got)
 	}
 }
+
+func TestTagDeleteByEntity(t *testing.T) {
+	repo := newTagRepo(t)
+	mustAdd := func(et string, id int64, name string) {
+		if err := repo.Add(domain.Tag{EntityType: et, EntityID: id, Name: name}); err != nil {
+			t.Fatalf("Add(%s,%d,%s): %v", et, id, name, err)
+		}
+	}
+	mustAdd("host", 1, "a")
+	mustAdd("host", 1, "b")
+	mustAdd("service", 1, "a") // different entity — must remain
+
+	if err := repo.DeleteByEntity("host", 1); err != nil {
+		t.Fatalf("DeleteByEntity: %v", err)
+	}
+	if tags, _ := repo.ListForEntity("host", 1); len(tags) != 0 {
+		t.Errorf("host:1 tags not removed: %+v", tags)
+	}
+	if tags, _ := repo.ListForEntity("service", 1); len(tags) != 1 {
+		t.Errorf("service:1 tag should remain: %+v", tags)
+	}
+}

@@ -40,6 +40,18 @@ func (r *TagRepo) Delete(id int64) error {
 	return nil
 }
 
+// DeleteByEntity removes every tag attached to (entityType, id). Used to clean
+// up when an entity is deleted.
+func (r *TagRepo) DeleteByEntity(entityType string, id int64) error {
+	if _, err := r.db.Exec(
+		`DELETE FROM tags WHERE entity_type = ? AND entity_id = ?`,
+		entityType, id,
+	); err != nil {
+		return fmt.Errorf("delete tags for entity: %w", err)
+	}
+	return nil
+}
+
 // ListForEntity returns the tags attached to (entityType, entityID), ordered by name.
 func (r *TagRepo) ListForEntity(entityType string, entityID int64) ([]domain.Tag, error) {
 	rows, err := r.db.Query(
