@@ -276,6 +276,9 @@ func TestDomainDetailPage(t *testing.T) {
 	if !strings.Contains(body, "cloudflare") {
 		t.Error("detail page missing provider")
 	}
+	if !strings.Contains(body, "<strong>yearly</strong>") {
+		t.Error("notes not rendered as Markdown")
+	}
 }
 
 func TestCreateAndListCertificate(t *testing.T) {
