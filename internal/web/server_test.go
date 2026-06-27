@@ -764,6 +764,38 @@ func TestDashboardEmpty(t *testing.T) {
 	}
 }
 
+func TestDeleteEntityCleansUpRelationshipsAndTags(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}})
+	postForm(t, srv, "/services", url.Values{"name": {"jellyfin"}, "kind": {"container"}})
+	// relationship service:1 -> host:1, and a tag on host:1
+	postForm(t, srv, "/relationships", url.Values{"from": {"service:1"}, "to": {"host:1"}, "kind": {"runs on"}})
+	postForm(t, srv, "/tags", url.Values{"entity_type": {"host"}, "entity_id": {"1"}, "tag": {"critical"}})
+
+	// delete host:1
+	rec := postForm(t, srv, "/hosts/1/delete", url.Values{})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("delete host = %d, want 303", rec.Code)
+	}
+
+	// the relationship touching host:1 must be gone — an orphaned row would render
+	// the endpoint as "host:1 (deleted)", so "(deleted)" must NOT appear.
+	req := httptest.NewRequest(http.MethodGet, "/relationships", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if strings.Contains(rec.Body.String(), "(deleted)") {
+		t.Error("relationship touching the deleted host was not cleaned up")
+	}
+
+	// the host's tag must be gone from the tags overview
+	req = httptest.NewRequest(http.MethodGet, "/tags", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if strings.Contains(rec.Body.String(), "critical") {
+		t.Error("tag on the deleted host was not cleaned up")
+	}
+}
+
 func TestGlobalSearch(t *testing.T) {
 	srv := newTestServer(t)
 	// host:1 — matches by name, by note content, and by IP; also carries a tag.

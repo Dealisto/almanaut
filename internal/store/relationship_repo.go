@@ -66,6 +66,20 @@ func (r *RelationshipRepo) Delete(id int64) error {
 	return nil
 }
 
+// DeleteByEntity removes every relationship where (entityType, id) is the from
+// or the to endpoint. Used to clean up when an entity is deleted.
+func (r *RelationshipRepo) DeleteByEntity(entityType string, id int64) error {
+	_, err := r.db.Exec(
+		`DELETE FROM relationships
+		 WHERE (from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?)`,
+		entityType, id, entityType, id,
+	)
+	if err != nil {
+		return fmt.Errorf("delete relationships for entity: %w", err)
+	}
+	return nil
+}
+
 func (r *RelationshipRepo) query(sqlStr string, args ...any) ([]domain.Relationship, error) {
 	rows, err := r.db.Query(sqlStr, args...)
 	if err != nil {
