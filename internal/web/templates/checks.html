@@ -1,0 +1,35 @@
+{{define "content"}}
+<h1>Checks</h1>
+
+<h2>Services without a backup</h2>
+{{if .UnbackedServices}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Kind</th><th>Category</th></tr></thead>
+  <tbody>
+  {{range .UnbackedServices}}
+    <tr><td><a href="/services/{{.ID}}/edit">{{.Name}}</a></td><td>{{.Kind}}</td><td>{{.Category}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">Every service is linked to a backup. Nice.</div></div>
+{{end}}
+
+<h2>Certificates expiring within {{.WithinDays}} days</h2>
+{{if .ExpiringCerts}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Subject</th><th>Issuer</th><th>Expires</th><th>Auto-renew</th></tr></thead>
+  <tbody>
+  {{range .ExpiringCerts}}
+    <tr><td><a href="/certificates/{{.ID}}/edit">{{.Subject}}</a></td><td>{{.Issuer}}</td><td>{{.ExpiresOn}}</td><td>{{if .AutoRenew}}yes{{else}}no{{end}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No certificates expiring soon.</div></div>
+{{end}}
+{{end}}

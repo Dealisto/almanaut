@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
@@ -138,6 +139,7 @@ func New(
 	r.Post("/relationships", createRelationship(relationships, cat))
 	r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
 	r.Get("/impact", impactView(relationships, cat))
+	r.Get("/checks", healthChecks(services, certificates, relationships))
 	return r
 }
 
@@ -185,6 +187,40 @@ func impactView(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFun
 			}
 		}
 		render(w, "impact.html", data)
+	}
+}
+
+type checksPageData struct {
+	Title            string
+	WithinDays       int
+	UnbackedServices []domain.Service
+	ExpiringCerts    []domain.Certificate
+}
+
+func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	const withinDays = 30
+	return func(w http.ResponseWriter, req *http.Request) {
+		svcList, err := services.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		certList, err := certs.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		relList, err := rels.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		render(w, "checks.html", checksPageData{
+			Title:            "Checks",
+			WithinDays:       withinDays,
+			UnbackedServices: domain.ServicesWithoutBackup(svcList, relList),
+			ExpiringCerts:    domain.ExpiringSoon(certList, time.Now(), withinDays),
+		})
 	}
 }
 
