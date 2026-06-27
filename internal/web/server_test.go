@@ -421,6 +421,9 @@ func TestTagsOverview(t *testing.T) {
 	if body := rec.Body.String(); !strings.Contains(body, "#critical") {
 		t.Errorf("overview missing tag: %q", body)
 	}
+	if body := rec.Body.String(); !strings.Contains(body, "/tags?name=critical") {
+		t.Errorf("overview missing drilldown link: %q", body)
+	}
 
 	// drilling into a tag lists the tagged entity, linked to its detail page
 	req = httptest.NewRequest(http.MethodGet, "/tags?name=critical", nil)
