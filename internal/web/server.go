@@ -139,6 +139,7 @@ func New(
 	r.Get("/backups", listBackups(backups))
 	r.Get("/backups/new", newBackupForm())
 	r.Post("/backups", createBackup(backups))
+	r.Get("/backups/{id}", showBackup(backups, cat, tags, relationships))
 	r.Get("/backups/{id}/edit", editBackupForm(backups))
 	r.Post("/backups/{id}", updateBackup(backups))
 	r.Post("/backups/{id}/delete", deleteBackup(backups))
@@ -980,6 +981,28 @@ func deleteBackup(repo *store.BackupRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/backups", http.StatusSeeOther)
+	}
+}
+
+func showBackup(repo *store.BackupRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		b, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "backup not found", http.StatusNotFound)
+			return
+		}
+		fields := []fieldRow{
+			{"Destination", b.Destination},
+			{"Frequency", b.Frequency},
+			{"Last run", b.LastRun},
+		}
+		renderDetail(w, cat, tags, rels, "backup", id,
+			"Backup: "+b.Source, b.Notes, fmt.Sprintf("/backups/%d/edit", id), fields)
 	}
 }
 

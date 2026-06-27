@@ -381,6 +381,31 @@ func TestCreateBackupInvalidShowsError(t *testing.T) {
 	}
 }
 
+func TestBackupDetailPage(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/backups", url.Values{
+		"source": {"nas"}, "destination": {"b2"}, "frequency": {"daily"},
+		"last_run": {"2026-06-01"}, "notes": {"verify **monthly**"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/backups/1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /backups/1 = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Backup: nas") {
+		t.Error("detail page missing backup heading")
+	}
+	if !strings.Contains(body, "daily") {
+		t.Error("detail page missing frequency")
+	}
+	if !strings.Contains(body, "<strong>monthly</strong>") {
+		t.Error("notes not rendered as Markdown")
+	}
+}
+
 func postForm(t *testing.T, srv http.Handler, path string, form url.Values) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))

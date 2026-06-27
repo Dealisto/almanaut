@@ -8,7 +8,7 @@
   <tbody>
   {{range .Backups}}
     <tr>
-      <td>{{.Source}}</td>
+      <td><a href="/backups/{{.ID}}">{{.Source}}</a></td>
       <td>{{.Destination}}</td>
       <td>{{.Frequency}}</td>
       <td>{{.LastRun}}</td>
