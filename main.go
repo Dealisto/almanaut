@@ -77,8 +77,9 @@ func main() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
-			log.Fatalf("graceful shutdown failed: %v", err)
+			log.Printf("graceful shutdown failed: %v", err)
+		} else {
+			log.Println("stopped")
 		}
-		log.Println("stopped")
 	}
 }
