@@ -180,10 +180,7 @@ func impactView(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFun
 				render(w, "impact.html", data)
 				return
 			}
-			labels := make(map[string]string, len(opts))
-			for _, o := range opts {
-				labels[o.Value] = o.Label
-			}
+			labels := labelMap(opts)
 			data.Selected = ref
 			data.SelectedLabel = labelOrFallback(labels, typ, id)
 			refs, err := store.Impact(rels, typ, id)
@@ -253,10 +250,7 @@ func renderRelationships(w http.ResponseWriter, rels *store.RelationshipRepo, ca
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	labels := make(map[string]string, len(opts))
-	for _, o := range opts {
-		labels[o.Value] = o.Label
-	}
+	labels := labelMap(opts)
 	all, err := rels.List()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1138,8 +1132,11 @@ type tagsOverviewData struct {
 
 func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		name := domain.NormalizeTag(req.URL.Query().Get("name"))
-		if name == "" {
+		// Decide between the tag cloud and a drilldown on whether a name was
+		// actually requested, not on its normalized form — otherwise a query
+		// like ?name=# (which normalizes to "") would silently show the cloud.
+		raw := strings.TrimSpace(req.URL.Query().Get("name"))
+		if raw == "" {
 			counts, err := tags.Counts()
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1149,6 +1146,7 @@ func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 			return
 		}
 
+		name := domain.NormalizeTag(raw)
 		tagged, err := tags.ListByName(name)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1159,10 +1157,7 @@ func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		labels := make(map[string]string, len(opts))
-		for _, o := range opts {
-			labels[o.Value] = o.Label
-		}
+		labels := labelMap(opts)
 		entities := make([]tagEntity, 0, len(tagged))
 		for _, tg := range tagged {
 			entities = append(entities, tagEntity{
@@ -1170,8 +1165,14 @@ func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 				URL:   fmt.Sprintf("/%ss/%d", tg.EntityType, tg.EntityID),
 			})
 		}
+		// Keep the view in drilldown mode (Selected non-empty) even when the
+		// requested name normalizes away, so it shows "no entities" not the cloud.
+		selected := name
+		if selected == "" {
+			selected = raw
+		}
 		render(w, "tags_overview.html", tagsOverviewData{
-			Title: "Tags", Selected: name, Entities: entities,
+			Title: "Tags", Selected: selected, Entities: entities,
 		})
 	}
 }

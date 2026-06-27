@@ -439,6 +439,18 @@ func TestTagsOverview(t *testing.T) {
 	if !strings.Contains(body, "host: proxmox") {
 		t.Error("tag drilldown missing entity label")
 	}
+
+	// a name query that normalizes to empty (e.g. "#") must show the drilldown's
+	// empty state, NOT silently fall back to the full tag cloud.
+	req = httptest.NewRequest(http.MethodGet, "/tags?name=%23", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /tags?name=%%23 = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); strings.Contains(body, "#critical") {
+		t.Errorf("punctuation-only name should not show the tag cloud: %q", body)
+	}
 }
 
 func postForm(t *testing.T, srv http.Handler, path string, form url.Values) *httptest.ResponseRecorder {
