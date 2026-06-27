@@ -60,3 +60,53 @@ func (r *TagRepo) ListForEntity(entityType string, entityID int64) ([]domain.Tag
 	}
 	return tags, rows.Err()
 }
+
+// TagCount is a distinct tag name and the number of entities carrying it.
+type TagCount struct {
+	Name  string
+	Count int
+}
+
+// Counts returns every distinct tag name with the number of entities that
+// carry it, ordered by name.
+func (r *TagRepo) Counts() ([]TagCount, error) {
+	rows, err := r.db.Query(
+		`SELECT name, COUNT(*) FROM tags GROUP BY name ORDER BY name`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query tag counts: %w", err)
+	}
+	defer rows.Close()
+	counts := []TagCount{}
+	for rows.Next() {
+		var c TagCount
+		if err := rows.Scan(&c.Name, &c.Count); err != nil {
+			return nil, fmt.Errorf("scan tag count: %w", err)
+		}
+		counts = append(counts, c)
+	}
+	return counts, rows.Err()
+}
+
+// ListByName returns every tag row whose (normalized) name matches, ordered by
+// entity_type then entity_id.
+func (r *TagRepo) ListByName(name string) ([]domain.Tag, error) {
+	rows, err := r.db.Query(
+		`SELECT id, entity_type, entity_id, name FROM tags
+		 WHERE name = ? ORDER BY entity_type, entity_id`,
+		domain.NormalizeTag(name),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query tags by name: %w", err)
+	}
+	defer rows.Close()
+	tags := []domain.Tag{}
+	for rows.Next() {
+		var t domain.Tag
+		if err := rows.Scan(&t.ID, &t.EntityType, &t.EntityID, &t.Name); err != nil {
+			return nil, fmt.Errorf("scan tag: %w", err)
+		}
+		tags = append(tags, t)
+	}
+	return tags, rows.Err()
+}

@@ -59,3 +59,43 @@ func TestTagRepoAddListDelete(t *testing.T) {
 		t.Errorf("after delete: %+v", tags)
 	}
 }
+
+func TestTagRepoCountsAndListByName(t *testing.T) {
+	repo := newTagRepo(t)
+	mustAdd := func(et string, id int64, name string) {
+		if err := repo.Add(domain.Tag{EntityType: et, EntityID: id, Name: name}); err != nil {
+			t.Fatalf("Add(%s,%d,%s): %v", et, id, name, err)
+		}
+	}
+	mustAdd("host", 1, "critical")
+	mustAdd("service", 1, "critical")
+	mustAdd("service", 2, "media")
+
+	counts, err := repo.Counts()
+	if err != nil {
+		t.Fatalf("Counts: %v", err)
+	}
+	if len(counts) != 2 {
+		t.Fatalf("got %d counts, want 2: %+v", len(counts), counts)
+	}
+	// ordered by name: critical (2), media (1)
+	if counts[0].Name != "critical" || counts[0].Count != 2 {
+		t.Errorf("counts[0] = %+v, want {critical 2}", counts[0])
+	}
+	if counts[1].Name != "media" || counts[1].Count != 1 {
+		t.Errorf("counts[1] = %+v, want {media 1}", counts[1])
+	}
+
+	// ListByName normalizes its argument ("#Critical" -> "critical")
+	tagged, err := repo.ListByName("#Critical")
+	if err != nil {
+		t.Fatalf("ListByName: %v", err)
+	}
+	if len(tagged) != 2 {
+		t.Fatalf("got %d tagged, want 2: %+v", len(tagged), tagged)
+	}
+	// ordered by entity_type then entity_id: host:1, service:1
+	if tagged[0].EntityType != "host" || tagged[1].EntityType != "service" {
+		t.Errorf("unexpected order: %+v", tagged)
+	}
+}
