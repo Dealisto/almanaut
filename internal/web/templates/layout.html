@@ -69,12 +69,20 @@ header.app .search input{padding:6px 10px;border:1px solid var(--border);border-
 form.search-page{display:flex;gap:8px;margin-bottom:20px}
 form.search-page input{flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;
   background:var(--bg);color:var(--text);font:inherit}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:8px}
+.card{display:flex;flex-direction:column;gap:4px;padding:16px 18px;background:var(--surface);
+  border:1px solid var(--border);border-radius:8px;color:var(--text)}
+.card:hover{border-color:var(--accent);text-decoration:none}
+.card-count{font-size:1.8rem;font-weight:700}
+.card-label{color:var(--muted);font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}
+.attention{margin-bottom:12px}
+.attention h3{margin:.6em 0 .3em}
 </style>
 </head>
 <body>
 <header class="app"><div class="wrap">
-  <span class="brand">Almanaut</span>
-  <nav><a href="/hosts">Hosts</a><a href="/services">Services</a><a href="/networks">Networks</a><a href="/domains">Domains</a><a href="/certificates">Certificates</a><a href="/backups">Backups</a><a href="/tags">Tags</a><a href="/relationships">Relationships</a><a href="/impact">Impact</a><a href="/checks">Checks</a><a href="/data">Data</a></nav>
+  <a class="brand" href="/">Almanaut</a>
+  <nav><a href="/">Dashboard</a><a href="/hosts">Hosts</a><a href="/services">Services</a><a href="/networks">Networks</a><a href="/domains">Domains</a><a href="/certificates">Certificates</a><a href="/backups">Backups</a><a href="/tags">Tags</a><a href="/relationships">Relationships</a><a href="/impact">Impact</a><a href="/checks">Checks</a><a href="/data">Data</a></nav>
   <form class="search" method="get" action="/search" role="search">
     <input type="search" name="q" placeholder="Search…" aria-label="Search">
   </form>

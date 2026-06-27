@@ -715,6 +715,55 @@ func uploadImport(t *testing.T, srv http.Handler, yamlDoc string, confirm bool) 
 	return rec
 }
 
+func TestDashboard(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}, "status": {"running"}})
+	postForm(t, srv, "/hosts", url.Values{"name": {"oldbox"}, "type": {"vm"}, "status": {"down"}})
+	soon := time.Now().AddDate(0, 0, 7).Format("2006-01-02")
+	postForm(t, srv, "/certificates", url.Values{"subject": {"example.com"}, "expires_on": {soon}})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET / = %d, want 200 (dashboard, not a redirect)", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"Dashboard", "Hosts", "Services", "Certificates", "Attention"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("dashboard missing %q", want)
+		}
+	}
+	if !strings.Contains(body, `<span class="card-count">2</span>`) {
+		t.Errorf("expected a count card showing 2 hosts; body:\n%s", body)
+	}
+	// down host appears under attention, linked to its detail page
+	if !strings.Contains(body, "/hosts/2") || !strings.Contains(body, "oldbox") {
+		t.Error("down host not shown in attention")
+	}
+	// expiring cert appears under attention, linked to its detail page
+	if !strings.Contains(body, "/certificates/1") || !strings.Contains(body, "example.com") {
+		t.Error("expiring certificate not shown in attention")
+	}
+}
+
+func TestDashboardEmpty(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET / = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `<span class="card-count">0</span>`) {
+		t.Error("empty inventory should show zero counts")
+	}
+	if !strings.Contains(body, "All clear.") {
+		t.Error("empty inventory should show an 'All clear.' attention line")
+	}
+}
+
 func TestGlobalSearch(t *testing.T) {
 	srv := newTestServer(t)
 	// host:1 — matches by name, by note content, and by IP; also carries a tag.

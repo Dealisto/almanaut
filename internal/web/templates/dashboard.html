@@ -1,0 +1,23 @@
+{{define "content"}}
+<h1>Dashboard</h1>
+<div class="cards">
+  {{range .Counts}}
+  <a class="card" href="{{.URL}}">
+    <span class="card-count">{{.Count}}</span>
+    <span class="card-label">{{.Label}}</span>
+  </a>
+  {{end}}
+</div>
+
+<h2>Attention</h2>
+{{range .Groups}}
+<div class="attention">
+  <h3>{{if .MoreURL}}<a href="{{.MoreURL}}">{{.Title}}</a>{{else}}{{.Title}}{{end}}</h3>
+  {{if .Items}}
+  <ul class="related">{{range .Items}}<li><a href="{{.URL}}">{{.Label}}</a></li>{{end}}</ul>
+  {{else}}
+  <p class="muted">All clear.</p>
+  {{end}}
+</div>
+{{end}}
+{{end}}

@@ -93,9 +93,7 @@ func New(
 		domains: domains, certificates: certificates, backups: backups,
 	}
 	r := chi.NewRouter()
-	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
-		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
-	})
+	r.Get("/", dashboard(cat, relationships))
 	r.Get("/hosts", listHosts(hosts))
 	r.Get("/hosts/new", newHostForm())
 	r.Post("/hosts", createHost(hosts))
