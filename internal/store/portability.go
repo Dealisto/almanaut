@@ -206,5 +206,8 @@ func Import(db *sql.DB, snap Snapshot) error {
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
 }

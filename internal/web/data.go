@@ -48,6 +48,11 @@ func importData(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "could not parse upload", http.StatusBadRequest)
 			return
 		}
+		defer func() {
+			if req.MultipartForm != nil {
+				_ = req.MultipartForm.RemoveAll()
+			}
+		}()
 		if req.FormValue("confirm") == "" {
 			http.Error(w, "you must confirm that all data will be replaced", http.StatusBadRequest)
 			return

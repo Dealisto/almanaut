@@ -38,7 +38,7 @@ func TestExportEmptyMarshalsEmptyLists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	for _, key := range []string{"hosts: []", "services: []", "relationships: []", "tags: []"} {
+	for _, key := range []string{"hosts: []", "services: []", "networks: []", "domains: []", "certificates: []", "backups: []", "relationships: []", "tags: []"} {
 		if !strings.Contains(string(out), key) {
 			t.Errorf("empty inventory: want %q (not null) in:\n%s", key, out)
 		}
