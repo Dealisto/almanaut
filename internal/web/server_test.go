@@ -367,3 +367,22 @@ func TestCreateRelationshipInvalidShowsError(t *testing.T) {
 		t.Error("invalid POST /relationships missing validation error")
 	}
 }
+
+func TestImpactView(t *testing.T) {
+	srv := newTestServer(t)
+	// host:1, service:1, and service runs on host
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}})
+	postForm(t, srv, "/services", url.Values{"name": {"jellyfin"}, "kind": {"container"}})
+	postForm(t, srv, "/relationships", url.Values{"from": {"service:1"}, "kind": {"runs on"}, "to": {"host:1"}})
+
+	req := httptest.NewRequest(http.MethodGet, "/impact?ref=host:1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /impact = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "service: jellyfin") {
+		t.Error("impact of host:1 should list the dependent service")
+	}
+}

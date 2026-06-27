@@ -137,7 +137,55 @@ func New(
 	r.Get("/relationships", listRelationships(relationships, cat))
 	r.Post("/relationships", createRelationship(relationships, cat))
 	r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
+	r.Get("/impact", impactView(relationships, cat))
 	return r
+}
+
+type impactPageData struct {
+	Title         string
+	Options       []entityOption
+	Selected      string
+	SelectedLabel string
+	Impacted      []string
+	Computed      bool
+	Error         string
+}
+
+func impactView(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		opts, err := cat.options()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		data := impactPageData{Title: "Impact", Options: opts}
+
+		ref := req.URL.Query().Get("ref")
+		if ref != "" {
+			typ, id, perr := parseRef(ref)
+			if perr != nil {
+				data.Error = perr.Error()
+				render(w, "impact.html", data)
+				return
+			}
+			labels := make(map[string]string, len(opts))
+			for _, o := range opts {
+				labels[o.Value] = o.Label
+			}
+			data.Selected = ref
+			data.SelectedLabel = labelOrFallback(labels, typ, id)
+			refs, err := store.Impact(rels, typ, id)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			data.Computed = true
+			for _, r := range refs {
+				data.Impacted = append(data.Impacted, labelOrFallback(labels, r.Type, r.ID))
+			}
+		}
+		render(w, "impact.html", data)
+	}
 }
 
 type relationshipView struct {
