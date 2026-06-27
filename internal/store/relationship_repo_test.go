@@ -21,6 +21,13 @@ func newRelationshipRepo(t *testing.T) *RelationshipRepo {
 	return NewRelationshipRepo(db)
 }
 
+func mustCreateRel(t *testing.T, repo *RelationshipRepo, ft string, fid int64, tt string, tid int64, kind string) {
+	t.Helper()
+	if _, err := repo.Create(domain.Relationship{FromType: ft, FromID: fid, ToType: tt, ToID: tid, Kind: kind}); err != nil {
+		t.Fatalf("Create rel: %v", err)
+	}
+}
+
 
 func TestRelationshipRepoCRUDAndListByTo(t *testing.T) {
 	repo := newRelationshipRepo(t)
@@ -77,5 +84,26 @@ func TestRelationshipListForEntity(t *testing.T) {
 	}
 	if len(got) != 2 {
 		t.Fatalf("got %d, want 2: %+v", len(got), got)
+	}
+}
+
+func TestRelationshipDeleteByEntity(t *testing.T) {
+	repo := newRelationshipRepo(t)
+	mustCreateRel(t, repo, "service", 1, "host", 1, "runs on")      // host:1 is the "to"
+	mustCreateRel(t, repo, "host", 1, "network", 2, "connected to") // host:1 is the "from"
+	mustCreateRel(t, repo, "domain", 9, "service", 1, "exposed via") // does not touch host:1
+
+	if err := repo.DeleteByEntity("host", 1); err != nil {
+		t.Fatalf("DeleteByEntity: %v", err)
+	}
+	all, err := repo.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("got %d relationships, want 1: %+v", len(all), all)
+	}
+	if all[0].FromType != "domain" {
+		t.Errorf("wrong relationship survived: %+v", all[0])
 	}
 }
