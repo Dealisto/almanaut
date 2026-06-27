@@ -8,7 +8,7 @@
   <tbody>
   {{range .Hosts}}
     <tr>
-      <td>{{.Name}}</td>
+      <td><a href="/hosts/{{.ID}}">{{.Name}}</a></td>
       <td>{{.Type}}</td>
       <td>{{.OS}}</td>
       <td>{{range $i, $ip := .IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}</td>

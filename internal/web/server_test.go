@@ -23,7 +23,7 @@ func newTestServer(t *testing.T) http.Handler {
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db), store.NewRelationshipRepo(db))
+	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db), store.NewRelationshipRepo(db), store.NewTagRepo(db))
 }
 
 func TestCreateAndListHost(t *testing.T) {
@@ -408,5 +408,34 @@ func TestImpactView(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "service: jellyfin") {
 		t.Error("impact of host:1 should list the dependent service")
+	}
+}
+
+func TestHostDetailWithTagsAndNotes(t *testing.T) {
+	srv := newTestServer(t)
+	// host:1 with a Markdown note
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}, "notes": {"# Runbook\n\nreboot **carefully**"}})
+
+	// add a tag via the top-level endpoint
+	rec := postForm(t, srv, "/tags", url.Values{"entity_type": {"host"}, "entity_id": {"1"}, "tag": {"#Critical"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /tags = %d, want 303", rec.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/hosts/1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /hosts/1 = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "proxmox") {
+		t.Error("detail page missing host name")
+	}
+	if !strings.Contains(body, "<strong>carefully</strong>") {
+		t.Error("notes not rendered as Markdown")
+	}
+	if !strings.Contains(body, "#critical") {
+		t.Error("normalized tag not shown")
 	}
 }

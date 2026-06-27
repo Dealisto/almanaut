@@ -84,6 +84,7 @@ func New(
 	certificates *store.CertificateRepo,
 	backups *store.BackupRepo,
 	relationships *store.RelationshipRepo,
+	tags *store.TagRepo,
 ) http.Handler {
 	cat := entityCatalog{
 		hosts: hosts, services: services, networks: networks,
@@ -96,9 +97,12 @@ func New(
 	r.Get("/hosts", listHosts(hosts))
 	r.Get("/hosts/new", newHostForm())
 	r.Post("/hosts", createHost(hosts))
+	r.Get("/hosts/{id}", showHost(hosts, cat, tags, relationships))
 	r.Get("/hosts/{id}/edit", editHostForm(hosts))
 	r.Post("/hosts/{id}", updateHost(hosts))
 	r.Post("/hosts/{id}/delete", deleteHost(hosts))
+	r.Post("/tags", addTag(tags))
+	r.Post("/tags/delete", removeTag(tags))
 
 	r.Get("/services", listServices(services))
 	r.Get("/services/new", newServiceForm())
@@ -972,6 +976,70 @@ func deleteBackup(repo *store.BackupRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/backups", http.StatusSeeOther)
+	}
+}
+
+func showHost(repo *store.HostRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		h, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "host not found", http.StatusNotFound)
+			return
+		}
+		fields := []fieldRow{
+			{"Type", h.Type},
+			{"OS", h.OS},
+			{"CPU", h.CPU},
+			{"RAM", h.RAM},
+			{"Disk", h.Disk},
+			{"Status", h.Status},
+			{"IPs", strings.Join(h.IPs, ", ")},
+		}
+		renderDetail(w, cat, tags, rels, "host", id,
+			"Host: "+h.Name, h.Notes, fmt.Sprintf("/hosts/%d/edit", id), fields)
+	}
+}
+
+func addTag(tags *store.TagRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		entityType := req.FormValue("entity_type")
+		entityID, err := strconv.ParseInt(req.FormValue("entity_id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid entity id", http.StatusBadRequest)
+			return
+		}
+		tag := domain.Tag{EntityType: entityType, EntityID: entityID, Name: req.FormValue("tag")}
+		if err := tag.Validate(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := tags.Add(tag); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, fmt.Sprintf("/%ss/%d", entityType, entityID), http.StatusSeeOther)
+	}
+}
+
+func removeTag(tags *store.TagRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(req.FormValue("id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := tags.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		entityType := req.FormValue("entity_type")
+		entityID, _ := strconv.ParseInt(req.FormValue("entity_id"), 10, 64)
+		http.Redirect(w, req, fmt.Sprintf("/%ss/%d", entityType, entityID), http.StatusSeeOther)
 	}
 }
 

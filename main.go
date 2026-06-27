@@ -40,6 +40,7 @@ func main() {
 		store.NewCertificateRepo(db),
 		store.NewBackupRepo(db),
 		store.NewRelationshipRepo(db),
+		store.NewTagRepo(db),
 	)
 	srv := &http.Server{
 		Addr:              cfg.Addr,

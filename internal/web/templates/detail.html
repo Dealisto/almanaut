@@ -1,0 +1,41 @@
+{{define "content"}}
+<h1>{{.Heading}}</h1>
+<div class="toolbar">
+  <a class="btn" href="{{.EditURL}}">Edit</a>
+  <a class="btn" href="/{{.EntityType}}s">Back to list</a>
+</div>
+
+<div class="table-wrap">
+<table><tbody>
+  {{range .Fields}}<tr><th>{{.Label}}</th><td>{{.Value}}</td></tr>{{end}}
+</tbody></table>
+</div>
+
+<h2>Notes</h2>
+<div class="notes">{{if .NotesHTML}}{{.NotesHTML}}{{else}}<em>No notes.</em>{{end}}</div>
+
+<h2>Tags</h2>
+<div class="tags">
+  {{range .Tags}}
+    <span class="tag">#{{.Name}}
+      <form class="form-inline" method="post" action="/tags/delete">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <input type="hidden" name="entity_type" value="{{.EntityType}}">
+        <input type="hidden" name="entity_id" value="{{.EntityID}}">
+        <button class="tag-x" type="submit" title="remove">&times;</button>
+      </form>
+    </span>
+  {{else}}<em>No tags.</em>{{end}}
+</div>
+<form class="form-inline" method="post" action="/tags">
+  <input type="hidden" name="entity_type" value="{{.EntityType}}">
+  <input type="hidden" name="entity_id" value="{{.EntityID}}">
+  <input name="tag" placeholder="add a tag" required>
+  <button class="btn btn-primary" type="submit">Add tag</button>
+</form>
+
+<h2>Relationships</h2>
+{{if .Related}}
+<ul class="related">{{range .Related}}<li>{{.Text}}</li>{{end}}</ul>
+{{else}}<p><em>No relationships.</em></p>{{end}}
+{{end}}
