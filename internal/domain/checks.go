@@ -2,6 +2,7 @@ package domain
 
 import (
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -41,6 +42,22 @@ func ServicesWithoutBackup(services []Service, rels []Relationship) []Service {
 	for _, s := range services {
 		if !backedUp[s.ID] {
 			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// downStatuses are the free-text Host.Status values treated as "not running".
+var downStatuses = []string{"down", "offline", "stopped"}
+
+// HostsDown returns the hosts whose Status (trimmed, lowercased) marks them as
+// not running — "down", "offline", or "stopped" — in input order. Status is
+// free text, so this is a best-effort heuristic.
+func HostsDown(hosts []Host) []Host {
+	out := []Host{}
+	for _, h := range hosts {
+		if contains(downStatuses, strings.ToLower(strings.TrimSpace(h.Status))) {
+			out = append(out, h)
 		}
 	}
 	return out

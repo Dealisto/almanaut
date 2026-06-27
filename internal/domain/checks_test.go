@@ -38,3 +38,20 @@ func TestServicesWithoutBackup(t *testing.T) {
 		t.Errorf("want only service 3 without backup, got %+v", got)
 	}
 }
+
+func TestHostsDown(t *testing.T) {
+	hosts := []Host{
+		{ID: 1, Name: "a", Status: "running"},
+		{ID: 2, Name: "b", Status: "DOWN"},
+		{ID: 3, Name: "c", Status: " offline "},
+		{ID: 4, Name: "d", Status: "stopped"},
+		{ID: 5, Name: "e", Status: ""},
+	}
+	down := HostsDown(hosts)
+	if len(down) != 3 {
+		t.Fatalf("got %d down, want 3: %+v", len(down), down)
+	}
+	if down[0].Name != "b" || down[1].Name != "c" || down[2].Name != "d" {
+		t.Errorf("wrong hosts or order: %+v", down)
+	}
+}
