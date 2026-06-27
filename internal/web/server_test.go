@@ -1,6 +1,8 @@
 package web
 
 import (
+	"bytes"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -23,7 +25,7 @@ func newTestServer(t *testing.T) http.Handler {
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db), store.NewRelationshipRepo(db), store.NewTagRepo(db))
+	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db), store.NewRelationshipRepo(db), store.NewTagRepo(db), db)
 }
 
 func TestCreateAndListHost(t *testing.T) {
@@ -611,6 +613,106 @@ func TestNetworkDetailPage(t *testing.T) {
 	if !strings.Contains(body, "<strong>LAN</strong>") {
 		t.Error("notes not rendered as Markdown")
 	}
+}
+
+func TestExportImport(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}, "notes": {"# run"}})
+
+	// Export returns a YAML attachment containing the host.
+	req := httptest.NewRequest(http.MethodGet, "/export", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /export = %d, want 200", rec.Code)
+	}
+	if cd := rec.Header().Get("Content-Disposition"); !strings.Contains(cd, "almanaut-export.yaml") {
+		t.Errorf("missing attachment filename, got %q", cd)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/x-yaml") {
+		t.Errorf("Content-Type = %q, want application/x-yaml", ct)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "proxmox") || !strings.Contains(body, "version: 1") {
+		t.Fatalf("export body unexpected:\n%s", body)
+	}
+
+	// Import a fresh YAML into a new server → the entity appears.
+	yamlDoc := "version: 1\nhosts:\n  - id: 9\n    name: imported-host\n    type: vm\n    ips: []\n    notes: \"\"\nservices: []\nnetworks: []\ndomains: []\ncertificates: []\nbackups: []\nrelationships: []\ntags: []\n"
+
+	srv2 := newTestServer(t)
+	rec = uploadImport(t, srv2, yamlDoc, true)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /import = %d, want 303; body=%s", rec.Code, rec.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodGet, "/hosts", nil)
+	rec = httptest.NewRecorder()
+	srv2.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "imported-host") {
+		t.Error("imported host not listed")
+	}
+
+	// Without the confirm checkbox → 400, nothing happens.
+	rec = uploadImport(t, srv2, yamlDoc, false)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("import without confirm = %d, want 400", rec.Code)
+	}
+}
+
+func TestImportReplacesAndRejectsBadYAML(t *testing.T) {
+	srv := newTestServer(t)
+	// Pre-existing data that must be GONE after a replace-all import.
+	postForm(t, srv, "/hosts", url.Values{"name": {"old-host"}, "type": {"physical"}})
+
+	yamlDoc := "version: 1\nhosts:\n  - id: 5\n    name: new-host\n    type: vm\n    ips: []\n    notes: \"\"\nservices: []\nnetworks: []\ndomains: []\ncertificates: []\nbackups: []\nrelationships: []\ntags: []\n"
+	if rec := uploadImport(t, srv, yamlDoc, true); rec.Code != http.StatusSeeOther {
+		t.Fatalf("import = %d, want 303; body=%s", rec.Code, rec.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/hosts", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, "new-host") {
+		t.Error("imported host missing after replace-all")
+	}
+	if strings.Contains(body, "old-host") {
+		t.Error("replace-all did not remove pre-existing data")
+	}
+
+	// Malformed YAML must render the page with an error (200), not crash (500).
+	rec = uploadImport(t, srv, "{ this is not valid yaml", true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("malformed YAML = %d, want 200 page render", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "invalid YAML") {
+		t.Errorf("expected an 'invalid YAML' error message on the page")
+	}
+}
+
+// uploadImport posts a multipart form with the YAML file and optional confirm.
+func uploadImport(t *testing.T, srv http.Handler, yamlDoc string, confirm bool) *httptest.ResponseRecorder {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("file", "import.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write([]byte(yamlDoc)); err != nil {
+		t.Fatal(err)
+	}
+	if confirm {
+		if err := mw.WriteField("confirm", "on"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mw.Close()
+	req := httptest.NewRequest(http.MethodPost, "/import", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	return rec
 }
 
 func TestGlobalSearch(t *testing.T) {

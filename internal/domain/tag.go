@@ -7,10 +7,10 @@ import (
 
 // Tag is a normalized label attached to an entity.
 type Tag struct {
-	ID         int64
-	EntityType string
-	EntityID   int64
-	Name       string
+	ID         int64  `yaml:"id"`
+	EntityType string `yaml:"entity_type"`
+	EntityID   int64  `yaml:"entity_id"`
+	Name       string `yaml:"name"`
 }
 
 // NormalizeTag trims whitespace, strips a leading '#', and lowercases.

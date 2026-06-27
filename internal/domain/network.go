@@ -8,12 +8,12 @@ import (
 
 // Network is an IP subnet / VLAN in the homelab.
 type Network struct {
-	ID      int64
-	Name    string
-	CIDR    string
-	VLAN    string // free text (may be blank)
-	Gateway string
-	Notes   string
+	ID      int64  `yaml:"id"`
+	Name    string `yaml:"name"`
+	CIDR    string `yaml:"cidr"`
+	VLAN    string `yaml:"vlan"` // free text (may be blank)
+	Gateway string `yaml:"gateway"`
+	Notes   string `yaml:"notes"`
 }
 
 // Validate checks required fields and address formats.

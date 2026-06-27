@@ -62,6 +62,24 @@ func (r *TagRepo) ListForEntity(entityType string, entityID int64) ([]domain.Tag
 	return tags, rows.Err()
 }
 
+// List returns every tag, ordered by id.
+func (r *TagRepo) List() ([]domain.Tag, error) {
+	rows, err := r.db.Query(`SELECT id, entity_type, entity_id, name FROM tags ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("query tags: %w", err)
+	}
+	defer rows.Close()
+	tags := []domain.Tag{}
+	for rows.Next() {
+		var t domain.Tag
+		if err := rows.Scan(&t.ID, &t.EntityType, &t.EntityID, &t.Name); err != nil {
+			return nil, fmt.Errorf("scan tag: %w", err)
+		}
+		tags = append(tags, t)
+	}
+	return tags, rows.Err()
+}
+
 // TagCount is a distinct tag name and the number of entities carrying it.
 type TagCount struct {
 	Name  string
