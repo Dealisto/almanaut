@@ -849,3 +849,21 @@ func TestGlobalSearch(t *testing.T) {
 		t.Error("no-match state missing")
 	}
 }
+
+func TestNewFormPagesRender(t *testing.T) {
+	srv := newTestServer(t)
+	for _, path := range []string{
+		"/hosts/new", "/services/new", "/networks/new",
+		"/domains/new", "/certificates/new", "/backups/new",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200", path, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "<form") {
+			t.Errorf("GET %s: expected a form in the rendered page", path)
+		}
+	}
+}
