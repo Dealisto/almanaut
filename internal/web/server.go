@@ -131,6 +131,7 @@ func New(
 	r.Get("/certificates", listCertificates(certificates))
 	r.Get("/certificates/new", newCertificateForm())
 	r.Post("/certificates", createCertificate(certificates))
+	r.Get("/certificates/{id}", showCertificate(certificates, cat, tags, relationships))
 	r.Get("/certificates/{id}/edit", editCertificateForm(certificates))
 	r.Post("/certificates/{id}", updateCertificate(certificates))
 	r.Post("/certificates/{id}/delete", deleteCertificate(certificates))
@@ -1070,6 +1071,32 @@ func showDomain(repo *store.DomainRepo, cat entityCatalog, tags *store.TagRepo, 
 		}
 		renderDetail(w, cat, tags, rels, "domain", id,
 			"Domain: "+d.FQDN, d.Notes, fmt.Sprintf("/domains/%d/edit", id), fields)
+	}
+}
+
+func showCertificate(repo *store.CertificateRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		c, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "certificate not found", http.StatusNotFound)
+			return
+		}
+		autoRenew := "no"
+		if c.AutoRenew {
+			autoRenew = "yes"
+		}
+		fields := []fieldRow{
+			{"Issuer", c.Issuer},
+			{"Expires on", c.ExpiresOn},
+			{"Auto-renew", autoRenew},
+		}
+		renderDetail(w, cat, tags, rels, "certificate", id,
+			"Certificate: "+c.Subject, c.Notes, fmt.Sprintf("/certificates/%d/edit", id), fields)
 	}
 }
 

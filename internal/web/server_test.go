@@ -317,6 +317,35 @@ func TestCreateCertificateInvalidShowsError(t *testing.T) {
 	}
 }
 
+func TestCertificateDetailPage(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/certificates", url.Values{
+		"subject": {"example.com"}, "issuer": {"Let's Encrypt"},
+		"expires_on": {"2027-01-01"}, "auto_renew": {"on"},
+		"notes": {"managed by **certbot**"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/certificates/1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /certificates/1 = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Let&#39;s Encrypt") && !strings.Contains(body, "Let's Encrypt") {
+		t.Error("detail page missing issuer")
+	}
+	if !strings.Contains(body, "2027-01-01") {
+		t.Error("detail page missing expiry date")
+	}
+	if !strings.Contains(body, "yes") {
+		t.Error("detail page missing auto-renew flag")
+	}
+	if !strings.Contains(body, "<strong>certbot</strong>") {
+		t.Error("notes not rendered as Markdown")
+	}
+}
+
 func TestCreateAndListBackup(t *testing.T) {
 	srv := newTestServer(t)
 
