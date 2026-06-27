@@ -103,6 +103,7 @@ func New(
 	r.Post("/hosts/{id}/delete", deleteHost(hosts))
 	r.Post("/tags", addTag(tags))
 	r.Post("/tags/delete", removeTag(tags))
+	r.Get("/tags", tagsOverview(tags, cat))
 
 	r.Get("/services", listServices(services))
 	r.Get("/services/new", newServiceForm())
@@ -1120,6 +1121,58 @@ func showCertificate(repo *store.CertificateRepo, cat entityCatalog, tags *store
 		}
 		renderDetail(w, cat, tags, rels, "certificate", id,
 			"Certificate: "+c.Subject, c.Notes, fmt.Sprintf("/certificates/%d/edit", id), fields)
+	}
+}
+
+type tagEntity struct {
+	Label string
+	URL   string
+}
+
+type tagsOverviewData struct {
+	Title    string
+	Counts   []store.TagCount
+	Selected string
+	Entities []tagEntity
+}
+
+func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		name := domain.NormalizeTag(req.URL.Query().Get("name"))
+		if name == "" {
+			counts, err := tags.Counts()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			render(w, "tags_overview.html", tagsOverviewData{Title: "Tags", Counts: counts})
+			return
+		}
+
+		tagged, err := tags.ListByName(name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		opts, err := cat.options()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		labels := make(map[string]string, len(opts))
+		for _, o := range opts {
+			labels[o.Value] = o.Label
+		}
+		entities := make([]tagEntity, 0, len(tagged))
+		for _, tg := range tagged {
+			entities = append(entities, tagEntity{
+				Label: labelOrFallback(labels, tg.EntityType, tg.EntityID),
+				URL:   fmt.Sprintf("/%ss/%d", tg.EntityType, tg.EntityID),
+			})
+		}
+		render(w, "tags_overview.html", tagsOverviewData{
+			Title: "Tags", Selected: name, Entities: entities,
+		})
 	}
 }
 

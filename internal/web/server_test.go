@@ -406,6 +406,38 @@ func TestBackupDetailPage(t *testing.T) {
 	}
 }
 
+func TestTagsOverview(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}})
+	postForm(t, srv, "/tags", url.Values{"entity_type": {"host"}, "entity_id": {"1"}, "tag": {"#Critical"}})
+
+	// overview lists the tag with its count
+	req := httptest.NewRequest(http.MethodGet, "/tags", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /tags = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "#critical") {
+		t.Errorf("overview missing tag: %q", body)
+	}
+
+	// drilling into a tag lists the tagged entity, linked to its detail page
+	req = httptest.NewRequest(http.MethodGet, "/tags?name=critical", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /tags?name=critical = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "/hosts/1") {
+		t.Error("tag drilldown missing link to tagged entity")
+	}
+	if !strings.Contains(body, "host: proxmox") {
+		t.Error("tag drilldown missing entity label")
+	}
+}
+
 func postForm(t *testing.T, srv http.Handler, path string, form url.Values) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
