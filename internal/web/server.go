@@ -107,6 +107,7 @@ func New(
 	r.Get("/services", listServices(services))
 	r.Get("/services/new", newServiceForm())
 	r.Post("/services", createService(services))
+	r.Get("/services/{id}", showService(services, cat, tags, relationships))
 	r.Get("/services/{id}/edit", editServiceForm(services))
 	r.Post("/services/{id}", updateService(services))
 	r.Post("/services/{id}/delete", deleteService(services))
@@ -1002,6 +1003,29 @@ func showHost(repo *store.HostRepo, cat entityCatalog, tags *store.TagRepo, rels
 		}
 		renderDetail(w, cat, tags, rels, "host", id,
 			"Host: "+h.Name, h.Notes, fmt.Sprintf("/hosts/%d/edit", id), fields)
+	}
+}
+
+func showService(repo *store.ServiceRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		s, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "service not found", http.StatusNotFound)
+			return
+		}
+		fields := []fieldRow{
+			{"Kind", s.Kind},
+			{"URL", s.URL},
+			{"Ports", s.Ports},
+			{"Category", s.Category},
+		}
+		renderDetail(w, cat, tags, rels, "service", id,
+			"Service: "+s.Name, s.Notes, fmt.Sprintf("/services/%d/edit", id), fields)
 	}
 }
 

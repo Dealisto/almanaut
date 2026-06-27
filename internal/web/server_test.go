@@ -439,3 +439,28 @@ func TestHostDetailWithTagsAndNotes(t *testing.T) {
 		t.Error("normalized tag not shown")
 	}
 }
+
+func TestServiceDetailPage(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/services", url.Values{
+		"name": {"jellyfin"}, "kind": {"container"}, "url": {"http://jf.local"},
+		"notes": {"runs on **proxmox**"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/services/1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /services/1 = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "jellyfin") {
+		t.Error("detail page missing service name")
+	}
+	if !strings.Contains(body, "<strong>proxmox</strong>") {
+		t.Error("notes not rendered as Markdown")
+	}
+	if !strings.Contains(body, "/services/1/edit") {
+		t.Error("detail page missing edit link")
+	}
+}
