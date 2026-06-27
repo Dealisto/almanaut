@@ -21,8 +21,8 @@ type hostsPageData struct {
 
 type hostFormData struct {
 	Title, Heading, Action, SubmitLabel, Error string
-	Host  domain.Host
-	Types []string
+	Host                                       domain.Host
+	Types                                      []string
 }
 
 type servicesPageData struct {
@@ -32,8 +32,8 @@ type servicesPageData struct {
 
 type serviceFormData struct {
 	Title, Heading, Action, SubmitLabel, Error string
-	Service domain.Service
-	Kinds   []string
+	Service                                    domain.Service
+	Kinds                                      []string
 }
 
 type networksPageData struct {
@@ -43,7 +43,7 @@ type networksPageData struct {
 
 type networkFormData struct {
 	Title, Heading, Action, SubmitLabel, Error string
-	Network domain.Network
+	Network                                    domain.Network
 }
 
 type domainsPageData struct {
@@ -53,7 +53,7 @@ type domainsPageData struct {
 
 type domainFormData struct {
 	Title, Heading, Action, SubmitLabel, Error string
-	Domain domain.Domain
+	Domain                                     domain.Domain
 }
 
 type certificatesPageData struct {
@@ -63,7 +63,7 @@ type certificatesPageData struct {
 
 type certificateFormData struct {
 	Title, Heading, Action, SubmitLabel, Error string
-	Certificate domain.Certificate
+	Certificate                                domain.Certificate
 }
 
 type backupsPageData struct {
@@ -73,7 +73,7 @@ type backupsPageData struct {
 
 type backupFormData struct {
 	Title, Heading, Action, SubmitLabel, Error string
-	Backup domain.Backup
+	Backup                                     domain.Backup
 }
 
 // New builds the HTTP handler with all routes wired to the given repos.

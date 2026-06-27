@@ -10,6 +10,14 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-formatted (run 'gofmt -w .'):"
+            echo "$unformatted"
+            exit 1
+          fi
       - run: go vet ./...
       - run: go test ./...
       - run: CGO_ENABLED=0 go build -trimpath ./...

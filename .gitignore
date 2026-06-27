@@ -16,5 +16,8 @@
 .idea/
 .vscode/
 
+# Claude Code: share settings.json + hooks/, keep personal overrides local
+.claude/settings.local.json
+
 # Local agent scratch (progress ledger, task briefs/reports)
 .superpowers/
