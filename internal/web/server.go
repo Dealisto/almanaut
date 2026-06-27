@@ -2,6 +2,7 @@
 package web
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -85,6 +86,7 @@ func New(
 	backups *store.BackupRepo,
 	relationships *store.RelationshipRepo,
 	tags *store.TagRepo,
+	db *sql.DB,
 ) http.Handler {
 	cat := entityCatalog{
 		hosts: hosts, services: services, networks: networks,
@@ -151,6 +153,9 @@ func New(
 	r.Get("/impact", impactView(relationships, cat))
 	r.Get("/checks", healthChecks(services, certificates, relationships))
 	r.Get("/search", searchEntities(cat, tags))
+	r.Get("/data", showData())
+	r.Get("/export", exportData(db))
+	r.Post("/import", importData(db))
 	return r
 }
 

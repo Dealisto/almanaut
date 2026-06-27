@@ -41,6 +41,7 @@ func main() {
 		store.NewBackupRepo(db),
 		store.NewRelationshipRepo(db),
 		store.NewTagRepo(db),
+		db,
 	)
 	srv := &http.Server{
 		Addr:              cfg.Addr,
