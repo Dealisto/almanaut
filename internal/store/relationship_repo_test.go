@@ -21,6 +21,7 @@ func newRelationshipRepo(t *testing.T) *RelationshipRepo {
 	return NewRelationshipRepo(db)
 }
 
+
 func TestRelationshipRepoCRUDAndListByTo(t *testing.T) {
 	repo := newRelationshipRepo(t)
 
@@ -61,5 +62,20 @@ func TestRelationshipRepoCRUDAndListByTo(t *testing.T) {
 	all, _ = repo.List()
 	if len(all) != 1 {
 		t.Fatalf("List len after delete = %d, want 1", len(all))
+	}
+}
+
+func TestRelationshipListForEntity(t *testing.T) {
+	repo := newRelationshipRepo(t)
+	mustCreateRel(t, repo, "service", 1, "host", 1, "runs on")   // host:1 is the "to"
+	mustCreateRel(t, repo, "host", 1, "network", 2, "connected to") // host:1 is the "from"
+	mustCreateRel(t, repo, "domain", 9, "service", 1, "exposed via") // does not touch host:1
+
+	got, err := repo.ListForEntity("host", 1)
+	if err != nil {
+		t.Fatalf("ListForEntity: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d, want 2: %+v", len(got), got)
 	}
 }

@@ -46,6 +46,18 @@ func (r *RelationshipRepo) ListByTo(toType string, toID int64) ([]domain.Relatio
 	)
 }
 
+// ListForEntity returns all relationships where (entityType, entityID) is either
+// the from or the to endpoint, ordered by id.
+func (r *RelationshipRepo) ListForEntity(entityType string, entityID int64) ([]domain.Relationship, error) {
+	return r.query(
+		`SELECT id, from_type, from_id, to_type, to_id, kind
+		 FROM relationships
+		 WHERE (from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?)
+		 ORDER BY id`,
+		entityType, entityID, entityType, entityID,
+	)
+}
+
 // Delete removes the relationship with the given id.
 func (r *RelationshipRepo) Delete(id int64) error {
 	if _, err := r.db.Exec(`DELETE FROM relationships WHERE id = ?`, id); err != nil {
