@@ -22,7 +22,7 @@ func newTestServer(t *testing.T) http.Handler {
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db))
+	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db), store.NewRelationshipRepo(db))
 }
 
 func TestCreateAndListHost(t *testing.T) {
@@ -323,5 +323,47 @@ func TestCreateBackupInvalidShowsError(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "last run must be") {
 		t.Error("invalid POST /backups missing date validation error")
+	}
+}
+
+func postForm(t *testing.T, srv http.Handler, path string, form url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestCreateAndListRelationship(t *testing.T) {
+	srv := newTestServer(t)
+	// Seed a host (id 1) and a service (id 1).
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}})
+	postForm(t, srv, "/services", url.Values{"name": {"jellyfin"}, "kind": {"container"}})
+
+	rec := postForm(t, srv, "/relationships", url.Values{"from": {"service:1"}, "kind": {"runs on"}, "to": {"host:1"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /relationships = %d, want 303", rec.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/relationships", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, "runs on") || !strings.Contains(body, "service: jellyfin") || !strings.Contains(body, "host: proxmox") {
+		t.Errorf("GET /relationships missing the created relationship or its labels")
+	}
+}
+
+func TestCreateRelationshipInvalidShowsError(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}})
+	// self-reference host:1 -> host:1 is invalid
+	rec := postForm(t, srv, "/relationships", url.Values{"from": {"host:1"}, "kind": {"depends on"}, "to": {"host:1"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid POST /relationships = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "cannot relate to itself") {
+		t.Error("invalid POST /relationships missing validation error")
 	}
 }

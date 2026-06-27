@@ -75,7 +75,19 @@ type backupFormData struct {
 }
 
 // New builds the HTTP handler with all routes wired to the given repos.
-func New(hosts *store.HostRepo, services *store.ServiceRepo, networks *store.NetworkRepo, domains *store.DomainRepo, certificates *store.CertificateRepo, backups *store.BackupRepo) http.Handler {
+func New(
+	hosts *store.HostRepo,
+	services *store.ServiceRepo,
+	networks *store.NetworkRepo,
+	domains *store.DomainRepo,
+	certificates *store.CertificateRepo,
+	backups *store.BackupRepo,
+	relationships *store.RelationshipRepo,
+) http.Handler {
+	cat := entityCatalog{
+		hosts: hosts, services: services, networks: networks,
+		domains: domains, certificates: certificates, backups: backups,
+	}
 	r := chi.NewRouter()
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
@@ -121,7 +133,103 @@ func New(hosts *store.HostRepo, services *store.ServiceRepo, networks *store.Net
 	r.Get("/backups/{id}/edit", editBackupForm(backups))
 	r.Post("/backups/{id}", updateBackup(backups))
 	r.Post("/backups/{id}/delete", deleteBackup(backups))
+
+	r.Get("/relationships", listRelationships(relationships, cat))
+	r.Post("/relationships", createRelationship(relationships, cat))
+	r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
 	return r
+}
+
+type relationshipView struct {
+	ID                       int64
+	FromLabel, Kind, ToLabel string
+}
+
+type relationshipsPageData struct {
+	Title         string
+	Relationships []relationshipView
+	Options       []entityOption
+	Kinds         []string
+	Error         string
+}
+
+func renderRelationships(w http.ResponseWriter, rels *store.RelationshipRepo, cat entityCatalog, errMsg string) {
+	opts, err := cat.options()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	labels := make(map[string]string, len(opts))
+	for _, o := range opts {
+		labels[o.Value] = o.Label
+	}
+	all, err := rels.List()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	views := make([]relationshipView, 0, len(all))
+	for _, rel := range all {
+		views = append(views, relationshipView{
+			ID:        rel.ID,
+			FromLabel: labelOrFallback(labels, rel.FromType, rel.FromID),
+			Kind:      rel.Kind,
+			ToLabel:   labelOrFallback(labels, rel.ToType, rel.ToID),
+		})
+	}
+	render(w, "relationships.html", relationshipsPageData{
+		Title: "Relationships", Relationships: views, Options: opts,
+		Kinds: domain.RelationshipKinds, Error: errMsg,
+	})
+}
+
+func listRelationships(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		renderRelationships(w, rels, cat, "")
+	}
+}
+
+func createRelationship(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		fromType, fromID, errFrom := parseRef(req.FormValue("from"))
+		toType, toID, errTo := parseRef(req.FormValue("to"))
+		rel := domain.Relationship{
+			FromType: fromType, FromID: fromID,
+			ToType: toType, ToID: toID, Kind: req.FormValue("kind"),
+		}
+		if errFrom != nil {
+			renderRelationships(w, rels, cat, errFrom.Error())
+			return
+		}
+		if errTo != nil {
+			renderRelationships(w, rels, cat, errTo.Error())
+			return
+		}
+		if err := rel.Validate(); err != nil {
+			renderRelationships(w, rels, cat, err.Error())
+			return
+		}
+		if _, err := rels.Create(rel); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/relationships", http.StatusSeeOther)
+	}
+}
+
+func deleteRelationship(rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := rels.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/relationships", http.StatusSeeOther)
+	}
 }
 
 func listHosts(repo *store.HostRepo) http.HandlerFunc {
