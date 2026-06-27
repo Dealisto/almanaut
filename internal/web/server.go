@@ -115,6 +115,7 @@ func New(
 	r.Get("/networks", listNetworks(networks))
 	r.Get("/networks/new", newNetworkForm())
 	r.Post("/networks", createNetwork(networks))
+	r.Get("/networks/{id}", showNetwork(networks, cat, tags, relationships))
 	r.Get("/networks/{id}/edit", editNetworkForm(networks))
 	r.Post("/networks/{id}", updateNetwork(networks))
 	r.Post("/networks/{id}/delete", deleteNetwork(networks))
@@ -1026,6 +1027,28 @@ func showService(repo *store.ServiceRepo, cat entityCatalog, tags *store.TagRepo
 		}
 		renderDetail(w, cat, tags, rels, "service", id,
 			"Service: "+s.Name, s.Notes, fmt.Sprintf("/services/%d/edit", id), fields)
+	}
+}
+
+func showNetwork(repo *store.NetworkRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		n, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "network not found", http.StatusNotFound)
+			return
+		}
+		fields := []fieldRow{
+			{"CIDR", n.CIDR},
+			{"VLAN", n.VLAN},
+			{"Gateway", n.Gateway},
+		}
+		renderDetail(w, cat, tags, rels, "network", id,
+			"Network: "+n.Name, n.Notes, fmt.Sprintf("/networks/%d/edit", id), fields)
 	}
 }
 

@@ -464,3 +464,25 @@ func TestServiceDetailPage(t *testing.T) {
 		t.Error("detail page missing edit link")
 	}
 }
+
+func TestNetworkDetailPage(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/networks", url.Values{
+		"name": {"lan"}, "cidr": {"10.0.0.0/24"}, "gateway": {"10.0.0.1"},
+		"notes": {"main **LAN**"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/networks/1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /networks/1 = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "10.0.0.0/24") {
+		t.Error("detail page missing CIDR")
+	}
+	if !strings.Contains(body, "<strong>LAN</strong>") {
+		t.Error("notes not rendered as Markdown")
+	}
+}
