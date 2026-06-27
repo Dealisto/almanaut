@@ -28,7 +28,6 @@ func mustCreateRel(t *testing.T, repo *RelationshipRepo, ft string, fid int64, t
 	}
 }
 
-
 func TestRelationshipRepoCRUDAndListByTo(t *testing.T) {
 	repo := newRelationshipRepo(t)
 
@@ -74,8 +73,8 @@ func TestRelationshipRepoCRUDAndListByTo(t *testing.T) {
 
 func TestRelationshipListForEntity(t *testing.T) {
 	repo := newRelationshipRepo(t)
-	mustCreateRel(t, repo, "service", 1, "host", 1, "runs on")   // host:1 is the "to"
-	mustCreateRel(t, repo, "host", 1, "network", 2, "connected to") // host:1 is the "from"
+	mustCreateRel(t, repo, "service", 1, "host", 1, "runs on")       // host:1 is the "to"
+	mustCreateRel(t, repo, "host", 1, "network", 2, "connected to")  // host:1 is the "from"
 	mustCreateRel(t, repo, "domain", 9, "service", 1, "exposed via") // does not touch host:1
 
 	got, err := repo.ListForEntity("host", 1)
@@ -89,8 +88,8 @@ func TestRelationshipListForEntity(t *testing.T) {
 
 func TestRelationshipDeleteByEntity(t *testing.T) {
 	repo := newRelationshipRepo(t)
-	mustCreateRel(t, repo, "service", 1, "host", 1, "runs on")      // host:1 is the "to"
-	mustCreateRel(t, repo, "host", 1, "network", 2, "connected to") // host:1 is the "from"
+	mustCreateRel(t, repo, "service", 1, "host", 1, "runs on")       // host:1 is the "to"
+	mustCreateRel(t, repo, "host", 1, "network", 2, "connected to")  // host:1 is the "from"
 	mustCreateRel(t, repo, "domain", 9, "service", 1, "exposed via") // does not touch host:1
 
 	if err := repo.DeleteByEntity("host", 1); err != nil {

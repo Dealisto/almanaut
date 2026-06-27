@@ -12,8 +12,8 @@ var ServiceKinds = []string{"container", "native", "vm"}
 type Service struct {
 	ID       int64  `yaml:"id"`
 	Name     string `yaml:"name"`
-	Kind     string `yaml:"kind"` // container | native | vm
-	URL      string `yaml:"url"` // access URL
+	Kind     string `yaml:"kind"`  // container | native | vm
+	URL      string `yaml:"url"`   // access URL
 	Ports    string `yaml:"ports"` // free text, e.g. "8096, 443"
 	Category string `yaml:"category"`
 	Notes    string `yaml:"notes"`

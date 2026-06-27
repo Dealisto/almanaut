@@ -8,10 +8,10 @@ import (
 func TestExpiringSoon(t *testing.T) {
 	now := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 	certs := []Certificate{
-		{Subject: "expired", ExpiresOn: "2026-05-01"},      // already expired -> included
-		{Subject: "soon", ExpiresOn: "2026-06-20"},         // within 30 days -> included
-		{Subject: "far", ExpiresOn: "2026-12-31"},          // beyond 30 days -> excluded
-		{Subject: "bad", ExpiresOn: "not-a-date"},          // unparseable -> skipped
+		{Subject: "expired", ExpiresOn: "2026-05-01"}, // already expired -> included
+		{Subject: "soon", ExpiresOn: "2026-06-20"},    // within 30 days -> included
+		{Subject: "far", ExpiresOn: "2026-12-31"},     // beyond 30 days -> excluded
+		{Subject: "bad", ExpiresOn: "not-a-date"},     // unparseable -> skipped
 	}
 	got := ExpiringSoon(certs, now, 30)
 	if len(got) != 2 {

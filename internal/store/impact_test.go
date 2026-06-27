@@ -29,4 +29,3 @@ func TestImpact(t *testing.T) {
 		t.Errorf("impact size = %d, want 2", len(impacted))
 	}
 }
-

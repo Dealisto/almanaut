@@ -1,0 +1,10 @@
+# Normalize line endings: LF in the repository and in the working tree.
+# Go tooling (gofmt) always writes LF, and CI runs on Linux, so pinning eol=lf
+# keeps the working tree consistent on Windows checkouts and avoids spurious
+# CRLF/LF diffs (e.g. after the gofmt PostToolUse hook).
+* text=auto eol=lf
+
+# Explicit binaries (never normalize).
+*.exe binary
+*.png binary
+*.db binary
