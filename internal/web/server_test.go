@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Dealisto/almanaut/internal/store"
 )
@@ -365,6 +366,29 @@ func TestCreateRelationshipInvalidShowsError(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "cannot relate to itself") {
 		t.Error("invalid POST /relationships missing validation error")
+	}
+}
+
+func TestChecksView(t *testing.T) {
+	srv := newTestServer(t)
+	// A service with no backup link.
+	postForm(t, srv, "/services", url.Values{"name": {"lonely-svc"}, "kind": {"container"}})
+	// A certificate expiring in 7 days (relative to now, so the test is date-stable).
+	soon := time.Now().AddDate(0, 0, 7).Format("2006-01-02")
+	postForm(t, srv, "/certificates", url.Values{"subject": {"soon.example.com"}, "expires_on": {soon}})
+
+	req := httptest.NewRequest(http.MethodGet, "/checks", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /checks = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "lonely-svc") {
+		t.Error("checks page should list the service without a backup")
+	}
+	if !strings.Contains(body, "soon.example.com") {
+		t.Error("checks page should list the soon-expiring certificate")
 	}
 }
 
