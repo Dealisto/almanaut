@@ -8,7 +8,7 @@
   <tbody>
   {{range .Networks}}
     <tr>
-      <td>{{.Name}}</td>
+      <td><a href="/networks/{{.ID}}">{{.Name}}</a></td>
       <td>{{.CIDR}}</td>
       <td>{{.VLAN}}</td>
       <td>{{.Gateway}}</td>

@@ -256,6 +256,31 @@ func TestCreateDomainInvalidShowsError(t *testing.T) {
 	}
 }
 
+func TestDomainDetailPage(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/domains", url.Values{
+		"fqdn": {"example.com"}, "provider": {"cloudflare"},
+		"notes": {"renews **yearly**"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/domains/1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /domains/1 = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "example.com") {
+		t.Error("detail page missing FQDN")
+	}
+	if !strings.Contains(body, "cloudflare") {
+		t.Error("detail page missing provider")
+	}
+	if !strings.Contains(body, "<strong>yearly</strong>") {
+		t.Error("notes not rendered as Markdown")
+	}
+}
+
 func TestCreateAndListCertificate(t *testing.T) {
 	srv := newTestServer(t)
 
@@ -292,6 +317,35 @@ func TestCreateCertificateInvalidShowsError(t *testing.T) {
 	}
 }
 
+func TestCertificateDetailPage(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/certificates", url.Values{
+		"subject": {"example.com"}, "issuer": {"Let's Encrypt"},
+		"expires_on": {"2027-01-01"}, "auto_renew": {"on"},
+		"notes": {"managed by **certbot**"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/certificates/1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /certificates/1 = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Let&#39;s Encrypt") && !strings.Contains(body, "Let's Encrypt") {
+		t.Error("detail page missing issuer")
+	}
+	if !strings.Contains(body, "2027-01-01") {
+		t.Error("detail page missing expiry date")
+	}
+	if !strings.Contains(body, "yes") {
+		t.Error("detail page missing auto-renew flag")
+	}
+	if !strings.Contains(body, "<strong>certbot</strong>") {
+		t.Error("notes not rendered as Markdown")
+	}
+}
+
 func TestCreateAndListBackup(t *testing.T) {
 	srv := newTestServer(t)
 
@@ -324,6 +378,78 @@ func TestCreateBackupInvalidShowsError(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "last run must be") {
 		t.Error("invalid POST /backups missing date validation error")
+	}
+}
+
+func TestBackupDetailPage(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/backups", url.Values{
+		"source": {"nas"}, "destination": {"b2"}, "frequency": {"daily"},
+		"last_run": {"2026-06-01"}, "notes": {"verify **monthly**"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/backups/1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /backups/1 = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Backup: nas") {
+		t.Error("detail page missing backup heading")
+	}
+	if !strings.Contains(body, "daily") {
+		t.Error("detail page missing frequency")
+	}
+	if !strings.Contains(body, "<strong>monthly</strong>") {
+		t.Error("notes not rendered as Markdown")
+	}
+}
+
+func TestTagsOverview(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}})
+	postForm(t, srv, "/tags", url.Values{"entity_type": {"host"}, "entity_id": {"1"}, "tag": {"#Critical"}})
+
+	// overview lists the tag with its count
+	req := httptest.NewRequest(http.MethodGet, "/tags", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /tags = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "#critical") {
+		t.Errorf("overview missing tag: %q", body)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "/tags?name=critical") {
+		t.Errorf("overview missing drilldown link: %q", body)
+	}
+
+	// drilling into a tag lists the tagged entity, linked to its detail page
+	req = httptest.NewRequest(http.MethodGet, "/tags?name=critical", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /tags?name=critical = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "/hosts/1") {
+		t.Error("tag drilldown missing link to tagged entity")
+	}
+	if !strings.Contains(body, "host: proxmox") {
+		t.Error("tag drilldown missing entity label")
+	}
+
+	// a name query that normalizes to empty (e.g. "#") must show the drilldown's
+	// empty state, NOT silently fall back to the full tag cloud.
+	req = httptest.NewRequest(http.MethodGet, "/tags?name=%23", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /tags?name=%%23 = %d, want 200", rec.Code)
+	}
+	if body := rec.Body.String(); strings.Contains(body, "#critical") {
+		t.Errorf("punctuation-only name should not show the tag cloud: %q", body)
 	}
 }
 
@@ -437,5 +563,52 @@ func TestHostDetailWithTagsAndNotes(t *testing.T) {
 	}
 	if !strings.Contains(body, "#critical") {
 		t.Error("normalized tag not shown")
+	}
+}
+
+func TestServiceDetailPage(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/services", url.Values{
+		"name": {"jellyfin"}, "kind": {"container"}, "url": {"http://jf.local"},
+		"notes": {"runs on **proxmox**"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/services/1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /services/1 = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "jellyfin") {
+		t.Error("detail page missing service name")
+	}
+	if !strings.Contains(body, "<strong>proxmox</strong>") {
+		t.Error("notes not rendered as Markdown")
+	}
+	if !strings.Contains(body, "/services/1/edit") {
+		t.Error("detail page missing edit link")
+	}
+}
+
+func TestNetworkDetailPage(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/networks", url.Values{
+		"name": {"lan"}, "cidr": {"10.0.0.0/24"}, "gateway": {"10.0.0.1"},
+		"notes": {"main **LAN**"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/networks/1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /networks/1 = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "10.0.0.0/24") {
+		t.Error("detail page missing CIDR")
+	}
+	if !strings.Contains(body, "<strong>LAN</strong>") {
+		t.Error("notes not rendered as Markdown")
 	}
 }

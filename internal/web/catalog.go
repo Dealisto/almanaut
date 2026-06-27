@@ -85,6 +85,16 @@ func (c entityCatalog) options() ([]entityOption, error) {
 	return opts, nil
 }
 
+// labelMap builds a lookup from each option's "type:id" value to its label,
+// used to resolve relationship endpoints and tagged entities to human names.
+func labelMap(opts []entityOption) map[string]string {
+	labels := make(map[string]string, len(opts))
+	for _, o := range opts {
+		labels[o.Value] = o.Label
+	}
+	return labels
+}
+
 // parseRef splits a "type:id" reference string.
 func parseRef(s string) (string, int64, error) {
 	parts := strings.SplitN(s, ":", 2)

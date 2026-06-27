@@ -8,7 +8,7 @@
   <tbody>
   {{range .Services}}
     <tr>
-      <td>{{.Name}}</td>
+      <td><a href="/services/{{.ID}}">{{.Name}}</a></td>
       <td>{{.Kind}}</td>
       <td>{{.URL}}</td>
       <td>{{.Ports}}</td>

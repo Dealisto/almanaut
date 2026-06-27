@@ -8,7 +8,7 @@
   <tbody>
   {{range .Domains}}
     <tr>
-      <td>{{.FQDN}}</td>
+      <td><a href="/domains/{{.ID}}">{{.FQDN}}</a></td>
       <td>{{.Provider}}</td>
       <td>
         <a class="btn" href="/domains/{{.ID}}/edit">Edit</a>

@@ -1,0 +1,20 @@
+{{define "content"}}
+<h1>Tags</h1>
+{{if .Selected}}
+  <div class="toolbar"><a class="btn" href="/tags">All tags</a></div>
+  <h2>Entities tagged #{{.Selected}}</h2>
+  {{if .Entities}}
+  <ul class="related">
+    {{range .Entities}}<li><a href="{{.URL}}">{{.Label}}</a></li>{{end}}
+  </ul>
+  {{else}}<p><em>No entities carry this tag.</em></p>{{end}}
+{{else}}
+  {{if .Counts}}
+  <div class="tags">
+    {{range .Counts}}
+      <a class="tag" href="/tags?name={{.Name}}">#{{.Name}} <span class="muted">({{.Count}})</span></a>
+    {{end}}
+  </div>
+  {{else}}<p><em>No tags yet.</em></p>{{end}}
+{{end}}
+{{end}}

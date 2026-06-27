@@ -52,14 +52,16 @@ func renderDetail(
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	opts, err := cat.options()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	labels := make(map[string]string, len(opts))
-	for _, o := range opts {
-		labels[o.Value] = o.Label
+	// Resolving relationship endpoints to labels requires loading the whole
+	// entity catalog, so skip that work entirely when the entity has no edges.
+	var labels map[string]string
+	if len(edges) > 0 {
+		opts, err := cat.options()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		labels = labelMap(opts)
 	}
 
 	related := make([]relatedItem, 0, len(edges))

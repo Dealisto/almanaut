@@ -103,10 +103,12 @@ func New(
 	r.Post("/hosts/{id}/delete", deleteHost(hosts))
 	r.Post("/tags", addTag(tags))
 	r.Post("/tags/delete", removeTag(tags))
+	r.Get("/tags", tagsOverview(tags, cat))
 
 	r.Get("/services", listServices(services))
 	r.Get("/services/new", newServiceForm())
 	r.Post("/services", createService(services))
+	r.Get("/services/{id}", showService(services, cat, tags, relationships))
 	r.Get("/services/{id}/edit", editServiceForm(services))
 	r.Post("/services/{id}", updateService(services))
 	r.Post("/services/{id}/delete", deleteService(services))
@@ -114,6 +116,7 @@ func New(
 	r.Get("/networks", listNetworks(networks))
 	r.Get("/networks/new", newNetworkForm())
 	r.Post("/networks", createNetwork(networks))
+	r.Get("/networks/{id}", showNetwork(networks, cat, tags, relationships))
 	r.Get("/networks/{id}/edit", editNetworkForm(networks))
 	r.Post("/networks/{id}", updateNetwork(networks))
 	r.Post("/networks/{id}/delete", deleteNetwork(networks))
@@ -121,6 +124,7 @@ func New(
 	r.Get("/domains", listDomains(domains))
 	r.Get("/domains/new", newDomainForm())
 	r.Post("/domains", createDomain(domains))
+	r.Get("/domains/{id}", showDomain(domains, cat, tags, relationships))
 	r.Get("/domains/{id}/edit", editDomainForm(domains))
 	r.Post("/domains/{id}", updateDomain(domains))
 	r.Post("/domains/{id}/delete", deleteDomain(domains))
@@ -128,6 +132,7 @@ func New(
 	r.Get("/certificates", listCertificates(certificates))
 	r.Get("/certificates/new", newCertificateForm())
 	r.Post("/certificates", createCertificate(certificates))
+	r.Get("/certificates/{id}", showCertificate(certificates, cat, tags, relationships))
 	r.Get("/certificates/{id}/edit", editCertificateForm(certificates))
 	r.Post("/certificates/{id}", updateCertificate(certificates))
 	r.Post("/certificates/{id}/delete", deleteCertificate(certificates))
@@ -135,6 +140,7 @@ func New(
 	r.Get("/backups", listBackups(backups))
 	r.Get("/backups/new", newBackupForm())
 	r.Post("/backups", createBackup(backups))
+	r.Get("/backups/{id}", showBackup(backups, cat, tags, relationships))
 	r.Get("/backups/{id}/edit", editBackupForm(backups))
 	r.Post("/backups/{id}", updateBackup(backups))
 	r.Post("/backups/{id}/delete", deleteBackup(backups))
@@ -174,10 +180,7 @@ func impactView(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFun
 				render(w, "impact.html", data)
 				return
 			}
-			labels := make(map[string]string, len(opts))
-			for _, o := range opts {
-				labels[o.Value] = o.Label
-			}
+			labels := labelMap(opts)
 			data.Selected = ref
 			data.SelectedLabel = labelOrFallback(labels, typ, id)
 			refs, err := store.Impact(rels, typ, id)
@@ -247,10 +250,7 @@ func renderRelationships(w http.ResponseWriter, rels *store.RelationshipRepo, ca
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	labels := make(map[string]string, len(opts))
-	for _, o := range opts {
-		labels[o.Value] = o.Label
-	}
+	labels := labelMap(opts)
 	all, err := rels.List()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -979,6 +979,28 @@ func deleteBackup(repo *store.BackupRepo) http.HandlerFunc {
 	}
 }
 
+func showBackup(repo *store.BackupRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		b, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "backup not found", http.StatusNotFound)
+			return
+		}
+		fields := []fieldRow{
+			{"Destination", b.Destination},
+			{"Frequency", b.Frequency},
+			{"Last run", b.LastRun},
+		}
+		renderDetail(w, cat, tags, rels, "backup", id,
+			"Backup: "+b.Source, b.Notes, fmt.Sprintf("/backups/%d/edit", id), fields)
+	}
+}
+
 func showHost(repo *store.HostRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
@@ -1002,6 +1024,156 @@ func showHost(repo *store.HostRepo, cat entityCatalog, tags *store.TagRepo, rels
 		}
 		renderDetail(w, cat, tags, rels, "host", id,
 			"Host: "+h.Name, h.Notes, fmt.Sprintf("/hosts/%d/edit", id), fields)
+	}
+}
+
+func showService(repo *store.ServiceRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		s, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "service not found", http.StatusNotFound)
+			return
+		}
+		fields := []fieldRow{
+			{"Kind", s.Kind},
+			{"URL", s.URL},
+			{"Ports", s.Ports},
+			{"Category", s.Category},
+		}
+		renderDetail(w, cat, tags, rels, "service", id,
+			"Service: "+s.Name, s.Notes, fmt.Sprintf("/services/%d/edit", id), fields)
+	}
+}
+
+func showNetwork(repo *store.NetworkRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		n, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "network not found", http.StatusNotFound)
+			return
+		}
+		fields := []fieldRow{
+			{"CIDR", n.CIDR},
+			{"VLAN", n.VLAN},
+			{"Gateway", n.Gateway},
+		}
+		renderDetail(w, cat, tags, rels, "network", id,
+			"Network: "+n.Name, n.Notes, fmt.Sprintf("/networks/%d/edit", id), fields)
+	}
+}
+
+func showDomain(repo *store.DomainRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		d, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "domain not found", http.StatusNotFound)
+			return
+		}
+		fields := []fieldRow{
+			{"Provider", d.Provider},
+		}
+		renderDetail(w, cat, tags, rels, "domain", id,
+			"Domain: "+d.FQDN, d.Notes, fmt.Sprintf("/domains/%d/edit", id), fields)
+	}
+}
+
+func showCertificate(repo *store.CertificateRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		c, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "certificate not found", http.StatusNotFound)
+			return
+		}
+		autoRenew := "no"
+		if c.AutoRenew {
+			autoRenew = "yes"
+		}
+		fields := []fieldRow{
+			{"Issuer", c.Issuer},
+			{"Expires on", c.ExpiresOn},
+			{"Auto-renew", autoRenew},
+		}
+		renderDetail(w, cat, tags, rels, "certificate", id,
+			"Certificate: "+c.Subject, c.Notes, fmt.Sprintf("/certificates/%d/edit", id), fields)
+	}
+}
+
+type tagEntity struct {
+	Label string
+	URL   string
+}
+
+type tagsOverviewData struct {
+	Title    string
+	Counts   []store.TagCount
+	Selected string
+	Entities []tagEntity
+}
+
+func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		// Decide between the tag cloud and a drilldown on whether a name was
+		// actually requested, not on its normalized form — otherwise a query
+		// like ?name=# (which normalizes to "") would silently show the cloud.
+		raw := strings.TrimSpace(req.URL.Query().Get("name"))
+		if raw == "" {
+			counts, err := tags.Counts()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			render(w, "tags_overview.html", tagsOverviewData{Title: "Tags", Counts: counts})
+			return
+		}
+
+		name := domain.NormalizeTag(raw)
+		tagged, err := tags.ListByName(name)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		opts, err := cat.options()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		labels := labelMap(opts)
+		entities := make([]tagEntity, 0, len(tagged))
+		for _, tg := range tagged {
+			entities = append(entities, tagEntity{
+				Label: labelOrFallback(labels, tg.EntityType, tg.EntityID),
+				URL:   fmt.Sprintf("/%ss/%d", tg.EntityType, tg.EntityID),
+			})
+		}
+		// Keep the view in drilldown mode (Selected non-empty) even when the
+		// requested name normalizes away, so it shows "no entities" not the cloud.
+		selected := name
+		if selected == "" {
+			selected = raw
+		}
+		render(w, "tags_overview.html", tagsOverviewData{
+			Title: "Tags", Selected: selected, Entities: entities,
+		})
 	}
 }
 

@@ -8,7 +8,7 @@
   <tbody>
   {{range .Certificates}}
     <tr>
-      <td>{{.Subject}}</td>
+      <td><a href="/certificates/{{.ID}}">{{.Subject}}</a></td>
       <td>{{.Issuer}}</td>
       <td>{{.ExpiresOn}}</td>
       <td>{{if .AutoRenew}}yes{{else}}no{{end}}</td>
