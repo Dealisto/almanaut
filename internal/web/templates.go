@@ -14,7 +14,7 @@ var templatesFS embed.FS
 // layout with that page's "content" block.
 var pages = func() map[string]*template.Template {
 	m := map[string]*template.Template{}
-	for _, page := range []string{"hosts.html", "host_form.html", "services.html", "service_form.html", "networks.html", "network_form.html", "domains.html", "domain_form.html", "certificates.html", "certificate_form.html", "backups.html", "backup_form.html"} {
+	for _, page := range []string{"hosts.html", "host_form.html", "services.html", "service_form.html", "networks.html", "network_form.html", "domains.html", "domain_form.html", "certificates.html", "certificate_form.html", "backups.html", "backup_form.html", "relationships.html", "impact.html"} {
 		m[page] = template.Must(
 			template.ParseFS(templatesFS, "templates/layout.html", "templates/"+page),
 		)

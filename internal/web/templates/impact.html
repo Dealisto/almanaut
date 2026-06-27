@@ -1,0 +1,25 @@
+{{define "content"}}
+<h1>What breaks if...</h1>
+<form class="stack" method="get" action="/impact">
+  <label>If this is down
+    <select name="ref">
+      <option value="">-- choose an entity --</option>
+      {{range .Options}}<option value="{{.Value}}" {{if eq .Value $.Selected}}selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+  </label>
+  <div class="actions"><button class="btn btn-primary" type="submit">Show impact</button></div>
+</form>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .Computed}}
+<h2>If "{{.SelectedLabel}}" fails, these break:</h2>
+{{if .Impacted}}
+<div class="table-wrap">
+<table><tbody>
+  {{range .Impacted}}<tr><td>{{.}}</td></tr>{{end}}
+</tbody></table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">Nothing depends on it.</div></div>
+{{end}}
+{{end}}
+{{end}}

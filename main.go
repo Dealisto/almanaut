@@ -39,6 +39,7 @@ func main() {
 		store.NewDomainRepo(db),
 		store.NewCertificateRepo(db),
 		store.NewBackupRepo(db),
+		store.NewRelationshipRepo(db),
 	)
 	srv := &http.Server{
 		Addr:              cfg.Addr,

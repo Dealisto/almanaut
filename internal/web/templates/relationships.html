@@ -1,0 +1,44 @@
+{{define "content"}}
+<h1>Relationships</h1>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .Options}}
+<form class="stack" method="post" action="/relationships">
+  <label>From
+    <select name="from">{{range .Options}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+  </label>
+  <label>Kind
+    <select name="kind">{{range .Kinds}}<option value="{{.}}">{{.}}</option>{{end}}</select>
+  </label>
+  <label>To
+    <select name="to">{{range .Options}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+  </label>
+  <div class="actions"><button class="btn btn-primary" type="submit">Add relationship</button></div>
+</form>
+{{else}}
+<p>Create some entities first, then you can link them here.</p>
+{{end}}
+{{if .Relationships}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>From</th><th>Kind</th><th>To</th><th></th></tr></thead>
+  <tbody>
+  {{range .Relationships}}
+    <tr>
+      <td>{{.FromLabel}}</td>
+      <td>{{.Kind}}</td>
+      <td>{{.ToLabel}}</td>
+      <td>
+        <form class="form-inline" method="post" action="/relationships/{{.ID}}/delete"
+              onsubmit="return confirm('Delete this relationship?');">
+          <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No relationships yet.</div></div>
+{{end}}
+{{end}}
