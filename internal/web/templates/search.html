@@ -1,0 +1,20 @@
+{{define "content"}}
+<h1>Search</h1>
+<form class="search-page" method="get" action="/search" role="search">
+  <input type="search" name="q" value="{{.Query}}" placeholder="Search…" aria-label="Search" autofocus>
+  <button class="btn btn-primary" type="submit">Search</button>
+</form>
+{{if .Query}}
+  {{if .Groups}}
+    <p class="muted">{{.Total}} result{{if ne .Total 1}}s{{end}} for "{{.Query}}".</p>
+    {{range .Groups}}
+      <h2>{{.Heading}}</h2>
+      <ul class="related">{{range .Hits}}<li><a href="{{.URL}}">{{.Label}}</a></li>{{end}}</ul>
+    {{end}}
+  {{else}}
+    <p><em>No results for "{{.Query}}".</em></p>
+  {{end}}
+{{else}}
+  <p class="muted">Type a query in the search box.</p>
+{{end}}
+{{end}}

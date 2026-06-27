@@ -63,12 +63,21 @@ th{vertical-align:top}
 .tag .form-inline{display:inline}
 .tag-x{border:0;background:none;color:var(--danger);cursor:pointer;font-size:1rem;line-height:1;padding:0}
 ul.related{padding-left:20px}
+header.app .search{margin-left:auto}
+header.app .search input{padding:6px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--bg);color:var(--text);font:inherit;font-size:.9rem}
+form.search-page{display:flex;gap:8px;margin-bottom:20px}
+form.search-page input{flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--bg);color:var(--text);font:inherit}
 </style>
 </head>
 <body>
 <header class="app"><div class="wrap">
   <span class="brand">Almanaut</span>
   <nav><a href="/hosts">Hosts</a><a href="/services">Services</a><a href="/networks">Networks</a><a href="/domains">Domains</a><a href="/certificates">Certificates</a><a href="/backups">Backups</a><a href="/tags">Tags</a><a href="/relationships">Relationships</a><a href="/impact">Impact</a><a href="/checks">Checks</a></nav>
+  <form class="search" method="get" action="/search" role="search">
+    <input type="search" name="q" placeholder="Search…" aria-label="Search">
+  </form>
 </div></header>
 <main>{{template "content" .}}</main>
 </body>
