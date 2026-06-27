@@ -10,13 +10,13 @@ var ServiceKinds = []string{"container", "native", "vm"}
 
 // Service is an application or process running in the homelab.
 type Service struct {
-	ID       int64
-	Name     string
-	Kind     string // container | native | vm
-	URL      string // access URL
-	Ports    string // free text, e.g. "8096, 443"
-	Category string
-	Notes    string
+	ID       int64  `yaml:"id"`
+	Name     string `yaml:"name"`
+	Kind     string `yaml:"kind"` // container | native | vm
+	URL      string `yaml:"url"` // access URL
+	Ports    string `yaml:"ports"` // free text, e.g. "8096, 443"
+	Category string `yaml:"category"`
+	Notes    string `yaml:"notes"`
 }
 
 // Validate checks required fields and value formats.

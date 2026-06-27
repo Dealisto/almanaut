@@ -12,16 +12,16 @@ var HostTypes = []string{"physical", "vm", "lxc", "vps"}
 
 // Host is a machine in the homelab (physical, VM, LXC, or VPS).
 type Host struct {
-	ID     int64
-	Name   string
-	Type   string
-	OS     string
-	CPU    string
-	RAM    string
-	Disk   string
-	Status string
-	IPs    []string
-	Notes  string
+	ID     int64    `yaml:"id"`
+	Name   string   `yaml:"name"`
+	Type   string   `yaml:"type"`
+	OS     string   `yaml:"os"`
+	CPU    string   `yaml:"cpu"`
+	RAM    string   `yaml:"ram"`
+	Disk   string   `yaml:"disk"`
+	Status string   `yaml:"status"`
+	IPs    []string `yaml:"ips"`
+	Notes  string   `yaml:"notes"`
 }
 
 // Validate checks required fields and value formats.

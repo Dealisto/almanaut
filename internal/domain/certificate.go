@@ -11,12 +11,12 @@ const DateLayout = "2006-01-02"
 
 // Certificate is a TLS certificate tracked in the homelab.
 type Certificate struct {
-	ID        int64
-	Subject   string // domain(s) the cert covers
-	Issuer    string
-	ExpiresOn string // YYYY-MM-DD
-	AutoRenew bool
-	Notes     string
+	ID        int64  `yaml:"id"`
+	Subject   string `yaml:"subject"` // domain(s) the cert covers
+	Issuer    string `yaml:"issuer"`
+	ExpiresOn string `yaml:"expires_on"` // YYYY-MM-DD
+	AutoRenew bool   `yaml:"auto_renew"`
+	Notes     string `yaml:"notes"`
 }
 
 // Validate checks the subject and the expiry date.
