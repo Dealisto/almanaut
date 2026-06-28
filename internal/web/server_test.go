@@ -100,6 +100,16 @@ func TestProxmoxDisabledIs404(t *testing.T) {
 	}
 }
 
+func TestProxmoxImportDisabledIs404(t *testing.T) {
+	srv := newTestServerProxmox(t, fakeProxmoxScanner{}, ProxmoxOptions{})
+	req := httptest.NewRequest(http.MethodPost, "/discovery/proxmox/import", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("disabled POST /discovery/proxmox/import = %d, want 404", rec.Code)
+	}
+}
+
 func TestProxmoxReviewShowsRows(t *testing.T) {
 	pve := fakeProxmoxScanner{res: []discovery.ProxmoxResource{
 		{Type: "node", Node: "pve", Status: "online", ID: "node/pve", MaxCPU: 8},
