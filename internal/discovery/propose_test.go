@@ -114,3 +114,58 @@ func TestProposeHostsSortedByIP(t *testing.T) {
 		t.Errorf("not sorted by IP: %q, %q", got[0].IP, got[1].IP)
 	}
 }
+
+func TestHumanBytes(t *testing.T) {
+	cases := map[int64]string{
+		512:        "512 B",
+		4294967296: "4.0 GiB",
+		536870912:  "512.0 MiB",
+	}
+	for in, want := range cases {
+		if got := humanBytes(in); got != want {
+			t.Errorf("humanBytes(%d) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestProposeProxmoxHosts(t *testing.T) {
+	res := []ProxmoxResource{
+		{Type: "qemu", Node: "pve", Name: "web", Status: "running", ID: "qemu/100", MaxCPU: 4, MaxMem: 4294967296, MaxDisk: 34359738368},
+		{Type: "node", Node: "pve", Status: "online", ID: "node/pve", MaxCPU: 8},
+		{Type: "lxc", Node: "pve", Name: "dns", Status: "running", ID: "lxc/101", MaxCPU: 1},
+	}
+	existing := []domain.Host{{Name: "DNS", Type: "lxc"}} // case-insensitive match
+	got := ProposeProxmoxHosts(res, existing)
+
+	if len(got) != 3 {
+		t.Fatalf("got %d proposals, want 3", len(got))
+	}
+	// Nodes sort first, then by name.
+	if got[0].Host.Name != "pve" || got[0].Host.Type != "physical" {
+		t.Errorf("first proposal = %+v, want node pve/physical", got[0].Host)
+	}
+	if got[0].Host.CPU != "8 cores" {
+		t.Errorf("node CPU = %q, want %q", got[0].Host.CPU, "8 cores")
+	}
+	// Find the qemu proposal and check mapping.
+	var web domain.Host
+	var webTracked bool
+	for _, p := range got {
+		if p.ID == "qemu/100" {
+			web, webTracked = p.Host, p.AlreadyTracked
+		}
+	}
+	if web.Type != "vm" || web.Status != "running" || web.CPU != "4 cores" ||
+		web.RAM != "4.0 GiB" || web.Disk != "32.0 GiB" || web.Notes != "Discovered from Proxmox." {
+		t.Errorf("web host mapped wrong: %+v", web)
+	}
+	if webTracked {
+		t.Error("web should not be already-tracked")
+	}
+	// dns matches existing host name case-insensitively.
+	for _, p := range got {
+		if p.ID == "lxc/101" && !p.AlreadyTracked {
+			t.Error("dns should be already-tracked")
+		}
+	}
+}
