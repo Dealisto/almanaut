@@ -86,9 +86,11 @@ func (s *NetworkScanner) Scan(ctx context.Context, cidr string, ports []int) ([]
 				}
 				sort.Ints(open)
 				host := ScannedHost{IP: ip, OpenPorts: open}
-				if names, lerr := resolver.LookupAddr(ctx, ip); lerr == nil && len(names) > 0 {
+				lookupCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+				if names, lerr := resolver.LookupAddr(lookupCtx, ip); lerr == nil && len(names) > 0 {
 					host.Hostname = strings.TrimSuffix(names[0], ".")
 				}
+				cancel()
 				results <- host
 			}
 		}()

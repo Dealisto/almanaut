@@ -202,6 +202,9 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions) http.Handler
 			}
 		}
 		for _, v := range req.Form["host"] {
+			// Each value is "ip|name|ports". PTR hostnames and IPs are LDH/
+			// numeric (no "|"), and SplitN caps at 3 so a "|" in ports is kept.
+			// Malformed or empty-field rows fall through to Host.Validate below.
 			parts := strings.SplitN(v, "|", 3)
 			if len(parts) != 3 {
 				continue
