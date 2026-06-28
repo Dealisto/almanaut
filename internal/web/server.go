@@ -157,6 +157,7 @@ func New(
 	r.Post("/import", importData(db))
 	r.Get("/discovery", discoveryLanding())
 	r.Get("/discovery/docker", scanDocker(docker, services, hosts))
+	r.Post("/discovery/docker/import", importDocker(docker, services, relationships))
 	return r
 }
 

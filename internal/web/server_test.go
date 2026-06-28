@@ -922,6 +922,61 @@ func TestGlobalSearch(t *testing.T) {
 	}
 }
 
+func TestDiscoveryDockerImport(t *testing.T) {
+	scanner := fakeScanner{containers: []discovery.Container{
+		{ID: "c1", Name: "jellyfin"},
+		{ID: "c2", Name: "sonarr"},
+	}}
+	srv := newTestServerWithScanner(t, scanner)
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}}) // host id 1
+
+	// Import only c1, attached to host 1.
+	rec := postForm(t, srv, "/discovery/docker/import", url.Values{"id": {"c1"}, "host": {"1"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST import = %d, want 303", rec.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/services", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, "jellyfin") {
+		t.Error("selected container jellyfin was not imported")
+	}
+	if strings.Contains(body, "sonarr") {
+		t.Error("unselected container sonarr should not be imported")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/relationships", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	rbody := rec.Body.String()
+	if !strings.Contains(rbody, "runs on") ||
+		!strings.Contains(rbody, "service: jellyfin") ||
+		!strings.Contains(rbody, "host: proxmox") {
+		t.Errorf("expected a 'service jellyfin runs on host proxmox' relationship; body=%q", rbody)
+	}
+}
+
+func TestDiscoveryDockerImportSkipsAlreadyTracked(t *testing.T) {
+	scanner := fakeScanner{containers: []discovery.Container{{ID: "c1", Name: "jellyfin"}}}
+	srv := newTestServerWithScanner(t, scanner)
+	postForm(t, srv, "/services", url.Values{"name": {"jellyfin"}, "kind": {"container"}})
+
+	// Attempt to import c1 even though a service named jellyfin already exists.
+	rec := postForm(t, srv, "/discovery/docker/import", url.Values{"id": {"c1"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST import = %d, want 303", rec.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/services", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if n := strings.Count(rec.Body.String(), ">jellyfin<"); n != 1 {
+		t.Errorf("jellyfin appears %d times, want 1 (no duplicate import)", n)
+	}
+}
+
 func TestNewFormPagesRender(t *testing.T) {
 	srv := newTestServer(t)
 	for _, path := range []string{
