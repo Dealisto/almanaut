@@ -32,5 +32,8 @@ func WithTx(db *sql.DB, fn func(*sql.Tx) error) error {
 		}
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
 }

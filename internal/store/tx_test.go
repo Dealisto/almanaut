@@ -68,3 +68,31 @@ func TestWithTxBoundRepoIsolatedUntilCommit(t *testing.T) {
 		t.Fatalf("Rollback: %v", err)
 	}
 }
+
+func TestWithTxPanicRollsBack(t *testing.T) {
+	db := newTestDB(t)
+	panicked := false
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panicked = true
+			}
+		}()
+		_ = WithTx(db, func(tx *sql.Tx) error {
+			if _, err := NewServiceRepo(db).WithTx(tx).Create(domain.Service{Name: "plex", Kind: "container"}); err != nil {
+				t.Fatalf("create in tx: %v", err)
+			}
+			panic("simulated crash")
+		})
+	}()
+	if !panicked {
+		t.Fatal("expected the panic to propagate out of WithTx")
+	}
+	got, err := NewServiceRepo(db).List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("after panic+rollback got %+v, want no services", got)
+	}
+}
