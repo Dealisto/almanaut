@@ -117,6 +117,11 @@ func importDocker(scanner dockerScanner, services *store.ServiceRepo, rels *stor
 			if p.AlreadyTracked || !selected[p.ContainerID] {
 				continue
 			}
+			// Discovery must not write a Service that the manual UI would reject
+			// (e.g. a container with no name). Skip invalid proposals.
+			if err := p.Service.Validate(); err != nil {
+				continue
+			}
 			newID, err := services.Create(p.Service)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)

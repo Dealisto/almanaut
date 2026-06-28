@@ -977,6 +977,22 @@ func TestDiscoveryDockerImportSkipsAlreadyTracked(t *testing.T) {
 	}
 }
 
+func TestDiscoveryDockerImportSkipsNamelessContainer(t *testing.T) {
+	scanner := fakeScanner{containers: []discovery.Container{{ID: "c1", Name: ""}}}
+	srv := newTestServerWithScanner(t, scanner)
+	rec := postForm(t, srv, "/discovery/docker/import", url.Values{"id": {"c1"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST import = %d, want 303", rec.Code)
+	}
+	// No service should have been created from the nameless container.
+	req := httptest.NewRequest(http.MethodGet, "/services", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "No services yet.") {
+		t.Error("nameless container should not have been imported as a service")
+	}
+}
+
 func TestNewFormPagesRender(t *testing.T) {
 	srv := newTestServer(t)
 	for _, path := range []string{
