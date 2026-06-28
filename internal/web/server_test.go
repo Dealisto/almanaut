@@ -75,6 +75,14 @@ func (f fakeProxmoxScanner) Resources(ctx context.Context) ([]discovery.ProxmoxR
 
 func newTestServerProxmox(t *testing.T, pve proxmoxScanner, opts ProxmoxOptions) http.Handler {
 	t.Helper()
+	srv, _, _ := newTestServerProxmoxRepos(t, pve, opts)
+	return srv
+}
+
+// newTestServerProxmoxRepos is like newTestServerProxmox but also returns the
+// host and relationship repos so a test can assert persisted state directly.
+func newTestServerProxmoxRepos(t *testing.T, pve proxmoxScanner, opts ProxmoxOptions) (http.Handler, *store.HostRepo, *store.RelationshipRepo) {
+	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -84,10 +92,13 @@ func newTestServerProxmox(t *testing.T, pve proxmoxScanner, opts ProxmoxOptions)
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db),
+	hosts := store.NewHostRepo(db)
+	rels := store.NewRelationshipRepo(db)
+	srv := New(hosts, store.NewServiceRepo(db), store.NewNetworkRepo(db),
 		store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db),
-		store.NewRelationshipRepo(db), store.NewTagRepo(db), db,
+		rels, store.NewTagRepo(db), db,
 		fakeScanner{}, fakeNetworkScanner{}, NetDiscoveryOptions{}, pve, opts)
+	return srv, hosts, rels
 }
 
 func TestProxmoxDisabledIs404(t *testing.T) {
@@ -163,6 +174,77 @@ func TestProxmoxImportCreatesHostsAndLinks(t *testing.T) {
 	}
 	if rels := getBody("/relationships"); !strings.Contains(rels, "runs on") {
 		t.Errorf("/relationships missing runs-on link: %s", rels)
+	}
+}
+
+// Two guests sharing a name must each get their own runs-on edge: linking is
+// keyed on the unique Proxmox resource id, not the (colliding) host name.
+func TestProxmoxImportLinksDuplicateGuestNames(t *testing.T) {
+	pve := fakeProxmoxScanner{res: []discovery.ProxmoxResource{
+		{Type: "node", Node: "pve", Status: "online", ID: "node/pve", MaxCPU: 8},
+		{Type: "qemu", Node: "pve", Name: "web", Status: "running", ID: "qemu/100", MaxCPU: 2},
+		{Type: "qemu", Node: "pve", Name: "web", Status: "running", ID: "qemu/101", MaxCPU: 2},
+	}}
+	srv, hostRepo, relRepo := newTestServerProxmoxRepos(t, pve, ProxmoxOptions{Enabled: true})
+
+	form := url.Values{}
+	form.Add("id", "node/pve")
+	form.Add("id", "qemu/100")
+	form.Add("id", "qemu/101")
+	form.Set("link", "on")
+	req := httptest.NewRequest(http.MethodPost, "/discovery/proxmox/import", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("import = %d, want 303", rec.Code)
+	}
+
+	allHosts, err := hostRepo.List()
+	if err != nil {
+		t.Fatalf("List hosts: %v", err)
+	}
+	if len(allHosts) != 3 {
+		t.Fatalf("imported %d hosts, want 3 (node + 2 same-named guests)", len(allHosts))
+	}
+	var nodeID int64
+	guestIDs := map[int64]bool{}
+	for _, h := range allHosts {
+		if h.Type == "physical" {
+			nodeID = h.ID
+		} else {
+			guestIDs[h.ID] = true
+		}
+	}
+	if len(guestIDs) != 2 {
+		t.Fatalf("got %d distinct guests, want 2", len(guestIDs))
+	}
+
+	allRels, err := relRepo.List()
+	if err != nil {
+		t.Fatalf("List relationships: %v", err)
+	}
+	linked := map[int64]bool{}
+	for _, r := range allRels {
+		if r.Kind != "runs on" {
+			continue
+		}
+		if r.FromType != "host" || r.ToType != "host" || r.ToID != nodeID {
+			t.Errorf("unexpected edge %+v (want guest -> node %d)", r, nodeID)
+			continue
+		}
+		if linked[r.FromID] {
+			t.Errorf("duplicate runs-on edge for guest %d", r.FromID)
+		}
+		linked[r.FromID] = true
+	}
+	if len(linked) != 2 {
+		t.Fatalf("got %d linked guests, want both guests linked exactly once", len(linked))
+	}
+	for gid := range guestIDs {
+		if !linked[gid] {
+			t.Errorf("guest %d has no runs-on edge to its node", gid)
+		}
 	}
 }
 

@@ -316,13 +316,6 @@ func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.Re
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		// name -> host id for runs-on linking (existing + newly created). Host
-		// names are not unique in the DB, so a name collision keeps the
-		// last-written id; the worst case is one mislinked edge, never data loss.
-		byName := make(map[string]int64)
-		for _, h := range existing {
-			byName[normalizeName(h.Name)] = h.ID
-		}
 		// resource id -> node name, to resolve a guest's node after import.
 		nodeOf := make(map[string]string)
 		for _, r := range res {
@@ -330,7 +323,10 @@ func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.Re
 		}
 
 		proposals := discovery.ProposeProxmoxHosts(res, existing)
-		created := make(map[string]bool)
+		// createdID maps each imported host's Proxmox resource id to its new DB
+		// id. Keying on the resource id (not the name) keeps guest linking exact:
+		// guest names can collide across nodes, but resource ids are unique.
+		createdID := make(map[string]int64)
 		for _, p := range proposals {
 			// ProposeProxmoxHosts recomputes AlreadyTracked against the freshly
 			// listed hosts, so skipping tracked rows also guards double-submit.
@@ -346,17 +342,30 @@ func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.Re
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			byName[normalizeName(p.Host.Name)] = newID
-			created[p.ID] = true
+			createdID[p.ID] = newID
 		}
 		if linkToNode {
+			// Resolve a guest's node by name. Proxmox node names are unique within
+			// a cluster, so name resolution is safe on the node side (existing node
+			// hosts plus any imported this submit). A manual host that happens to
+			// share a node's name is the only residual collision: at worst one edge
+			// points at the wrong host, never data loss.
+			nodeIDByName := make(map[string]int64)
+			for _, h := range existing {
+				nodeIDByName[normalizeName(h.Name)] = h.ID
+			}
+			for _, p := range proposals {
+				if id, ok := createdID[p.ID]; ok && p.Host.Type == "physical" {
+					nodeIDByName[normalizeName(p.Host.Name)] = id
+				}
+			}
 			// Link only freshly-imported guests, so re-import never duplicates edges.
 			for _, p := range proposals {
-				if !created[p.ID] || (p.Host.Type != "vm" && p.Host.Type != "lxc") {
+				guestID, ok := createdID[p.ID]
+				if !ok || (p.Host.Type != "vm" && p.Host.Type != "lxc") {
 					continue
 				}
-				guestID := byName[normalizeName(p.Host.Name)]
-				nodeID, ok := byName[normalizeName(nodeOf[p.ID])]
+				nodeID, ok := nodeIDByName[normalizeName(nodeOf[p.ID])]
 				if !ok || nodeID == guestID {
 					continue
 				}

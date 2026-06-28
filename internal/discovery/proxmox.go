@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -78,7 +79,10 @@ func (c *ProxmoxClient) Resources(ctx context.Context) ([]ProxmoxResource, error
 	var body struct {
 		Data []apiResource `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	// Cap the response so a buggy or hostile endpoint cannot exhaust memory; a
+	// real cluster inventory is far below this.
+	const maxBody = 16 << 20 // 16 MiB
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&body); err != nil {
 		return nil, fmt.Errorf("decode resources: %w", err)
 	}
 	out := make([]ProxmoxResource, 0, len(body.Data))
