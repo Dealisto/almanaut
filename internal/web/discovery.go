@@ -28,9 +28,21 @@ type NetDiscoveryOptions struct {
 	DefaultSubnet string
 }
 
+// proxmoxScanner is the subset of the Proxmox discovery client the web layer uses.
+type proxmoxScanner interface {
+	Resources(ctx context.Context) ([]discovery.ProxmoxResource, error)
+}
+
+// ProxmoxOptions configures the opt-in Proxmox import feature. It is exported so
+// package main can construct it when calling web.New.
+type ProxmoxOptions struct {
+	Enabled bool
+}
+
 type discoveryLandingData struct {
 	Title          string
 	NetworkEnabled bool
+	ProxmoxEnabled bool
 }
 
 type proposalRow struct {
@@ -49,9 +61,11 @@ type dockerReviewData struct {
 	NewCount  int
 }
 
-func discoveryLanding(opts NetDiscoveryOptions) http.HandlerFunc {
+func discoveryLanding(opts NetDiscoveryOptions, pve ProxmoxOptions) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "discovery.html", discoveryLandingData{Title: "Discover", NetworkEnabled: opts.Enabled})
+		render(w, "discovery.html", discoveryLandingData{
+			Title: "Discover", NetworkEnabled: opts.Enabled, ProxmoxEnabled: pve.Enabled,
+		})
 	}
 }
 
@@ -229,6 +243,151 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions) http.Handler
 		}
 		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
 	}
+}
+
+type proxmoxRow struct {
+	ID, Name, Type, Status, CPU, RAM, Disk string
+	AlreadyTracked                         bool
+}
+
+type proxmoxReviewData struct {
+	Title    string
+	Rows     []proxmoxRow
+	NewCount int
+	Error    string
+}
+
+func scanProxmox(scanner proxmoxScanner, hosts *store.HostRepo, opts ProxmoxOptions) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if !opts.Enabled {
+			http.NotFound(w, req)
+			return
+		}
+		data := proxmoxReviewData{Title: "Proxmox discovery"}
+		res, err := scanner.Resources(req.Context())
+		if err != nil {
+			data.Error = "Could not reach the Proxmox API: " + err.Error()
+			render(w, "discovery_proxmox.html", data)
+			return
+		}
+		existing, err := hosts.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		for _, p := range discovery.ProposeProxmoxHosts(res, existing) {
+			if !p.AlreadyTracked {
+				data.NewCount++
+			}
+			data.Rows = append(data.Rows, proxmoxRow{
+				ID: p.ID, Name: p.Host.Name, Type: p.Host.Type, Status: p.Host.Status,
+				CPU: p.Host.CPU, RAM: p.Host.RAM, Disk: p.Host.Disk, AlreadyTracked: p.AlreadyTracked,
+			})
+		}
+		render(w, "discovery_proxmox.html", data)
+	}
+}
+
+func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.RelationshipRepo, opts ProxmoxOptions) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if !opts.Enabled {
+			http.NotFound(w, req)
+			return
+		}
+		if err := req.ParseForm(); err != nil {
+			http.Error(w, "invalid form", http.StatusBadRequest)
+			return
+		}
+		selected := make(map[string]bool)
+		for _, id := range req.Form["id"] {
+			selected[id] = true
+		}
+		linkToNode := req.FormValue("link") != ""
+
+		// Re-query so we never round-trip proposal data through hidden fields; a
+		// guest that vanished since the review is simply skipped.
+		res, err := scanner.Resources(req.Context())
+		if err != nil {
+			http.Error(w, "could not reach the Proxmox API: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		existing, err := hosts.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// resource id -> node name, to resolve a guest's node after import.
+		nodeOf := make(map[string]string)
+		for _, r := range res {
+			nodeOf[r.ID] = r.Node
+		}
+
+		proposals := discovery.ProposeProxmoxHosts(res, existing)
+		// createdID maps each imported host's Proxmox resource id to its new DB
+		// id. Keying on the resource id (not the name) keeps guest linking exact:
+		// guest names can collide across nodes, but resource ids are unique.
+		createdID := make(map[string]int64)
+		for _, p := range proposals {
+			// ProposeProxmoxHosts recomputes AlreadyTracked against the freshly
+			// listed hosts, so skipping tracked rows also guards double-submit.
+			if p.AlreadyTracked || !selected[p.ID] {
+				continue
+			}
+			// Discovery must not write a Host the manual UI would reject.
+			if err := p.Host.Validate(); err != nil {
+				continue
+			}
+			newID, err := hosts.Create(p.Host)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			createdID[p.ID] = newID
+		}
+		if linkToNode {
+			// Resolve a guest's node by name. Proxmox node names are unique within
+			// a cluster, so name resolution is safe on the node side (existing node
+			// hosts plus any imported this submit). A manual host that happens to
+			// share a node's name is the only residual collision: at worst one edge
+			// points at the wrong host, never data loss.
+			nodeIDByName := make(map[string]int64)
+			for _, h := range existing {
+				nodeIDByName[normalizeName(h.Name)] = h.ID
+			}
+			for _, p := range proposals {
+				if id, ok := createdID[p.ID]; ok && p.Host.Type == "physical" {
+					nodeIDByName[normalizeName(p.Host.Name)] = id
+				}
+			}
+			// Link only freshly-imported guests, so re-import never duplicates edges.
+			for _, p := range proposals {
+				guestID, ok := createdID[p.ID]
+				if !ok || (p.Host.Type != "vm" && p.Host.Type != "lxc") {
+					continue
+				}
+				nodeID, ok := nodeIDByName[normalizeName(nodeOf[p.ID])]
+				if !ok || nodeID == guestID {
+					continue
+				}
+				rel := domain.Relationship{
+					FromType: "host", FromID: guestID,
+					ToType: "host", ToID: nodeID, Kind: "runs on",
+				}
+				if err := rel.Validate(); err != nil {
+					continue
+				}
+				if _, err := rels.Create(rel); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+			}
+		}
+		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
+	}
+}
+
+func normalizeName(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
 }
 
 func importDocker(scanner dockerScanner, services *store.ServiceRepo, rels *store.RelationshipRepo) http.HandlerFunc {

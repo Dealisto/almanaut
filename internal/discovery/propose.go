@@ -123,3 +123,87 @@ func formatPortsInts(ports []int) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// ProxmoxProposal is a discovered Proxmox resource mapped to a candidate Host,
+// with a flag indicating whether a host with the same name already exists.
+type ProxmoxProposal struct {
+	ID             string // Proxmox resource id, e.g. "qemu/100" (import key)
+	Host           domain.Host
+	AlreadyTracked bool
+}
+
+// ProposeProxmoxHosts maps Proxmox nodes/VMs/containers to candidate Hosts,
+// nodes first then by name, marking those whose name already matches an
+// existing host (case-insensitive).
+func ProposeProxmoxHosts(res []ProxmoxResource, existing []domain.Host) []ProxmoxProposal {
+	tracked := make(map[string]bool, len(existing))
+	for _, h := range existing {
+		tracked[normalizeName(h.Name)] = true
+	}
+	out := make([]ProxmoxProposal, 0, len(res))
+	for _, r := range res {
+		h := hostFromResource(r)
+		out = append(out, ProxmoxProposal{
+			ID:             r.ID,
+			Host:           h,
+			AlreadyTracked: tracked[normalizeName(h.Name)],
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		ni := out[i].Host.Type == "physical"
+		nj := out[j].Host.Type == "physical"
+		if ni != nj {
+			return ni // nodes first
+		}
+		return normalizeName(out[i].Host.Name) < normalizeName(out[j].Host.Name)
+	})
+	return out
+}
+
+func hostFromResource(r ProxmoxResource) domain.Host {
+	name := r.Name
+	if strings.TrimSpace(name) == "" {
+		name = r.Node // node rows carry the name in Node
+	}
+	h := domain.Host{
+		Name:   name,
+		Type:   proxmoxHostType(r.Type),
+		Status: r.Status,
+		Notes:  "Discovered from Proxmox.",
+	}
+	if r.MaxCPU > 0 {
+		h.CPU = fmt.Sprintf("%d cores", r.MaxCPU)
+	}
+	if r.MaxMem > 0 {
+		h.RAM = humanBytes(r.MaxMem)
+	}
+	if r.MaxDisk > 0 {
+		h.Disk = humanBytes(r.MaxDisk)
+	}
+	return h
+}
+
+func proxmoxHostType(t string) string {
+	switch t {
+	case "qemu":
+		return "vm"
+	case "lxc":
+		return "lxc"
+	default:
+		return "physical"
+	}
+}
+
+// humanBytes renders a byte count in binary units (e.g. "4.0 GiB").
+func humanBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(b)/float64(div), "KMGTPE"[exp])
+}

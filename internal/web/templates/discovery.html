@@ -6,5 +6,8 @@
   {{if .NetworkEnabled}}
   <li><a href="/discovery/network">Network scan</a> — scan a subnet for live hosts and import them.</li>
   {{end}}
+  {{if .ProxmoxEnabled}}
+  <li><a href="/discovery/proxmox">Proxmox</a> — import nodes, VMs, and LXC containers from a Proxmox VE instance.</li>
+  {{end}}
 </ul>
 {{end}}

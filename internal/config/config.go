@@ -13,6 +13,9 @@ type Config struct {
 	DockerSocket       string // path to the Docker Engine socket for discovery
 	NetworkScanEnabled bool   // whether the opt-in subnet scan is exposed
 	ScanSubnet         string // default subnet (CIDR) pre-filled in the scan form
+	ProxmoxURL         string // Proxmox VE API base URL, e.g. https://pve.lan:8006
+	ProxmoxToken       string // Proxmox API token "user@realm!tokenid=secret"
+	ProxmoxInsecure    bool   // skip TLS verification (self-signed Proxmox cert)
 }
 
 // Load reads configuration from the environment, falling back to defaults.
@@ -23,6 +26,9 @@ func Load() Config {
 		DockerSocket:       getenv("ALMANAUT_DOCKER_SOCKET", "/var/run/docker.sock"),
 		NetworkScanEnabled: getenvBool("ALMANAUT_ENABLE_NETWORK_SCAN", false),
 		ScanSubnet:         getenv("ALMANAUT_SCAN_SUBNET", ""),
+		ProxmoxURL:         getenv("ALMANAUT_PROXMOX_URL", ""),
+		ProxmoxToken:       getenv("ALMANAUT_PROXMOX_TOKEN", ""),
+		ProxmoxInsecure:    getenvBool("ALMANAUT_PROXMOX_INSECURE", false),
 	}
 }
 
