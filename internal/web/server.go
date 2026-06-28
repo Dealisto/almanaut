@@ -164,9 +164,9 @@ func New(
 	r.Post("/discovery/docker/import", importDocker(docker, services, relationships, db))
 	r.Get("/discovery/network", networkForm(netOpts))
 	r.Post("/discovery/network/scan", scanNetwork(netscan, hosts, netOpts))
-	r.Post("/discovery/network/import", importNetwork(hosts, netOpts))
+	r.Post("/discovery/network/import", importNetwork(hosts, netOpts, db))
 	r.Get("/discovery/proxmox", scanProxmox(proxmox, hosts, pveOpts))
-	r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts))
+	r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts, db))
 	return r
 }
 

@@ -194,7 +194,7 @@ func scanNetwork(netscan networkScanner, hosts *store.HostRepo, opts NetDiscover
 	}
 }
 
-func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions) http.HandlerFunc {
+func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if !opts.Enabled {
 			http.NotFound(w, req)
@@ -218,31 +218,38 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions) http.Handler
 				tracked[ip] = true
 			}
 		}
-		for _, v := range req.Form["host"] {
-			// Each value is "ip|name|ports". PTR hostnames and IPs are LDH/
-			// numeric (no "|"), and SplitN caps at 3 so a "|" in ports is kept.
-			// Malformed or empty-field rows fall through to Host.Validate below.
-			parts := strings.SplitN(v, "|", 3)
-			if len(parts) != 3 {
-				continue
+		txErr := store.WithTx(db, func(tx *sql.Tx) error {
+			hr := hosts.WithTx(tx)
+			for _, v := range req.Form["host"] {
+				// Each value is "ip|name|ports". PTR hostnames and IPs are LDH/
+				// numeric (no "|"), and SplitN caps at 3 so a "|" in ports is kept.
+				// Malformed or empty-field rows fall through to Host.Validate below.
+				parts := strings.SplitN(v, "|", 3)
+				if len(parts) != 3 {
+					continue
+				}
+				ip, name, ports := parts[0], parts[1], parts[2]
+				if tracked[ip] {
+					continue
+				}
+				h := domain.Host{
+					Name: name, Type: hostType,
+					IPs: []string{ip}, Notes: discovery.NetworkHostNotes(ports),
+				}
+				// Discovery must not write a Host the manual UI would reject.
+				if err := h.Validate(); err != nil {
+					continue
+				}
+				if _, err := hr.Create(h); err != nil {
+					return err
+				}
+				tracked[ip] = true // avoid a duplicate within the same submit
 			}
-			ip, name, ports := parts[0], parts[1], parts[2]
-			if tracked[ip] {
-				continue
-			}
-			h := domain.Host{
-				Name: name, Type: hostType,
-				IPs: []string{ip}, Notes: discovery.NetworkHostNotes(ports),
-			}
-			// Discovery must not write a Host the manual UI would reject.
-			if err := h.Validate(); err != nil {
-				continue
-			}
-			if _, err := hosts.Create(h); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			tracked[ip] = true // avoid a duplicate within the same submit
+			return nil
+		})
+		if txErr != nil {
+			http.Error(w, txErr.Error(), http.StatusInternalServerError)
+			return
 		}
 		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
 	}
@@ -291,7 +298,7 @@ func scanProxmox(scanner proxmoxScanner, hosts *store.HostRepo, opts ProxmoxOpti
 	}
 }
 
-func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.RelationshipRepo, opts ProxmoxOptions) http.HandlerFunc {
+func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.RelationshipRepo, opts ProxmoxOptions, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if !opts.Enabled {
 			http.NotFound(w, req)
@@ -326,64 +333,75 @@ func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.Re
 		}
 
 		proposals := discovery.ProposeProxmoxHosts(res, existing)
-		// createdID maps each imported host's Proxmox resource id to its new DB
-		// id. Keying on the resource id (not the name) keeps guest linking exact:
-		// guest names can collide across nodes, but resource ids are unique.
-		createdID := make(map[string]int64)
-		for _, p := range proposals {
-			// ProposeProxmoxHosts recomputes AlreadyTracked against the freshly
-			// listed hosts, so skipping tracked rows also guards double-submit.
-			if p.AlreadyTracked || !selected[p.ID] {
-				continue
-			}
-			// Discovery must not write a Host the manual UI would reject.
-			if err := p.Host.Validate(); err != nil {
-				continue
-			}
-			newID, err := hosts.Create(p.Host)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			createdID[p.ID] = newID
-		}
-		if linkToNode {
-			// Resolve a guest's node by name. Proxmox node names are unique within
-			// a cluster, so name resolution is safe on the node side (existing node
-			// hosts plus any imported this submit). A manual host that happens to
-			// share a node's name is the only residual collision: at worst one edge
-			// points at the wrong host, never data loss.
-			nodeIDByName := make(map[string]int64)
-			for _, h := range existing {
-				nodeIDByName[normalizeName(h.Name)] = h.ID
-			}
+
+		// One transaction covers host creation and guest linking, so a link
+		// failure rolls back the hosts created in the same submit too.
+		txErr := store.WithTx(db, func(tx *sql.Tx) error {
+			hr := hosts.WithTx(tx)
+			rl := rels.WithTx(tx)
+
+			// createdID maps each imported host's Proxmox resource id to its new DB
+			// id. Keying on the resource id (not the name) keeps guest linking exact:
+			// guest names can collide across nodes, but resource ids are unique.
+			createdID := make(map[string]int64)
 			for _, p := range proposals {
-				if id, ok := createdID[p.ID]; ok && p.Host.Type == "physical" {
-					nodeIDByName[normalizeName(p.Host.Name)] = id
+				// ProposeProxmoxHosts recomputes AlreadyTracked against the freshly
+				// listed hosts, so skipping tracked rows also guards double-submit.
+				if p.AlreadyTracked || !selected[p.ID] {
+					continue
+				}
+				// Discovery must not write a Host the manual UI would reject.
+				if err := p.Host.Validate(); err != nil {
+					continue
+				}
+				newID, err := hr.Create(p.Host)
+				if err != nil {
+					return err
+				}
+				createdID[p.ID] = newID
+			}
+			if linkToNode {
+				// Resolve a guest's node by name. Proxmox node names are unique within
+				// a cluster, so name resolution is safe on the node side (existing node
+				// hosts plus any imported this submit). A manual host that happens to
+				// share a node's name is the only residual collision: at worst one edge
+				// points at the wrong host, never data loss.
+				nodeIDByName := make(map[string]int64)
+				for _, h := range existing {
+					nodeIDByName[normalizeName(h.Name)] = h.ID
+				}
+				for _, p := range proposals {
+					if id, ok := createdID[p.ID]; ok && p.Host.Type == "physical" {
+						nodeIDByName[normalizeName(p.Host.Name)] = id
+					}
+				}
+				// Link only freshly-imported guests, so re-import never duplicates edges.
+				for _, p := range proposals {
+					guestID, ok := createdID[p.ID]
+					if !ok || (p.Host.Type != "vm" && p.Host.Type != "lxc") {
+						continue
+					}
+					nodeID, ok := nodeIDByName[normalizeName(nodeOf[p.ID])]
+					if !ok || nodeID == guestID {
+						continue
+					}
+					rel := domain.Relationship{
+						FromType: "host", FromID: guestID,
+						ToType: "host", ToID: nodeID, Kind: "runs on",
+					}
+					if err := rel.Validate(); err != nil {
+						continue
+					}
+					if _, err := rl.Create(rel); err != nil {
+						return err
+					}
 				}
 			}
-			// Link only freshly-imported guests, so re-import never duplicates edges.
-			for _, p := range proposals {
-				guestID, ok := createdID[p.ID]
-				if !ok || (p.Host.Type != "vm" && p.Host.Type != "lxc") {
-					continue
-				}
-				nodeID, ok := nodeIDByName[normalizeName(nodeOf[p.ID])]
-				if !ok || nodeID == guestID {
-					continue
-				}
-				rel := domain.Relationship{
-					FromType: "host", FromID: guestID,
-					ToType: "host", ToID: nodeID, Kind: "runs on",
-				}
-				if err := rel.Validate(); err != nil {
-					continue
-				}
-				if _, err := rels.Create(rel); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
-				}
-			}
+			return nil
+		})
+		if txErr != nil {
+			http.Error(w, txErr.Error(), http.StatusInternalServerError)
+			return
 		}
 		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
 	}
