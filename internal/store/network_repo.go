@@ -9,12 +9,17 @@ import (
 
 // NetworkRepo persists Network entities in SQLite.
 type NetworkRepo struct {
-	db *sql.DB
+	db DBTX
 }
 
 // NewNetworkRepo returns a NetworkRepo backed by db.
 func NewNetworkRepo(db *sql.DB) *NetworkRepo {
 	return &NetworkRepo{db: db}
+}
+
+// WithTx returns a copy of the repo whose operations run inside tx.
+func (r *NetworkRepo) WithTx(tx *sql.Tx) *NetworkRepo {
+	return &NetworkRepo{db: tx}
 }
 
 // Create inserts n and returns its new ID.

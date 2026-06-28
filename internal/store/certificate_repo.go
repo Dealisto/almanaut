@@ -9,12 +9,17 @@ import (
 
 // CertificateRepo persists Certificate entities in SQLite.
 type CertificateRepo struct {
-	db *sql.DB
+	db DBTX
 }
 
 // NewCertificateRepo returns a CertificateRepo backed by db.
 func NewCertificateRepo(db *sql.DB) *CertificateRepo {
 	return &CertificateRepo{db: db}
+}
+
+// WithTx returns a copy of the repo whose operations run inside tx.
+func (r *CertificateRepo) WithTx(tx *sql.Tx) *CertificateRepo {
+	return &CertificateRepo{db: tx}
 }
 
 func boolToInt(b bool) int {

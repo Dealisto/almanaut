@@ -10,12 +10,17 @@ import (
 
 // HostRepo persists Host entities in SQLite.
 type HostRepo struct {
-	db *sql.DB
+	db DBTX
 }
 
 // NewHostRepo returns a HostRepo backed by db.
 func NewHostRepo(db *sql.DB) *HostRepo {
 	return &HostRepo{db: db}
+}
+
+// WithTx returns a copy of the repo whose operations run inside tx.
+func (r *HostRepo) WithTx(tx *sql.Tx) *HostRepo {
+	return &HostRepo{db: tx}
 }
 
 // Create inserts h and returns its new ID.
