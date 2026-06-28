@@ -29,7 +29,8 @@
     <button class="btn btn-primary" type="submit"{{if not .NewCount}} disabled{{end}}>Import selected</button>
   </div>
 </form>
-{{else}}
-<div class="table-wrap"><div class="empty">{{if not .Error}}No running containers found.{{end}}</div></div>
+{{else}}{{if not .Error}}
+<div class="table-wrap"><div class="empty">No running containers found.</div></div>
+{{end}}
 {{end}}
 {{end}}
