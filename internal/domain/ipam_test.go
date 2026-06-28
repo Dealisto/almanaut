@@ -126,3 +126,52 @@ func TestBuildIPAMInvalidCIDR(t *testing.T) {
 		t.Errorf("IP matching no valid network should be unassigned")
 	}
 }
+
+func TestBuildIPAMSlash31(t *testing.T) {
+	// /31 point-to-point: both addresses are usable (no network/broadcast).
+	networks := []Network{{ID: 1, CIDR: "192.168.1.0/31"}}
+	hosts := []Host{{ID: 1, Name: "a", IPs: []string{"192.168.1.0"}}}
+	u := BuildIPAM(networks, hosts).Networks[0]
+	if u.TotalUsable != 2 {
+		t.Errorf("TotalUsable = %d, want 2", u.TotalUsable)
+	}
+	if u.NextFree != "192.168.1.1" {
+		t.Errorf("NextFree = %q, want 192.168.1.1", u.NextFree)
+	}
+}
+
+func TestBuildIPAMSlash32(t *testing.T) {
+	// /32 host route: exactly one usable address.
+	networks := []Network{{ID: 1, CIDR: "192.168.1.5/32"}}
+	u := BuildIPAM(networks, nil).Networks[0]
+	if u.TotalUsable != 1 {
+		t.Errorf("TotalUsable = %d, want 1", u.TotalUsable)
+	}
+	if u.FreeCount != 1 {
+		t.Errorf("FreeCount = %d, want 1", u.FreeCount)
+	}
+	if u.NextFree != "192.168.1.5" {
+		t.Errorf("NextFree = %q, want 192.168.1.5", u.NextFree)
+	}
+}
+
+func TestBuildIPAMLargeSubnetCountedNotEnumerated(t *testing.T) {
+	// A subnet too large to scan still reports its true size, but suppresses
+	// NextFree (the contract: always report size, suggest next-free only when
+	// the subnet is small enough to enumerate). It is not marked Unbounded.
+	networks := []Network{{ID: 1, CIDR: "10.0.0.0/8"}}
+	hosts := []Host{{ID: 1, Name: "a", IPs: []string{"10.1.1.1"}}}
+	u := BuildIPAM(networks, hosts).Networks[0]
+	if u.Unbounded {
+		t.Errorf("Unbounded = true, want false for IPv4 /8")
+	}
+	if u.TotalUsable != (1<<24)-2 {
+		t.Errorf("TotalUsable = %d, want %d", u.TotalUsable, (1<<24)-2)
+	}
+	if u.UsedCount != 1 {
+		t.Errorf("UsedCount = %d, want 1", u.UsedCount)
+	}
+	if u.NextFree != "" {
+		t.Errorf("NextFree = %q, want empty (subnet too large to enumerate)", u.NextFree)
+	}
+}
