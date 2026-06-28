@@ -817,7 +817,7 @@ func postForm(t *testing.T, srv http.Handler, path string, form url.Values) *htt
 	return rec
 }
 
-func getBody(t *testing.T, srv http.Handler, path string) string {
+func getPageBody(t *testing.T, srv http.Handler, path string) string {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	rec := httptest.NewRecorder()
@@ -842,7 +842,7 @@ func TestNetworkDetailShowsIPAM(t *testing.T) {
 		"name": {"router"}, "type": {"physical"}, "ips": {"10.0.0.9"},
 	})
 
-	body := getBody(t, srv, "/networks/1")
+	body := getPageBody(t, srv, "/networks/1")
 	for _, want := range []string{"IP allocations", "192.168.1.5", "nas", "192.168.1.2"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("network detail missing %q\n---\n%s", want, body)
