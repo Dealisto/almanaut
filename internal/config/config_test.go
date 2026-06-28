@@ -67,3 +67,19 @@ func TestGetenvBoolVariants(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadProxmox(t *testing.T) {
+	t.Setenv("ALMANAUT_PROXMOX_URL", "https://pve.lan:8006")
+	t.Setenv("ALMANAUT_PROXMOX_TOKEN", "root@pam!tok=secret")
+	t.Setenv("ALMANAUT_PROXMOX_INSECURE", "true")
+	cfg := Load()
+	if cfg.ProxmoxURL != "https://pve.lan:8006" {
+		t.Errorf("ProxmoxURL = %q", cfg.ProxmoxURL)
+	}
+	if cfg.ProxmoxToken != "root@pam!tok=secret" {
+		t.Errorf("ProxmoxToken = %q", cfg.ProxmoxToken)
+	}
+	if !cfg.ProxmoxInsecure {
+		t.Error("ProxmoxInsecure = false, want true")
+	}
+}
