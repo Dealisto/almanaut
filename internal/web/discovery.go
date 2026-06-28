@@ -316,7 +316,9 @@ func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.Re
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		// name -> host id for runs-on linking (existing + newly created).
+		// name -> host id for runs-on linking (existing + newly created). Host
+		// names are not unique in the DB, so a name collision keeps the
+		// last-written id; the worst case is one mislinked edge, never data loss.
 		byName := make(map[string]int64)
 		for _, h := range existing {
 			byName[normalizeName(h.Name)] = h.ID
