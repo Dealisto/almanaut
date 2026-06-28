@@ -12,6 +12,10 @@ func TestLoadDefaults(t *testing.T) {
 	if c.DataDir != "./data" {
 		t.Errorf("DataDir = %q, want \"./data\"", c.DataDir)
 	}
+	t.Setenv("ALMANAUT_DOCKER_SOCKET", "")
+	if c := Load(); c.DockerSocket != "/var/run/docker.sock" {
+		t.Errorf("DockerSocket = %q, want \"/var/run/docker.sock\"", c.DockerSocket)
+	}
 }
 
 func TestLoadFromEnv(t *testing.T) {
@@ -23,5 +27,9 @@ func TestLoadFromEnv(t *testing.T) {
 	}
 	if c.DataDir != "/var/almanaut" {
 		t.Errorf("DataDir = %q, want \"/var/almanaut\"", c.DataDir)
+	}
+	t.Setenv("ALMANAUT_DOCKER_SOCKET", "/tmp/docker.sock")
+	if c := Load(); c.DockerSocket != "/tmp/docker.sock" {
+		t.Errorf("DockerSocket = %q, want \"/tmp/docker.sock\"", c.DockerSocket)
 	}
 }

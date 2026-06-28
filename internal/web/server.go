@@ -87,6 +87,7 @@ func New(
 	relationships *store.RelationshipRepo,
 	tags *store.TagRepo,
 	db *sql.DB,
+	docker dockerScanner,
 ) http.Handler {
 	cat := entityCatalog{
 		hosts: hosts, services: services, networks: networks,
@@ -154,6 +155,9 @@ func New(
 	r.Get("/data", showData())
 	r.Get("/export", exportData(db))
 	r.Post("/import", importData(db))
+	r.Get("/discovery", discoveryLanding())
+	r.Get("/discovery/docker", scanDocker(docker, services, hosts))
+	r.Post("/discovery/docker/import", importDocker(docker, services, relationships))
 	return r
 }
 

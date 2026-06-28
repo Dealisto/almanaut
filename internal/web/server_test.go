@@ -2,6 +2,8 @@ package web
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -11,10 +13,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Dealisto/almanaut/internal/discovery"
 	"github.com/Dealisto/almanaut/internal/store"
 )
 
+type fakeScanner struct {
+	containers []discovery.Container
+	err        error
+}
+
+func (f fakeScanner) Containers(ctx context.Context) ([]discovery.Container, error) {
+	return f.containers, f.err
+}
+
 func newTestServer(t *testing.T) http.Handler {
+	return newTestServerWithScanner(t, fakeScanner{})
+}
+
+func newTestServerWithScanner(t *testing.T, scanner dockerScanner) http.Handler {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := store.Open(dbPath)
@@ -25,7 +41,63 @@ func newTestServer(t *testing.T) http.Handler {
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db), store.NewRelationshipRepo(db), store.NewTagRepo(db), db)
+	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db), store.NewRelationshipRepo(db), store.NewTagRepo(db), db, scanner)
+}
+
+func TestDiscoveryDockerScan(t *testing.T) {
+	scanner := fakeScanner{containers: []discovery.Container{
+		{ID: "c1", Name: "jellyfin", Ports: []discovery.Port{{Public: 8096, Private: 8096, Proto: "tcp"}}},
+		{ID: "c2", Name: "existing-svc"},
+	}}
+	srv := newTestServerWithScanner(t, scanner)
+	postForm(t, srv, "/services", url.Values{"name": {"existing-svc"}, "kind": {"container"}})
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}})
+
+	req := httptest.NewRequest(http.MethodGet, "/discovery/docker", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /discovery/docker = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "jellyfin") {
+		t.Error("scan page missing new container")
+	}
+	if !strings.Contains(body, `value="c1"`) {
+		t.Error("scan page missing checkbox for new container")
+	}
+	if !strings.Contains(body, "already tracked") {
+		t.Error("existing-svc should be marked already tracked")
+	}
+	if !strings.Contains(body, "proxmox") {
+		t.Error("host dropdown should list the host")
+	}
+}
+
+func TestDiscoveryDockerScanSocketError(t *testing.T) {
+	srv := newTestServerWithScanner(t, fakeScanner{err: errors.New("boom")})
+	req := httptest.NewRequest(http.MethodGet, "/discovery/docker", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /discovery/docker (socket error) = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Could not reach the Docker socket") {
+		t.Error("expected a friendly socket-error banner, not a 500")
+	}
+}
+
+func TestDiscoveryLanding(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/discovery", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /discovery = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "/discovery/docker") {
+		t.Error("landing page should link to Docker discovery")
+	}
 }
 
 func TestCreateAndListHost(t *testing.T) {
@@ -847,6 +919,77 @@ func TestGlobalSearch(t *testing.T) {
 	// no match → explicit empty state
 	if _, body := get("zzzznope"); !strings.Contains(body, "No results") {
 		t.Error("no-match state missing")
+	}
+}
+
+func TestDiscoveryDockerImport(t *testing.T) {
+	scanner := fakeScanner{containers: []discovery.Container{
+		{ID: "c1", Name: "jellyfin"},
+		{ID: "c2", Name: "sonarr"},
+	}}
+	srv := newTestServerWithScanner(t, scanner)
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}}) // host id 1
+
+	// Import only c1, attached to host 1.
+	rec := postForm(t, srv, "/discovery/docker/import", url.Values{"id": {"c1"}, "host": {"1"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST import = %d, want 303", rec.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/services", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, "jellyfin") {
+		t.Error("selected container jellyfin was not imported")
+	}
+	if strings.Contains(body, "sonarr") {
+		t.Error("unselected container sonarr should not be imported")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/relationships", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	rbody := rec.Body.String()
+	if !strings.Contains(rbody, "runs on") ||
+		!strings.Contains(rbody, "service: jellyfin") ||
+		!strings.Contains(rbody, "host: proxmox") {
+		t.Errorf("expected a 'service jellyfin runs on host proxmox' relationship; body=%q", rbody)
+	}
+}
+
+func TestDiscoveryDockerImportSkipsAlreadyTracked(t *testing.T) {
+	scanner := fakeScanner{containers: []discovery.Container{{ID: "c1", Name: "jellyfin"}}}
+	srv := newTestServerWithScanner(t, scanner)
+	postForm(t, srv, "/services", url.Values{"name": {"jellyfin"}, "kind": {"container"}})
+
+	// Attempt to import c1 even though a service named jellyfin already exists.
+	rec := postForm(t, srv, "/discovery/docker/import", url.Values{"id": {"c1"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST import = %d, want 303", rec.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/services", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if n := strings.Count(rec.Body.String(), ">jellyfin<"); n != 1 {
+		t.Errorf("jellyfin appears %d times, want 1 (no duplicate import)", n)
+	}
+}
+
+func TestDiscoveryDockerImportSkipsNamelessContainer(t *testing.T) {
+	scanner := fakeScanner{containers: []discovery.Container{{ID: "c1", Name: ""}}}
+	srv := newTestServerWithScanner(t, scanner)
+	rec := postForm(t, srv, "/discovery/docker/import", url.Values{"id": {"c1"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST import = %d, want 303", rec.Code)
+	}
+	// No service should have been created from the nameless container.
+	req := httptest.NewRequest(http.MethodGet, "/services", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "No services yet.") {
+		t.Error("nameless container should not have been imported as a service")
 	}
 }
 

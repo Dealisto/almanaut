@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Dealisto/almanaut/internal/config"
+	"github.com/Dealisto/almanaut/internal/discovery"
 	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/Dealisto/almanaut/internal/web"
 )
@@ -46,6 +47,7 @@ func main() {
 		store.NewRelationshipRepo(db),
 		store.NewTagRepo(db),
 		db,
+		discovery.NewSocketClient(cfg.DockerSocket),
 	)
 	srv := &http.Server{
 		Addr:              cfg.Addr,
