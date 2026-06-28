@@ -2,6 +2,9 @@ package web
 
 import (
 	"context"
+	"database/sql"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -390,7 +393,11 @@ func normalizeName(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
 
-func importDocker(scanner dockerScanner, services *store.ServiceRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+// errInvalidRel marks a relationship that failed Validate during an import, so
+// the handler can map it to 400 (vs 500 for DB errors) after the transaction.
+var errInvalidRel = errors.New("invalid relationship")
+
+func importDocker(scanner dockerScanner, services *store.ServiceRepo, rels *store.RelationshipRepo, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if err := req.ParseForm(); err != nil {
 			http.Error(w, "invalid form", http.StatusBadRequest)
@@ -423,36 +430,51 @@ func importDocker(scanner dockerScanner, services *store.ServiceRepo, rels *stor
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		// ProposeServices recomputes AlreadyTracked against the freshly-listed
-		// services, so skipping tracked rows also guards against double-submit.
-		for _, p := range discovery.ProposeServices(containers, existing) {
-			if p.AlreadyTracked || !selected[p.ContainerID] {
-				continue
-			}
-			// Discovery must not write a Service that the manual UI would reject
-			// (e.g. a container with no name). Skip invalid proposals.
-			if err := p.Service.Validate(); err != nil {
-				continue
-			}
-			newID, err := services.Create(p.Service)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			if hostID > 0 {
-				rel := domain.Relationship{
-					FromType: "service", FromID: newID,
-					ToType: "host", ToID: hostID, Kind: "runs on",
+		proposals := discovery.ProposeServices(containers, existing)
+
+		// The whole import is one transaction: any failure rolls back every
+		// service/relationship written in this submit, so no orphan Service
+		// can survive a failed relationship.
+		txErr := store.WithTx(db, func(tx *sql.Tx) error {
+			svc := services.WithTx(tx)
+			rl := rels.WithTx(tx)
+			for _, p := range proposals {
+				// ProposeServices recomputes AlreadyTracked against the freshly-listed
+				// services, so skipping tracked rows also guards against double-submit.
+				if p.AlreadyTracked || !selected[p.ContainerID] {
+					continue
 				}
-				if err := rel.Validate(); err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
+				// Discovery must not write a Service that the manual UI would reject
+				// (e.g. a container with no name). Skip invalid proposals.
+				if err := p.Service.Validate(); err != nil {
+					continue
 				}
-				if _, err := rels.Create(rel); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-					return
+				newID, err := svc.Create(p.Service)
+				if err != nil {
+					return err
+				}
+				if hostID > 0 {
+					rel := domain.Relationship{
+						FromType: "service", FromID: newID,
+						ToType: "host", ToID: hostID, Kind: "runs on",
+					}
+					if err := rel.Validate(); err != nil {
+						return fmt.Errorf("%w: %v", errInvalidRel, err)
+					}
+					if _, err := rl.Create(rel); err != nil {
+						return err
+					}
 				}
 			}
+			return nil
+		})
+		if txErr != nil {
+			if errors.Is(txErr, errInvalidRel) {
+				http.Error(w, txErr.Error(), http.StatusBadRequest)
+			} else {
+				http.Error(w, txErr.Error(), http.StatusInternalServerError)
+			}
+			return
 		}
 		http.Redirect(w, req, "/services", http.StatusSeeOther)
 	}

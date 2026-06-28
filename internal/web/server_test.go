@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"mime/multipart"
 	"net/http"
@@ -1271,6 +1272,53 @@ func TestDiscoveryDockerImportSkipsNamelessContainer(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if !strings.Contains(rec.Body.String(), "No services yet.") {
 		t.Error("nameless container should not have been imported as a service")
+	}
+}
+
+// newTestServerDockerDB is like newTestServerWithScanner but also returns the
+// underlying *sql.DB so a test can force a mid-import write failure.
+func newTestServerDockerDB(t *testing.T, scanner dockerScanner) (http.Handler, *sql.DB) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := store.Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	srv := New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db),
+		store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db),
+		store.NewRelationshipRepo(db), store.NewTagRepo(db), db,
+		scanner, fakeNetworkScanner{}, NetDiscoveryOptions{}, fakeProxmoxScanner{}, ProxmoxOptions{})
+	return srv, db
+}
+
+func TestDiscoveryDockerImportRollsBackOnRelFailure(t *testing.T) {
+	scanner := fakeScanner{containers: []discovery.Container{{ID: "c1", Name: "jellyfin"}}}
+	srv, db := newTestServerDockerDB(t, scanner)
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}}) // host id 1
+
+	// Force the relationship insert to fail mid-import. relationships has no
+	// UNIQUE/FK constraint, so drop the table the second write needs: the
+	// service insert succeeds inside the transaction, the relationship insert
+	// then errors, and the whole import must roll back.
+	if _, err := db.Exec("DROP TABLE relationships"); err != nil {
+		t.Fatalf("drop relationships: %v", err)
+	}
+
+	rec := postForm(t, srv, "/discovery/docker/import", url.Values{"id": {"c1"}, "host": {"1"}})
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("import with failing relationship = %d, want 500", rec.Code)
+	}
+
+	// The Service must NOT persist — no orphan left behind.
+	req := httptest.NewRequest(http.MethodGet, "/services", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if strings.Contains(w.Body.String(), "jellyfin") {
+		t.Error("service jellyfin persisted despite the failed relationship — transaction did not roll back")
 	}
 }
 
