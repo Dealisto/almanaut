@@ -50,6 +50,8 @@ func main() {
 		discovery.NewSocketClient(cfg.DockerSocket),
 		discovery.NewNetworkScanner(),
 		web.NetDiscoveryOptions{Enabled: cfg.NetworkScanEnabled, DefaultSubnet: cfg.ScanSubnet},
+		discovery.NewProxmoxClient(cfg.ProxmoxURL, cfg.ProxmoxToken, cfg.ProxmoxInsecure),
+		web.ProxmoxOptions{Enabled: cfg.ProxmoxURL != "" && cfg.ProxmoxToken != ""},
 	)
 	srv := &http.Server{
 		Addr:              cfg.Addr,

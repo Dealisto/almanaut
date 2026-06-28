@@ -90,6 +90,8 @@ func New(
 	docker dockerScanner,
 	netscan networkScanner,
 	netOpts NetDiscoveryOptions,
+	proxmox proxmoxScanner,
+	pveOpts ProxmoxOptions,
 ) http.Handler {
 	cat := entityCatalog{
 		hosts: hosts, services: services, networks: networks,
@@ -157,12 +159,14 @@ func New(
 	r.Get("/data", showData())
 	r.Get("/export", exportData(db))
 	r.Post("/import", importData(db))
-	r.Get("/discovery", discoveryLanding(netOpts))
+	r.Get("/discovery", discoveryLanding(netOpts, pveOpts))
 	r.Get("/discovery/docker", scanDocker(docker, services, hosts))
 	r.Post("/discovery/docker/import", importDocker(docker, services, relationships))
 	r.Get("/discovery/network", networkForm(netOpts))
 	r.Post("/discovery/network/scan", scanNetwork(netscan, hosts, netOpts))
 	r.Post("/discovery/network/import", importNetwork(hosts, netOpts))
+	r.Get("/discovery/proxmox", scanProxmox(proxmox, hosts, pveOpts))
+	r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts))
 	return r
 }
 
