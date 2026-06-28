@@ -177,6 +177,57 @@ func scanNetwork(netscan networkScanner, hosts *store.HostRepo, opts NetDiscover
 	}
 }
 
+func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if !opts.Enabled {
+			http.NotFound(w, req)
+			return
+		}
+		if err := req.ParseForm(); err != nil {
+			http.Error(w, "invalid form", http.StatusBadRequest)
+			return
+		}
+		hostType := req.FormValue("type")
+		existing, err := hosts.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Re-check tracked IPs against live data; guards double-submit and
+		// concurrent manual entry.
+		tracked := make(map[string]bool)
+		for _, h := range existing {
+			for _, ip := range h.IPs {
+				tracked[ip] = true
+			}
+		}
+		for _, v := range req.Form["host"] {
+			parts := strings.SplitN(v, "|", 3)
+			if len(parts) != 3 {
+				continue
+			}
+			ip, name, ports := parts[0], parts[1], parts[2]
+			if tracked[ip] {
+				continue
+			}
+			h := domain.Host{
+				Name: name, Type: hostType,
+				IPs: []string{ip}, Notes: discovery.NetworkHostNotes(ports),
+			}
+			// Discovery must not write a Host the manual UI would reject.
+			if err := h.Validate(); err != nil {
+				continue
+			}
+			if _, err := hosts.Create(h); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			tracked[ip] = true // avoid a duplicate within the same submit
+		}
+		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
+	}
+}
+
 func importDocker(scanner dockerScanner, services *store.ServiceRepo, rels *store.RelationshipRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if err := req.ParseForm(); err != nil {

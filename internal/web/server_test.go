@@ -1087,6 +1087,60 @@ func TestDiscoveryDockerImportSkipsNamelessContainer(t *testing.T) {
 	}
 }
 
+func TestNetworkDiscoveryImport(t *testing.T) {
+	srv := newTestServerNet(t, fakeNetworkScanner{}, NetDiscoveryOptions{Enabled: true})
+	// Import one new host, skip another by not selecting it.
+	rec := postForm(t, srv, "/discovery/network/import", url.Values{
+		"type": {"vm"},
+		"host": {"192.168.1.50|nas.lan|80, 443"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST import = %d, want 303", rec.Code)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/hosts", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, "nas.lan") {
+		t.Error("selected host was not imported")
+	}
+	// Detail page should show the chosen type and provenance.
+	req = httptest.NewRequest(http.MethodGet, "/hosts/1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	detail := rec.Body.String()
+	if !strings.Contains(detail, "192.168.1.50") {
+		t.Error("imported host missing its IP")
+	}
+	if !strings.Contains(detail, "Open ports: 80, 443") {
+		t.Error("imported host missing provenance notes")
+	}
+}
+
+func TestNetworkDiscoveryImportSkipsAlreadyTracked(t *testing.T) {
+	srv := newTestServerNet(t, fakeNetworkScanner{}, NetDiscoveryOptions{Enabled: true})
+	postForm(t, srv, "/hosts", url.Values{"name": {"box"}, "type": {"vm"}, "ips": {"192.168.1.50"}})
+	// Attempt to import a host whose IP is already tracked.
+	postForm(t, srv, "/discovery/network/import", url.Values{
+		"type": {"physical"}, "host": {"192.168.1.50|dup.lan|80"},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/hosts", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if strings.Contains(body, "dup.lan") {
+		t.Error("host with already-tracked IP should not be imported")
+	}
+}
+
+func TestNetworkDiscoveryImportDisabledIs404(t *testing.T) {
+	srv := newTestServer(t) // disabled
+	rec := postForm(t, srv, "/discovery/network/import", url.Values{"type": {"vm"}, "host": {"10.0.0.1|x|22"}})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("disabled import = %d, want 404", rec.Code)
+	}
+}
+
 func TestNewFormPagesRender(t *testing.T) {
 	srv := newTestServer(t)
 	for _, path := range []string{

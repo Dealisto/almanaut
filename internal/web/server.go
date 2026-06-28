@@ -162,6 +162,7 @@ func New(
 	r.Post("/discovery/docker/import", importDocker(docker, services, relationships))
 	r.Get("/discovery/network", networkForm(netOpts))
 	r.Post("/discovery/network/scan", scanNetwork(netscan, hosts, netOpts))
+	r.Post("/discovery/network/import", importNetwork(hosts, netOpts))
 	return r
 }
 
