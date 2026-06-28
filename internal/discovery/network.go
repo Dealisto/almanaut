@@ -94,10 +94,14 @@ func (s *NetworkScanner) Scan(ctx context.Context, cidr string, ports []int) ([]
 		}()
 	}
 	go func() {
+		defer close(jobs)
 		for _, ip := range ips {
-			jobs <- ip
+			select {
+			case jobs <- ip:
+			case <-ctx.Done():
+				return
+			}
 		}
-		close(jobs)
 	}()
 	go func() {
 		wg.Wait()

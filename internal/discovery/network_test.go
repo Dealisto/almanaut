@@ -75,3 +75,16 @@ func TestScanDetectsOpenPort(t *testing.T) {
 		t.Errorf("OpenPorts = %v, want [%d]", h.OpenPorts, openPort)
 	}
 }
+
+func TestScanRespectsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel before scanning
+	s := NewNetworkScanner()
+	hosts, err := s.Scan(ctx, "192.168.250.0/24", nil)
+	if err != nil {
+		t.Fatalf("Scan should return cleanly on cancellation, got: %v", err)
+	}
+	if len(hosts) != 0 {
+		t.Errorf("cancelled scan should find no hosts, got %d", len(hosts))
+	}
+}
