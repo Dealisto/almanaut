@@ -3,5 +3,8 @@
 <p>Scan an external source to discover entities. Discovery proposes; you confirm. Manual data is never overwritten.</p>
 <ul class="related">
   <li><a href="/discovery/docker">Docker containers</a> — read a mounted Docker socket and import running containers as services.</li>
+  {{if .NetworkEnabled}}
+  <li><a href="/discovery/network">Network scan</a> — scan a subnet for live hosts and import them.</li>
+  {{end}}
 </ul>
 {{end}}

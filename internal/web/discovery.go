@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/Dealisto/almanaut/internal/discovery"
 	"github.com/Dealisto/almanaut/internal/domain"
@@ -15,8 +16,21 @@ type dockerScanner interface {
 	Containers(ctx context.Context) ([]discovery.Container, error)
 }
 
+// networkScanner is the subset of the network discovery scanner the web layer uses.
+type networkScanner interface {
+	Scan(ctx context.Context, cidr string, ports []int) ([]discovery.ScannedHost, error)
+}
+
+// NetDiscoveryOptions configures the opt-in network scan feature. It is
+// exported so package main can construct it when calling web.New.
+type NetDiscoveryOptions struct {
+	Enabled       bool
+	DefaultSubnet string
+}
+
 type discoveryLandingData struct {
-	Title string
+	Title          string
+	NetworkEnabled bool
 }
 
 type proposalRow struct {
@@ -35,9 +49,9 @@ type dockerReviewData struct {
 	NewCount  int
 }
 
-func discoveryLanding() http.HandlerFunc {
+func discoveryLanding(opts NetDiscoveryOptions) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "discovery.html", discoveryLandingData{Title: "Discover"})
+		render(w, "discovery.html", discoveryLandingData{Title: "Discover", NetworkEnabled: opts.Enabled})
 	}
 }
 
@@ -75,6 +89,91 @@ func scanDocker(scanner dockerScanner, services *store.ServiceRepo, hosts *store
 			})
 		}
 		render(w, "discovery_docker.html", data)
+	}
+}
+
+type netHostRow struct {
+	IP, Name, Ports string
+	AlreadyTracked  bool
+}
+
+type networkDiscoveryData struct {
+	Title        string
+	Subnet       string
+	PortsInput   string
+	Types        []string
+	SelectedType string
+	Scanned      bool
+	Rows         []netHostRow
+	NewCount     int
+	Error        string
+}
+
+func networkForm(opts NetDiscoveryOptions) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if !opts.Enabled {
+			http.NotFound(w, req)
+			return
+		}
+		render(w, "discovery_network.html", networkDiscoveryData{
+			Title: "Network discovery", Subnet: opts.DefaultSubnet,
+			Types: domain.HostTypes, SelectedType: "physical",
+		})
+	}
+}
+
+func scanNetwork(netscan networkScanner, hosts *store.HostRepo, opts NetDiscoveryOptions) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if !opts.Enabled {
+			http.NotFound(w, req)
+			return
+		}
+		if err := req.ParseForm(); err != nil {
+			http.Error(w, "invalid form", http.StatusBadRequest)
+			return
+		}
+		subnet := strings.TrimSpace(req.FormValue("subnet"))
+		portsInput := strings.TrimSpace(req.FormValue("ports"))
+		data := networkDiscoveryData{
+			Title: "Network discovery", Subnet: subnet, PortsInput: portsInput,
+			Types: domain.HostTypes, SelectedType: "physical",
+		}
+		if subnet == "" {
+			data.Error = "Subnet is required."
+			render(w, "discovery_network.html", data)
+			return
+		}
+		var ports []int
+		if portsInput != "" {
+			p, err := discovery.ParsePorts(portsInput)
+			if err != nil {
+				data.Error = "Invalid ports: " + err.Error()
+				render(w, "discovery_network.html", data)
+				return
+			}
+			ports = p
+		}
+		scanned, err := netscan.Scan(req.Context(), subnet, ports)
+		if err != nil {
+			data.Error = "Scan failed: " + err.Error()
+			render(w, "discovery_network.html", data)
+			return
+		}
+		existing, err := hosts.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		data.Scanned = true
+		for _, p := range discovery.ProposeHosts(scanned, existing) {
+			if !p.AlreadyTracked {
+				data.NewCount++
+			}
+			data.Rows = append(data.Rows, netHostRow{
+				IP: p.IP, Name: p.Host.Name, Ports: p.Ports, AlreadyTracked: p.AlreadyTracked,
+			})
+		}
+		render(w, "discovery_network.html", data)
 	}
 }
 
