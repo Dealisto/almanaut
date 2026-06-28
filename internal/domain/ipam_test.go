@@ -175,3 +175,13 @@ func TestBuildIPAMLargeSubnetCountedNotEnumerated(t *testing.T) {
 		t.Errorf("NextFree = %q, want empty (subnet too large to enumerate)", u.NextFree)
 	}
 }
+
+func TestBuildIPAMNextFreeSkipsGateway(t *testing.T) {
+	// The gateway is reserved: NextFree must not suggest it.
+	networks := []Network{{ID: 1, CIDR: "192.168.1.0/24", Gateway: "192.168.1.1"}}
+	hosts := []Host{{ID: 1, Name: "a", IPs: []string{"192.168.1.5"}}}
+	u := BuildIPAM(networks, hosts).Networks[0]
+	if u.NextFree != "192.168.1.2" {
+		t.Errorf("NextFree = %q, want 192.168.1.2 (gateway .1 skipped)", u.NextFree)
+	}
+}

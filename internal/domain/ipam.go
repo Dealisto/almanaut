@@ -122,14 +122,22 @@ func buildUsage(n Network, used []Allocation) NetworkUsage {
 		if u.FreeCount = u.TotalUsable - u.UsedCount; u.FreeCount < 0 {
 			u.FreeCount = 0
 		}
-		u.NextFree = nextFree(ipn, byIP)
+		taken := make(map[string]bool, len(byIP)+1)
+		for ip := range byIP {
+			taken[ip] = true
+		}
+		// The gateway is a reserved address: never suggest it as free.
+		if gw := net.ParseIP(n.Gateway); gw != nil && ipn.Contains(gw) {
+			taken[gw.String()] = true
+		}
+		u.NextFree = nextFree(ipn, taken)
 	}
 	return u
 }
 
-// nextFree returns the lowest usable address in ipn not present in used, or ""
+// nextFree returns the lowest usable address in ipn not present in taken, or ""
 // if the subnet is full or larger than 2^maxEnumerableHostBits addresses.
-func nextFree(ipn *net.IPNet, used map[string][]Allocation) string {
+func nextFree(ipn *net.IPNet, taken map[string]bool) string {
 	ones, bits := ipn.Mask.Size()
 	if bits-ones > maxEnumerableHostBits {
 		return ""
@@ -149,7 +157,7 @@ func nextFree(ipn *net.IPNet, used map[string][]Allocation) string {
 		addrs = addrs[1 : len(addrs)-1] // drop network + broadcast
 	}
 	for _, a := range addrs {
-		if _, taken := used[a.String()]; !taken {
+		if !taken[a.String()] {
 			return a.String()
 		}
 	}
