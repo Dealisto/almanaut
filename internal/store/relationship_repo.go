@@ -9,12 +9,17 @@ import (
 
 // RelationshipRepo persists Relationship edges in SQLite.
 type RelationshipRepo struct {
-	db *sql.DB
+	db DBTX
 }
 
 // NewRelationshipRepo returns a RelationshipRepo backed by db.
 func NewRelationshipRepo(db *sql.DB) *RelationshipRepo {
 	return &RelationshipRepo{db: db}
+}
+
+// WithTx returns a copy of the repo whose operations run inside tx.
+func (r *RelationshipRepo) WithTx(tx *sql.Tx) *RelationshipRepo {
+	return &RelationshipRepo{db: tx}
 }
 
 // Create inserts rel and returns its new ID.

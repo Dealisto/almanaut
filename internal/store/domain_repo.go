@@ -9,12 +9,17 @@ import (
 
 // DomainRepo persists Domain entities in SQLite.
 type DomainRepo struct {
-	db *sql.DB
+	db DBTX
 }
 
 // NewDomainRepo returns a DomainRepo backed by db.
 func NewDomainRepo(db *sql.DB) *DomainRepo {
 	return &DomainRepo{db: db}
+}
+
+// WithTx returns a copy of the repo whose operations run inside tx.
+func (r *DomainRepo) WithTx(tx *sql.Tx) *DomainRepo {
+	return &DomainRepo{db: tx}
 }
 
 // Create inserts d and returns its new ID.

@@ -9,12 +9,17 @@ import (
 
 // BackupRepo persists Backup entities in SQLite.
 type BackupRepo struct {
-	db *sql.DB
+	db DBTX
 }
 
 // NewBackupRepo returns a BackupRepo backed by db.
 func NewBackupRepo(db *sql.DB) *BackupRepo {
 	return &BackupRepo{db: db}
+}
+
+// WithTx returns a copy of the repo whose operations run inside tx.
+func (r *BackupRepo) WithTx(tx *sql.Tx) *BackupRepo {
+	return &BackupRepo{db: tx}
 }
 
 // Create inserts b and returns its new ID.

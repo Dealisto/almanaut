@@ -9,12 +9,17 @@ import (
 
 // ServiceRepo persists Service entities in SQLite.
 type ServiceRepo struct {
-	db *sql.DB
+	db DBTX
 }
 
 // NewServiceRepo returns a ServiceRepo backed by db.
 func NewServiceRepo(db *sql.DB) *ServiceRepo {
 	return &ServiceRepo{db: db}
+}
+
+// WithTx returns a copy of the repo whose operations run inside tx.
+func (r *ServiceRepo) WithTx(tx *sql.Tx) *ServiceRepo {
+	return &ServiceRepo{db: tx}
 }
 
 // Create inserts s and returns its new ID.

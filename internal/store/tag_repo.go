@@ -10,12 +10,17 @@ import (
 
 // TagRepo persists Tag rows in SQLite.
 type TagRepo struct {
-	db *sql.DB
+	db DBTX
 }
 
 // NewTagRepo returns a TagRepo backed by db.
 func NewTagRepo(db *sql.DB) *TagRepo {
 	return &TagRepo{db: db}
+}
+
+// WithTx returns a copy of the repo whose operations run inside tx.
+func (r *TagRepo) WithTx(tx *sql.Tx) *TagRepo {
+	return &TagRepo{db: tx}
 }
 
 // Add stores a tag (normalizing its name). Adding the same tag twice is a no-op
