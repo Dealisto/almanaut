@@ -28,6 +28,56 @@ type detailData struct {
 	NotesHTML  template.HTML
 	Tags       []domain.Tag
 	Related    []relatedItem
+	IPAM       *ipamSection
+}
+
+// ipamRow is one IP allocation as shown in the network detail IPAM table.
+type ipamRow struct {
+	IP        string
+	HostID    int64
+	HostName  string
+	IsGateway bool
+	Conflict  bool
+}
+
+// ipamSection is the display-ready IP occupancy of the network being viewed.
+type ipamSection struct {
+	TotalUsable int
+	UsedCount   int
+	FreeCount   int
+	Unbounded   bool
+	NextFree    string
+	Gateway     string
+	Rows        []ipamRow
+}
+
+// buildIPAMSection converts a domain.NetworkUsage into the detail-page view.
+func buildIPAMSection(u domain.NetworkUsage) ipamSection {
+	conflicting := map[string]bool{}
+	for _, g := range u.Conflicts {
+		for _, a := range g {
+			conflicting[a.IP] = true
+		}
+	}
+	rows := make([]ipamRow, 0, len(u.Used))
+	for _, a := range u.Used {
+		rows = append(rows, ipamRow{
+			IP:        a.IP,
+			HostID:    a.HostID,
+			HostName:  a.HostName,
+			IsGateway: a.IP == u.Network.Gateway,
+			Conflict:  conflicting[a.IP],
+		})
+	}
+	return ipamSection{
+		TotalUsable: u.TotalUsable,
+		UsedCount:   u.UsedCount,
+		FreeCount:   u.FreeCount,
+		Unbounded:   u.Unbounded,
+		NextFree:    u.NextFree,
+		Gateway:     u.Network.Gateway,
+		Rows:        rows,
+	}
 }
 
 // renderDetail assembles and renders the shared detail page for one entity:
@@ -41,6 +91,21 @@ func renderDetail(
 	entityType string, entityID int64,
 	heading, notes, editURL string,
 	fields []fieldRow,
+) {
+	renderDetailExtra(w, cat, tags, rels, entityType, entityID, heading, notes, editURL, fields, nil)
+}
+
+// renderDetailExtra is renderDetail with an optional IPAM section appended to
+// the page (nil for entities that have none).
+func renderDetailExtra(
+	w http.ResponseWriter,
+	cat entityCatalog,
+	tags *store.TagRepo,
+	rels *store.RelationshipRepo,
+	entityType string, entityID int64,
+	heading, notes, editURL string,
+	fields []fieldRow,
+	ipam *ipamSection,
 ) {
 	tagList, err := tags.ListForEntity(entityType, entityID)
 	if err != nil {
@@ -85,5 +150,6 @@ func renderDetail(
 		NotesHTML:  renderMarkdown(notes),
 		Tags:       tagList,
 		Related:    related,
+		IPAM:       ipam,
 	})
 }

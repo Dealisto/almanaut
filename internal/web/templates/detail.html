@@ -11,6 +11,32 @@
 </tbody></table>
 </div>
 
+{{with .IPAM}}
+<h2>IP allocations</h2>
+<p class="ipam-stats">
+  {{.UsedCount}} used{{if not .Unbounded}} / {{.TotalUsable}} usable ({{.FreeCount}} free){{end}}.
+  {{if .NextFree}}Next free: <code>{{.NextFree}}</code>.{{end}}
+</p>
+{{if .Rows}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>IP</th><th>Host</th><th></th></tr></thead>
+  <tbody>
+    {{range .Rows}}
+    <tr>
+      <td><code>{{.IP}}</code></td>
+      <td><a href="/hosts/{{.HostID}}">{{.HostName}}</a></td>
+      <td>
+        {{if .IsGateway}}<span class="badge">gateway</span>{{end}}
+        {{if .Conflict}}<span class="badge badge-warn">conflict</span>{{end}}
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}<p><em>No IPs allocated in this subnet.</em></p>{{end}}
+{{end}}
 <h2>Notes</h2>
 <div class="notes">{{if .NotesHTML}}{{.NotesHTML}}{{else}}<em>No notes.</em>{{end}}</div>
 

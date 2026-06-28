@@ -1127,13 +1127,31 @@ func showNetwork(repo *store.NetworkRepo, cat entityCatalog, tags *store.TagRepo
 			http.Error(w, "network not found", http.StatusNotFound)
 			return
 		}
+		nets, err := repo.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		hosts, err := cat.hosts.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		var section *ipamSection
+		for _, u := range domain.BuildIPAM(nets, hosts).Networks {
+			if u.Network.ID == id {
+				s := buildIPAMSection(u)
+				section = &s
+				break
+			}
+		}
 		fields := []fieldRow{
 			{"CIDR", n.CIDR},
 			{"VLAN", n.VLAN},
 			{"Gateway", n.Gateway},
 		}
-		renderDetail(w, cat, tags, rels, "network", id,
-			"Network: "+n.Name, n.Notes, fmt.Sprintf("/networks/%d/edit", id), fields)
+		renderDetailExtra(w, cat, tags, rels, "network", id,
+			"Network: "+n.Name, n.Notes, fmt.Sprintf("/networks/%d/edit", id), fields, section)
 	}
 }
 

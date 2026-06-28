@@ -817,6 +817,42 @@ func postForm(t *testing.T, srv http.Handler, path string, form url.Values) *htt
 	return rec
 }
 
+func getBody(t *testing.T, srv http.Handler, path string) string {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET %s = %d, want 200", path, rec.Code)
+	}
+	return rec.Body.String()
+}
+
+func TestNetworkDetailShowsIPAM(t *testing.T) {
+	srv := newTestServer(t)
+
+	// Create a network and two hosts, one of which is inside the subnet.
+	postForm(t, srv, "/networks", url.Values{
+		"name": {"lan"}, "cidr": {"192.168.1.0/24"}, "gateway": {"192.168.1.1"},
+	})
+	postForm(t, srv, "/hosts", url.Values{
+		"name": {"nas"}, "type": {"physical"}, "ips": {"192.168.1.5"},
+	})
+	postForm(t, srv, "/hosts", url.Values{
+		"name": {"router"}, "type": {"physical"}, "ips": {"10.0.0.9"},
+	})
+
+	body := getBody(t, srv, "/networks/1")
+	for _, want := range []string{"IP allocations", "192.168.1.5", "nas", "192.168.1.2"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("network detail missing %q\n---\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "10.0.0.9") {
+		t.Errorf("out-of-subnet IP 10.0.0.9 should not appear in this network's IPAM")
+	}
+}
+
 func TestCreateAndListRelationship(t *testing.T) {
 	srv := newTestServer(t)
 	// Seed a host (id 1) and a service (id 1).
