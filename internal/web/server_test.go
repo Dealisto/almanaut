@@ -26,11 +26,28 @@ func (f fakeScanner) Containers(ctx context.Context) ([]discovery.Container, err
 	return f.containers, f.err
 }
 
+type fakeNetworkScanner struct {
+	hosts []discovery.ScannedHost
+	err   error
+}
+
+func (f fakeNetworkScanner) Scan(ctx context.Context, cidr string, ports []int) ([]discovery.ScannedHost, error) {
+	return f.hosts, f.err
+}
+
 func newTestServer(t *testing.T) http.Handler {
-	return newTestServerWithScanner(t, fakeScanner{})
+	return newTestServerFull(t, fakeScanner{}, fakeNetworkScanner{}, NetDiscoveryOptions{})
 }
 
 func newTestServerWithScanner(t *testing.T, scanner dockerScanner) http.Handler {
+	return newTestServerFull(t, scanner, fakeNetworkScanner{}, NetDiscoveryOptions{})
+}
+
+func newTestServerNet(t *testing.T, netscan networkScanner, opts NetDiscoveryOptions) http.Handler {
+	return newTestServerFull(t, fakeScanner{}, netscan, opts)
+}
+
+func newTestServerFull(t *testing.T, docker dockerScanner, netscan networkScanner, opts NetDiscoveryOptions) http.Handler {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := store.Open(dbPath)
@@ -41,7 +58,84 @@ func newTestServerWithScanner(t *testing.T, scanner dockerScanner) http.Handler 
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db), store.NewRelationshipRepo(db), store.NewTagRepo(db), db, scanner)
+	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db), store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db), store.NewRelationshipRepo(db), store.NewTagRepo(db), db, docker, netscan, opts)
+}
+
+func TestNetworkDiscoveryDisabledIs404(t *testing.T) {
+	srv := newTestServer(t) // network disabled by default
+	req := httptest.NewRequest(http.MethodGet, "/discovery/network", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("disabled GET /discovery/network = %d, want 404", rec.Code)
+	}
+	// Landing must not advertise the network option when disabled.
+	req = httptest.NewRequest(http.MethodGet, "/discovery", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if strings.Contains(rec.Body.String(), "/discovery/network") {
+		t.Error("landing should not link to network scan when disabled")
+	}
+}
+
+func TestNetworkDiscoveryFormRendersWhenEnabled(t *testing.T) {
+	srv := newTestServerNet(t, fakeNetworkScanner{}, NetDiscoveryOptions{Enabled: true, DefaultSubnet: "192.168.1.0/24"})
+	req := httptest.NewRequest(http.MethodGet, "/discovery/network", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /discovery/network = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `value="192.168.1.0/24"`) {
+		t.Error("scan form should pre-fill the default subnet")
+	}
+	// Landing should advertise the option when enabled.
+	req = httptest.NewRequest(http.MethodGet, "/discovery", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "/discovery/network") {
+		t.Error("landing should link to network scan when enabled")
+	}
+}
+
+func TestNetworkDiscoveryScanReview(t *testing.T) {
+	scanner := fakeNetworkScanner{hosts: []discovery.ScannedHost{
+		{IP: "192.168.1.50", Hostname: "nas.lan", OpenPorts: []int{80, 443}},
+		{IP: "192.168.1.51", OpenPorts: []int{22}},
+	}}
+	srv := newTestServerNet(t, scanner, NetDiscoveryOptions{Enabled: true})
+	// Seed a host owning .51 so it shows as already tracked.
+	postForm(t, srv, "/hosts", url.Values{"name": {"box"}, "type": {"vm"}, "ips": {"192.168.1.51"}})
+
+	rec := postForm(t, srv, "/discovery/network/scan", url.Values{"subnet": {"192.168.1.0/24"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST scan = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "nas.lan") {
+		t.Error("review missing discovered host")
+	}
+	if !strings.Contains(body, `value="192.168.1.50|nas.lan|80, 443"`) {
+		t.Error("review missing import checkbox value for the new host")
+	}
+	if !strings.Contains(body, "already tracked") {
+		t.Error(".51 should be marked already tracked")
+	}
+	if !strings.Contains(body, "physical") { // the Type selector
+		t.Error("review should include the host-type selector")
+	}
+}
+
+func TestNetworkDiscoveryScanError(t *testing.T) {
+	srv := newTestServerNet(t, fakeNetworkScanner{err: errors.New("boom")}, NetDiscoveryOptions{Enabled: true})
+	rec := postForm(t, srv, "/discovery/network/scan", url.Values{"subnet": {"192.168.1.0/24"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("scan error = %d, want 200 banner", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Scan failed") {
+		t.Error("expected a friendly scan-error banner")
+	}
 }
 
 func TestDiscoveryDockerScan(t *testing.T) {
@@ -990,6 +1084,60 @@ func TestDiscoveryDockerImportSkipsNamelessContainer(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if !strings.Contains(rec.Body.String(), "No services yet.") {
 		t.Error("nameless container should not have been imported as a service")
+	}
+}
+
+func TestNetworkDiscoveryImport(t *testing.T) {
+	srv := newTestServerNet(t, fakeNetworkScanner{}, NetDiscoveryOptions{Enabled: true})
+	// Import one new host, skip another by not selecting it.
+	rec := postForm(t, srv, "/discovery/network/import", url.Values{
+		"type": {"vm"},
+		"host": {"192.168.1.50|nas.lan|80, 443"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST import = %d, want 303", rec.Code)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/hosts", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, "nas.lan") {
+		t.Error("selected host was not imported")
+	}
+	// Detail page should show the chosen type and provenance.
+	req = httptest.NewRequest(http.MethodGet, "/hosts/1", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	detail := rec.Body.String()
+	if !strings.Contains(detail, "192.168.1.50") {
+		t.Error("imported host missing its IP")
+	}
+	if !strings.Contains(detail, "Open ports: 80, 443") {
+		t.Error("imported host missing provenance notes")
+	}
+}
+
+func TestNetworkDiscoveryImportSkipsAlreadyTracked(t *testing.T) {
+	srv := newTestServerNet(t, fakeNetworkScanner{}, NetDiscoveryOptions{Enabled: true})
+	postForm(t, srv, "/hosts", url.Values{"name": {"box"}, "type": {"vm"}, "ips": {"192.168.1.50"}})
+	// Attempt to import a host whose IP is already tracked.
+	postForm(t, srv, "/discovery/network/import", url.Values{
+		"type": {"physical"}, "host": {"192.168.1.50|dup.lan|80"},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/hosts", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if strings.Contains(body, "dup.lan") {
+		t.Error("host with already-tracked IP should not be imported")
+	}
+}
+
+func TestNetworkDiscoveryImportDisabledIs404(t *testing.T) {
+	srv := newTestServer(t) // disabled
+	rec := postForm(t, srv, "/discovery/network/import", url.Values{"type": {"vm"}, "host": {"10.0.0.1|x|22"}})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("disabled import = %d, want 404", rec.Code)
 	}
 }
 

@@ -48,6 +48,8 @@ func main() {
 		store.NewTagRepo(db),
 		db,
 		discovery.NewSocketClient(cfg.DockerSocket),
+		discovery.NewNetworkScanner(),
+		web.NetDiscoveryOptions{Enabled: cfg.NetworkScanEnabled, DefaultSubnet: cfg.ScanSubnet},
 	)
 	srv := &http.Server{
 		Addr:              cfg.Addr,
