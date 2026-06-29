@@ -128,3 +128,40 @@ func TestImportInvalidRollsBack(t *testing.T) {
 		t.Errorf("existing data was modified: %+v", hosts)
 	}
 }
+
+func TestPortabilityHardwareRoundTrip(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+	if err := Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	if _, err := NewHardwareRepo(db).Create(domain.Hardware{
+		Name: "core-switch", Kind: "switch", WarrantyEnd: "2029-09-09",
+	}); err != nil {
+		t.Fatalf("seed hardware: %v", err)
+	}
+
+	snap, err := Export(db)
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if len(snap.Hardware) != 1 || snap.Hardware[0].Name != "core-switch" {
+		t.Fatalf("export hardware = %+v", snap.Hardware)
+	}
+
+	if err := Import(db, snap); err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	list, err := NewHardwareRepo(db).List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 1 || list[0].Name != "core-switch" || list[0].WarrantyEnd != "2029-09-09" {
+		t.Fatalf("after import: %+v", list)
+	}
+}
