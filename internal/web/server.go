@@ -174,7 +174,7 @@ func New(
 	r.Post("/relationships", createRelationship(relationships, cat))
 	r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
 	r.Get("/impact", impactView(relationships, cat))
-	r.Get("/checks", healthChecks(services, certificates, relationships))
+	r.Get("/checks", healthChecks(services, certificates, hardware, relationships))
 	r.Get("/search", searchEntities(cat, tags))
 	r.Get("/data", showData())
 	r.Get("/export", exportData(db))
@@ -235,13 +235,14 @@ func impactView(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFun
 }
 
 type checksPageData struct {
-	Title            string
-	WithinDays       int
-	UnbackedServices []domain.Service
-	ExpiringCerts    []domain.Certificate
+	Title              string
+	WithinDays         int
+	UnbackedServices   []domain.Service
+	ExpiringCerts      []domain.Certificate
+	ExpiringWarranties []domain.Hardware
 }
 
-func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, hardware *store.HardwareRepo, rels *store.RelationshipRepo) http.HandlerFunc {
 	const withinDays = 30
 	return func(w http.ResponseWriter, req *http.Request) {
 		svcList, err := services.List()
@@ -254,16 +255,22 @@ func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, rel
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		hwList, err := hardware.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		relList, err := rels.List()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		render(w, "checks.html", checksPageData{
-			Title:            "Checks",
-			WithinDays:       withinDays,
-			UnbackedServices: domain.ServicesWithoutBackup(svcList, relList),
-			ExpiringCerts:    domain.ExpiringSoon(certList, time.Now(), withinDays),
+			Title:              "Checks",
+			WithinDays:         withinDays,
+			UnbackedServices:   domain.ServicesWithoutBackup(svcList, relList),
+			ExpiringCerts:      domain.ExpiringSoon(certList, time.Now(), withinDays),
+			ExpiringWarranties: domain.WarrantyExpiring(hwList, time.Now(), withinDays),
 		})
 	}
 }
