@@ -247,3 +247,15 @@ func parseHost(r *http.Request, id int64) domain.Host {
 		IPs:    parseIPs(r.FormValue("ips")),
 	}
 }
+
+func parseService(r *http.Request, id int64) domain.Service {
+	return domain.Service{
+		ID:       id,
+		Name:     strings.TrimSpace(r.FormValue("name")),
+		Kind:     r.FormValue("kind"),
+		URL:      r.FormValue("url"),
+		Ports:    r.FormValue("ports"),
+		Category: r.FormValue("category"),
+		Notes:    r.FormValue("notes"),
+	}
+}

@@ -14,17 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type servicesPageData struct {
-	Title    string
-	Services []domain.Service
-}
-
-type serviceFormData struct {
-	Title, Heading, Action, SubmitLabel, Error string
-	Service                                    domain.Service
-	Kinds                                      []string
-}
-
 type networksPageData struct {
 	Title    string
 	Networks []domain.Network
@@ -149,6 +138,25 @@ func New(cfg Config) http.Handler {
 			listTmpl: "hosts.html", formTmpl: "host_form.html",
 			extras: func() map[string]any { return map[string]any{"Types": domain.HostTypes} },
 		},
+		resource[domain.Service]{
+			name: "services", sing: "service", title: "Services", heading: "Service",
+			repo:  services,
+			parse: parseService,
+			label: func(s domain.Service) string { return s.Name },
+			id:    func(s domain.Service) int64 { return s.ID },
+			notes: func(s domain.Service) string { return s.Notes },
+			fields: func(s domain.Service) []fieldRow {
+				return []fieldRow{
+					{"Kind", s.Kind},
+					{"URL", s.URL},
+					{"Ports", s.Ports},
+					{"Category", s.Category},
+				}
+			},
+			newItem:  domain.Service{Kind: "container"},
+			listTmpl: "services.html", formTmpl: "service_form.html",
+			extras: func() map[string]any { return map[string]any{"Kinds": domain.ServiceKinds} },
+		},
 	}
 	r := chi.NewRouter()
 	r.Get("/", dashboard(cat, relationships))
@@ -158,14 +166,6 @@ func New(cfg Config) http.Handler {
 	r.Post("/tags", addTag(tags))
 	r.Post("/tags/delete", removeTag(tags))
 	r.Get("/tags", tagsOverview(tags, cat))
-
-	r.Get("/services", listServices(services))
-	r.Get("/services/new", newServiceForm())
-	r.Post("/services", createService(services))
-	r.Get("/services/{id}", showService(services, cat, tags, relationships))
-	r.Get("/services/{id}/edit", editServiceForm(services))
-	r.Post("/services/{id}", updateService(services))
-	r.Post("/services/{id}/delete", deleteService(services, relationships, tags))
 
 	r.Get("/networks", listNetworks(networks))
 	r.Get("/networks/new", newNetworkForm())
@@ -421,121 +421,6 @@ func deleteRelationship(rels *store.RelationshipRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/relationships", http.StatusSeeOther)
-	}
-}
-
-func listServices(repo *store.ServiceRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		services, err := repo.List()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		render(w, "services.html", servicesPageData{Title: "Services", Services: services})
-	}
-}
-
-func newServiceForm() http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "service_form.html", serviceFormData{
-			Title: "New service", Heading: "New service", Action: "/services",
-			SubmitLabel: "Create", Service: domain.Service{Kind: "container"}, Kinds: domain.ServiceKinds,
-		})
-	}
-}
-
-func serviceFromForm(req *http.Request) domain.Service {
-	return domain.Service{
-		Name:     strings.TrimSpace(req.FormValue("name")),
-		Kind:     req.FormValue("kind"),
-		URL:      req.FormValue("url"),
-		Ports:    req.FormValue("ports"),
-		Category: req.FormValue("category"),
-		Notes:    req.FormValue("notes"),
-	}
-}
-
-func createService(repo *store.ServiceRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		svc := serviceFromForm(req)
-		if err := svc.Validate(); err != nil {
-			render(w, "service_form.html", serviceFormData{
-				Title: "New service", Heading: "New service", Action: "/services",
-				SubmitLabel: "Create", Service: svc, Kinds: domain.ServiceKinds, Error: err.Error(),
-			})
-			return
-		}
-		if _, err := repo.Create(svc); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/services", http.StatusSeeOther)
-	}
-}
-
-func editServiceForm(repo *store.ServiceRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		svc, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "service not found", http.StatusNotFound)
-			return
-		}
-		render(w, "service_form.html", serviceFormData{
-			Title: "Edit service", Heading: "Edit service", Action: fmt.Sprintf("/services/%d", id),
-			SubmitLabel: "Save", Service: svc, Kinds: domain.ServiceKinds,
-		})
-	}
-}
-
-func updateService(repo *store.ServiceRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		svc := serviceFromForm(req)
-		svc.ID = id
-		if err := svc.Validate(); err != nil {
-			render(w, "service_form.html", serviceFormData{
-				Title: "Edit service", Heading: "Edit service", Action: fmt.Sprintf("/services/%d", id),
-				SubmitLabel: "Save", Service: svc, Kinds: domain.ServiceKinds, Error: err.Error(),
-			})
-			return
-		}
-		if err := repo.Update(svc); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/services", http.StatusSeeOther)
-	}
-}
-
-func deleteService(repo *store.ServiceRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		if err := repo.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := rels.DeleteByEntity("service", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := tags.DeleteByEntity("service", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/services", http.StatusSeeOther)
 	}
 }
 
@@ -1305,29 +1190,6 @@ func showSubscription(repo *store.SubscriptionRepo, cat entityCatalog, tags *sto
 		}
 		renderDetail(w, cat, tags, rels, "subscription", id,
 			"Subscription: "+s.Name, s.Notes, fmt.Sprintf("/subscriptions/%d/edit", id), fields)
-	}
-}
-
-func showService(repo *store.ServiceRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		s, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "service not found", http.StatusNotFound)
-			return
-		}
-		fields := []fieldRow{
-			{"Kind", s.Kind},
-			{"URL", s.URL},
-			{"Ports", s.Ports},
-			{"Category", s.Category},
-		}
-		renderDetail(w, cat, tags, rels, "service", id,
-			"Service: "+s.Name, s.Notes, fmt.Sprintf("/services/%d/edit", id), fields)
 	}
 }
 
