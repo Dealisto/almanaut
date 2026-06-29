@@ -44,12 +44,6 @@ func New(cfg Config) http.Handler {
 	relationships, tags, db := cfg.Relationships, cfg.Tags, cfg.DB
 	docker, netscan, netOpts := cfg.Docker, cfg.NetScan, cfg.NetOpts
 	proxmox, pveOpts := cfg.Proxmox, cfg.PVEOpts
-	cat := entityCatalog{
-		hosts: hosts, services: services, networks: networks,
-		domains: domains, certificates: certificates, backups: backups,
-		hardware: hardware, subscriptions: subscriptions, accounts: accounts,
-	}
-	deps := handlerDeps{cat: cat, tags: tags, rels: relationships}
 	resources := []mountable{
 		resource[domain.Host]{
 			name: "hosts", sing: "host", title: "Hosts", heading: "Host",
@@ -246,8 +240,10 @@ func New(cfg Config) http.Handler {
 			listTmpl: "accounts.html", formTmpl: "account_form.html",
 		},
 	}
+	cat := entityCatalog{resources: resources}
+	deps := handlerDeps{cat: cat, tags: tags, rels: relationships}
 	r := chi.NewRouter()
-	r.Get("/", dashboard(cat, relationships))
+	r.Get("/", dashboard(hosts, services, networks, domains, certificates, backups, hardware, subscriptions, accounts, relationships))
 	for _, rs := range resources {
 		rs.mount(r, deps)
 	}
@@ -260,7 +256,7 @@ func New(cfg Config) http.Handler {
 	r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
 	r.Get("/impact", impactView(relationships, cat))
 	r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
-	r.Get("/search", searchEntities(cat, tags))
+	r.Get("/search", searchEntities(hosts, services, networks, domains, certificates, backups, hardware, subscriptions, accounts, tags))
 	r.Get("/data", showData())
 	r.Get("/export", exportData(db))
 	r.Post("/import", importData(db))

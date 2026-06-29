@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/Dealisto/almanaut/internal/store"
 )
 
 // entityOption is one selectable entity in a relationship dropdown.
@@ -16,18 +14,10 @@ type entityOption struct {
 	ID    int64
 }
 
-// entityCatalog aggregates the nine entity repositories so the relationship UI
-// can list every entity and resolve (type,id) references to human labels.
+// entityCatalog resolves (type,id) references to human labels by aggregating
+// every registered entity resource.
 type entityCatalog struct {
-	hosts         *store.HostRepo
-	services      *store.ServiceRepo
-	networks      *store.NetworkRepo
-	domains       *store.DomainRepo
-	certificates  *store.CertificateRepo
-	backups       *store.BackupRepo
-	hardware      *store.HardwareRepo
-	subscriptions *store.SubscriptionRepo
-	accounts      *store.AccountRepo
+	resources []mountable
 }
 
 func entityOptionOf(typ string, id int64, name string) entityOption {
@@ -39,72 +29,15 @@ func entityOptionOf(typ string, id int64, name string) entityOption {
 	}
 }
 
-// options returns every entity across all nine types as selectable options.
+// options returns every entity across all registered types as selectable options.
 func (c entityCatalog) options() ([]entityOption, error) {
 	var opts []entityOption
-
-	hosts, err := c.hosts.List()
-	if err != nil {
-		return nil, err
-	}
-	for _, h := range hosts {
-		opts = append(opts, entityOptionOf("host", h.ID, h.Name))
-	}
-	services, err := c.services.List()
-	if err != nil {
-		return nil, err
-	}
-	for _, s := range services {
-		opts = append(opts, entityOptionOf("service", s.ID, s.Name))
-	}
-	networks, err := c.networks.List()
-	if err != nil {
-		return nil, err
-	}
-	for _, n := range networks {
-		opts = append(opts, entityOptionOf("network", n.ID, n.Name))
-	}
-	domains, err := c.domains.List()
-	if err != nil {
-		return nil, err
-	}
-	for _, d := range domains {
-		opts = append(opts, entityOptionOf("domain", d.ID, d.FQDN))
-	}
-	certs, err := c.certificates.List()
-	if err != nil {
-		return nil, err
-	}
-	for _, ct := range certs {
-		opts = append(opts, entityOptionOf("certificate", ct.ID, ct.Subject))
-	}
-	backups, err := c.backups.List()
-	if err != nil {
-		return nil, err
-	}
-	for _, b := range backups {
-		opts = append(opts, entityOptionOf("backup", b.ID, b.Source))
-	}
-	hardware, err := c.hardware.List()
-	if err != nil {
-		return nil, err
-	}
-	for _, h := range hardware {
-		opts = append(opts, entityOptionOf("hardware", h.ID, h.Name))
-	}
-	subscriptions, err := c.subscriptions.List()
-	if err != nil {
-		return nil, err
-	}
-	for _, s := range subscriptions {
-		opts = append(opts, entityOptionOf("subscription", s.ID, s.Name))
-	}
-	accounts, err := c.accounts.List()
-	if err != nil {
-		return nil, err
-	}
-	for _, a := range accounts {
-		opts = append(opts, entityOptionOf("account", a.ID, a.Name))
+	for _, rs := range c.resources {
+		got, err := rs.options()
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, got...)
 	}
 	return opts, nil
 }
