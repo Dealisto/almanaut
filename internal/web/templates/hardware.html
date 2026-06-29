@@ -1,0 +1,31 @@
+{{define "content"}}
+<h1>Hardware</h1>
+<div class="toolbar"><a class="btn btn-primary" href="/hardware/new">+ New hardware</a></div>
+{{if .Hardware}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Kind</th><th>Manufacturer</th><th>Model</th><th>Warranty end</th><th></th></tr></thead>
+  <tbody>
+  {{range .Hardware}}
+    <tr>
+      <td><a href="/hardware/{{.ID}}">{{.Name}}</a></td>
+      <td>{{.Kind}}</td>
+      <td>{{.Manufacturer}}</td>
+      <td>{{.Model}}</td>
+      <td>{{.WarrantyEnd}}</td>
+      <td>
+        <a class="btn" href="/hardware/{{.ID}}/edit">Edit</a>
+        <form class="form-inline" method="post" action="/hardware/{{.ID}}/delete"
+              onsubmit="return confirm('Delete this hardware?');">
+          <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No hardware yet.</div></div>
+{{end}}
+{{end}}

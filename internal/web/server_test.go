@@ -1432,3 +1432,55 @@ func TestNewFormPagesRender(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateAndListHardware(t *testing.T) {
+	srv := newTestServer(t)
+
+	// Create via form POST
+	form := url.Values{"name": {"APC UPS"}, "kind": {"ups"}, "manufacturer": {"APC"}, "status": {"active"}}
+	req := httptest.NewRequest(http.MethodPost, "/hardware", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /hardware status = %d, want 303", rec.Code)
+	}
+
+	// List shows the new hardware
+	req = httptest.NewRequest(http.MethodGet, "/hardware", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /hardware status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "APC UPS") {
+		t.Errorf("GET /hardware body does not contain created hardware")
+	}
+
+	// Delete it and verify the list no longer contains it
+	rec = postForm(t, srv, "/hardware/1/delete", url.Values{})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /hardware/1/delete = %d, want 303", rec.Code)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/hardware", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if strings.Contains(rec.Body.String(), "APC UPS") {
+		t.Errorf("GET /hardware still contains deleted hardware")
+	}
+}
+
+func TestCreateHardwareInvalidShowsError(t *testing.T) {
+	srv := newTestServer(t)
+	form := url.Values{"name": {""}, "kind": {"ups"}}
+	req := httptest.NewRequest(http.MethodPost, "/hardware", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid POST /hardware status = %d, want 200 (re-render with error)", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "name is required") {
+		t.Errorf("invalid POST /hardware body missing validation error")
+	}
+}
