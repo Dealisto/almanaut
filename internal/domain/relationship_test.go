@@ -35,3 +35,10 @@ func TestIsDependencyKind(t *testing.T) {
 		t.Error(`"backed up by" should NOT be a dependency kind`)
 	}
 }
+
+func TestRelationshipHardwareEndpoint(t *testing.T) {
+	r := Relationship{FromType: "hardware", FromID: 1, ToType: "host", ToID: 2, Kind: "runs on"}
+	if err := r.Validate(); err != nil {
+		t.Fatalf("hardware endpoint should be valid, got %v", err)
+	}
+}

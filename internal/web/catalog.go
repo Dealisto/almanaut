@@ -16,7 +16,7 @@ type entityOption struct {
 	ID    int64
 }
 
-// entityCatalog aggregates the six entity repositories so the relationship UI
+// entityCatalog aggregates the seven entity repositories so the relationship UI
 // can list every entity and resolve (type,id) references to human labels.
 type entityCatalog struct {
 	hosts        *store.HostRepo
@@ -25,6 +25,7 @@ type entityCatalog struct {
 	domains      *store.DomainRepo
 	certificates *store.CertificateRepo
 	backups      *store.BackupRepo
+	hardware     *store.HardwareRepo
 }
 
 func entityOptionOf(typ string, id int64, name string) entityOption {
@@ -36,7 +37,7 @@ func entityOptionOf(typ string, id int64, name string) entityOption {
 	}
 }
 
-// options returns every entity across all six types as selectable options.
+// options returns every entity across all seven types as selectable options.
 func (c entityCatalog) options() ([]entityOption, error) {
 	var opts []entityOption
 
@@ -81,6 +82,13 @@ func (c entityCatalog) options() ([]entityOption, error) {
 	}
 	for _, b := range backups {
 		opts = append(opts, entityOptionOf("backup", b.ID, b.Source))
+	}
+	hardware, err := c.hardware.List()
+	if err != nil {
+		return nil, err
+	}
+	for _, h := range hardware {
+		opts = append(opts, entityOptionOf("hardware", h.ID, h.Name))
 	}
 	return opts, nil
 }
