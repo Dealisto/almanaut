@@ -259,3 +259,14 @@ func parseService(r *http.Request, id int64) domain.Service {
 		Notes:    r.FormValue("notes"),
 	}
 }
+
+func parseNetwork(r *http.Request, id int64) domain.Network {
+	return domain.Network{
+		ID:      id,
+		Name:    strings.TrimSpace(r.FormValue("name")),
+		CIDR:    strings.TrimSpace(r.FormValue("cidr")),
+		VLAN:    r.FormValue("vlan"),
+		Gateway: strings.TrimSpace(r.FormValue("gateway")),
+		Notes:   r.FormValue("notes"),
+	}
+}

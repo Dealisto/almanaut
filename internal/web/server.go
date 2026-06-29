@@ -14,16 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type networksPageData struct {
-	Title    string
-	Networks []domain.Network
-}
-
-type networkFormData struct {
-	Title, Heading, Action, SubmitLabel, Error string
-	Network                                    domain.Network
-}
-
 type domainsPageData struct {
 	Title   string
 	Domains []domain.Domain
@@ -157,6 +147,40 @@ func New(cfg Config) http.Handler {
 			listTmpl: "services.html", formTmpl: "service_form.html",
 			extras: func() map[string]any { return map[string]any{"Kinds": domain.ServiceKinds} },
 		},
+		resource[domain.Network]{
+			name: "networks", sing: "network", title: "Networks", heading: "Network",
+			repo:  networks,
+			parse: parseNetwork,
+			label: func(n domain.Network) string { return n.Name },
+			id:    func(n domain.Network) int64 { return n.ID },
+			notes: func(n domain.Network) string { return n.Notes },
+			fields: func(n domain.Network) []fieldRow {
+				return []fieldRow{
+					{"CIDR", n.CIDR},
+					{"VLAN", n.VLAN},
+					{"Gateway", n.Gateway},
+				}
+			},
+			newItem:  domain.Network{},
+			listTmpl: "networks.html", formTmpl: "network_form.html",
+			ipam: func(n domain.Network) *ipamSection {
+				nets, err := networks.List()
+				if err != nil {
+					return nil
+				}
+				hostList, err := hosts.List()
+				if err != nil {
+					return nil
+				}
+				for _, u := range domain.BuildIPAM(nets, hostList).Networks {
+					if u.Network.ID == n.ID {
+						s := buildIPAMSection(u)
+						return &s
+					}
+				}
+				return nil
+			},
+		},
 	}
 	r := chi.NewRouter()
 	r.Get("/", dashboard(cat, relationships))
@@ -166,14 +190,6 @@ func New(cfg Config) http.Handler {
 	r.Post("/tags", addTag(tags))
 	r.Post("/tags/delete", removeTag(tags))
 	r.Get("/tags", tagsOverview(tags, cat))
-
-	r.Get("/networks", listNetworks(networks))
-	r.Get("/networks/new", newNetworkForm())
-	r.Post("/networks", createNetwork(networks))
-	r.Get("/networks/{id}", showNetwork(networks, cat, tags, relationships))
-	r.Get("/networks/{id}/edit", editNetworkForm(networks))
-	r.Post("/networks/{id}", updateNetwork(networks))
-	r.Post("/networks/{id}/delete", deleteNetwork(networks, relationships, tags))
 
 	r.Get("/domains", listDomains(domains))
 	r.Get("/domains/new", newDomainForm())
@@ -421,119 +437,6 @@ func deleteRelationship(rels *store.RelationshipRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/relationships", http.StatusSeeOther)
-	}
-}
-
-func listNetworks(repo *store.NetworkRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		networks, err := repo.List()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		render(w, "networks.html", networksPageData{Title: "Networks", Networks: networks})
-	}
-}
-
-func newNetworkForm() http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "network_form.html", networkFormData{
-			Title: "New network", Heading: "New network", Action: "/networks", SubmitLabel: "Create",
-		})
-	}
-}
-
-func networkFromForm(req *http.Request) domain.Network {
-	return domain.Network{
-		Name:    strings.TrimSpace(req.FormValue("name")),
-		CIDR:    strings.TrimSpace(req.FormValue("cidr")),
-		VLAN:    req.FormValue("vlan"),
-		Gateway: strings.TrimSpace(req.FormValue("gateway")),
-		Notes:   req.FormValue("notes"),
-	}
-}
-
-func createNetwork(repo *store.NetworkRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		n := networkFromForm(req)
-		if err := n.Validate(); err != nil {
-			render(w, "network_form.html", networkFormData{
-				Title: "New network", Heading: "New network", Action: "/networks",
-				SubmitLabel: "Create", Network: n, Error: err.Error(),
-			})
-			return
-		}
-		if _, err := repo.Create(n); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/networks", http.StatusSeeOther)
-	}
-}
-
-func editNetworkForm(repo *store.NetworkRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		n, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "network not found", http.StatusNotFound)
-			return
-		}
-		render(w, "network_form.html", networkFormData{
-			Title: "Edit network", Heading: "Edit network", Action: fmt.Sprintf("/networks/%d", id),
-			SubmitLabel: "Save", Network: n,
-		})
-	}
-}
-
-func updateNetwork(repo *store.NetworkRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		n := networkFromForm(req)
-		n.ID = id
-		if err := n.Validate(); err != nil {
-			render(w, "network_form.html", networkFormData{
-				Title: "Edit network", Heading: "Edit network", Action: fmt.Sprintf("/networks/%d", id),
-				SubmitLabel: "Save", Network: n, Error: err.Error(),
-			})
-			return
-		}
-		if err := repo.Update(n); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/networks", http.StatusSeeOther)
-	}
-}
-
-func deleteNetwork(repo *store.NetworkRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		if err := repo.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := rels.DeleteByEntity("network", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := tags.DeleteByEntity("network", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/networks", http.StatusSeeOther)
 	}
 }
 
@@ -1190,46 +1093,6 @@ func showSubscription(repo *store.SubscriptionRepo, cat entityCatalog, tags *sto
 		}
 		renderDetail(w, cat, tags, rels, "subscription", id,
 			"Subscription: "+s.Name, s.Notes, fmt.Sprintf("/subscriptions/%d/edit", id), fields)
-	}
-}
-
-func showNetwork(repo *store.NetworkRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		n, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "network not found", http.StatusNotFound)
-			return
-		}
-		nets, err := repo.List()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		hosts, err := cat.hosts.List()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		var section *ipamSection
-		for _, u := range domain.BuildIPAM(nets, hosts).Networks {
-			if u.Network.ID == id {
-				s := buildIPAMSection(u)
-				section = &s
-				break
-			}
-		}
-		fields := []fieldRow{
-			{"CIDR", n.CIDR},
-			{"VLAN", n.VLAN},
-			{"Gateway", n.Gateway},
-		}
-		renderDetailExtra(w, cat, tags, rels, "network", id,
-			"Network: "+n.Name, n.Notes, fmt.Sprintf("/networks/%d/edit", id), fields, section)
 	}
 }
 

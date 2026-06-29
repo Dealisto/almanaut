@@ -1,12 +1,12 @@
 {{define "content"}}
 <h1>Networks</h1>
 <div class="toolbar"><a class="btn btn-primary" href="/networks/new">+ New network</a></div>
-{{if .Networks}}
+{{if .Items}}
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>CIDR</th><th>VLAN</th><th>Gateway</th><th></th></tr></thead>
   <tbody>
-  {{range .Networks}}
+  {{range .Items}}
     <tr>
       <td><a href="/networks/{{.ID}}">{{.Name}}</a></td>
       <td>{{.CIDR}}</td>
