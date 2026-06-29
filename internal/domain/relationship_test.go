@@ -42,3 +42,10 @@ func TestRelationshipHardwareEndpoint(t *testing.T) {
 		t.Fatalf("hardware endpoint should be valid, got %v", err)
 	}
 }
+
+func TestRelationshipSubscriptionEndpoint(t *testing.T) {
+	r := Relationship{FromType: "subscription", FromID: 1, ToType: "host", ToID: 2, Kind: "runs on"}
+	if err := r.Validate(); err != nil {
+		t.Fatalf("subscription endpoint should be valid, got %v", err)
+	}
+}

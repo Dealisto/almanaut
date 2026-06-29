@@ -61,7 +61,7 @@ func newTestServerFull(t *testing.T, docker dockerScanner, netscan networkScanne
 	}
 	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db),
 		store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db),
-		store.NewHardwareRepo(db),
+		store.NewHardwareRepo(db), store.NewSubscriptionRepo(db),
 		store.NewRelationshipRepo(db), store.NewTagRepo(db), db,
 		docker, netscan, opts, fakeProxmoxScanner{}, ProxmoxOptions{})
 }
@@ -98,7 +98,7 @@ func newTestServerProxmoxRepos(t *testing.T, pve proxmoxScanner, opts ProxmoxOpt
 	rels := store.NewRelationshipRepo(db)
 	srv := New(hosts, store.NewServiceRepo(db), store.NewNetworkRepo(db),
 		store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db),
-		store.NewHardwareRepo(db),
+		store.NewHardwareRepo(db), store.NewSubscriptionRepo(db),
 		rels, store.NewTagRepo(db), db,
 		fakeScanner{}, fakeNetworkScanner{}, NetDiscoveryOptions{}, pve, opts)
 	return srv, hosts, rels
@@ -1328,7 +1328,7 @@ func newTestServerDockerDB(t *testing.T, scanner dockerScanner) (http.Handler, *
 	}
 	srv := New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db),
 		store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db),
-		store.NewHardwareRepo(db),
+		store.NewHardwareRepo(db), store.NewSubscriptionRepo(db),
 		store.NewRelationshipRepo(db), store.NewTagRepo(db), db,
 		scanner, fakeNetworkScanner{}, NetDiscoveryOptions{}, fakeProxmoxScanner{}, ProxmoxOptions{})
 	return srv, db

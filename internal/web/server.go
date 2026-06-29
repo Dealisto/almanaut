@@ -95,6 +95,7 @@ func New(
 	certificates *store.CertificateRepo,
 	backups *store.BackupRepo,
 	hardware *store.HardwareRepo,
+	subscriptions *store.SubscriptionRepo,
 	relationships *store.RelationshipRepo,
 	tags *store.TagRepo,
 	db *sql.DB,
@@ -107,7 +108,7 @@ func New(
 	cat := entityCatalog{
 		hosts: hosts, services: services, networks: networks,
 		domains: domains, certificates: certificates, backups: backups,
-		hardware: hardware,
+		hardware: hardware, subscriptions: subscriptions,
 	}
 	r := chi.NewRouter()
 	r.Get("/", dashboard(cat, relationships))
