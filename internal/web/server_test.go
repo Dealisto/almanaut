@@ -1484,3 +1484,41 @@ func TestCreateHardwareInvalidShowsError(t *testing.T) {
 		t.Errorf("invalid POST /hardware body missing validation error")
 	}
 }
+
+func TestCreateAndListSubscription(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := url.Values{"name": {"Hetzner VPS"}, "kind": {"vps"}, "amount": {"12.99"}, "currency": {"EUR"}, "billing_cycle": {"monthly"}, "auto_renew": {"on"}}
+	req := httptest.NewRequest(http.MethodPost, "/subscriptions", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /subscriptions status = %d, want 303", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/subscriptions", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /subscriptions status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Hetzner VPS") {
+		t.Errorf("GET /subscriptions body does not contain created subscription")
+	}
+}
+
+func TestCreateSubscriptionInvalidShowsError(t *testing.T) {
+	srv := newTestServer(t)
+	form := url.Values{"name": {""}, "amount": {"-5"}}
+	req := httptest.NewRequest(http.MethodPost, "/subscriptions", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid POST status = %d, want 200 (re-render with error)", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "name is required") {
+		t.Errorf("invalid POST body missing validation error")
+	}
+}
