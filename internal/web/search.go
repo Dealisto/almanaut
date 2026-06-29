@@ -53,18 +53,20 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 		}
 
 		type bucket struct {
-			typ, heading string
-			hits         []searchHit
+			typ, path, heading string
+			hits               []searchHit
 		}
-		hosts := &bucket{typ: "host", heading: "Hosts"}
-		services := &bucket{typ: "service", heading: "Services"}
-		networks := &bucket{typ: "network", heading: "Networks"}
-		domains := &bucket{typ: "domain", heading: "Domains"}
-		certificates := &bucket{typ: "certificate", heading: "Certificates"}
-		backups := &bucket{typ: "backup", heading: "Backups"}
+		hosts := &bucket{typ: "host", path: "/hosts", heading: "Hosts"}
+		services := &bucket{typ: "service", path: "/services", heading: "Services"}
+		networks := &bucket{typ: "network", path: "/networks", heading: "Networks"}
+		domains := &bucket{typ: "domain", path: "/domains", heading: "Domains"}
+		certificates := &bucket{typ: "certificate", path: "/certificates", heading: "Certificates"}
+		backups := &bucket{typ: "backup", path: "/backups", heading: "Backups"}
+		hardware := &bucket{typ: "hardware", path: "/hardware", heading: "Hardware"}
 		buckets := map[string]*bucket{
 			"host": hosts, "service": services, "network": networks,
 			"domain": domains, "certificate": certificates, "backup": backups,
+			"hardware": hardware,
 		}
 
 		seen := map[string]bool{}      // dedupe by "type:id"
@@ -75,7 +77,7 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 				return
 			}
 			seen[key] = true
-			b.hits = append(b.hits, searchHit{Label: label, URL: fmt.Sprintf("/%ss/%d", b.typ, id)})
+			b.hits = append(b.hits, searchHit{Label: label, URL: fmt.Sprintf("%s/%d", b.path, id)})
 		}
 		fail := func(err error) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -147,6 +149,17 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 				add(backups, b.ID, b.Source)
 			}
 		}
+		hardwareList, err := cat.hardware.List()
+		if err != nil {
+			fail(err)
+			return
+		}
+		for _, h := range hardwareList {
+			labelOf[fmt.Sprintf("hardware:%d", h.ID)] = h.Name
+			if matchesQuery([]string{h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.Status, h.Notes}, q) {
+				add(hardware, h.ID, h.Name)
+			}
+		}
 
 		// Fold in tag matches: a matching tag pulls its entity into that group.
 		tagged, err := tags.Search(q)
@@ -166,7 +179,7 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 			add(b, tg.EntityID, label)
 		}
 
-		for _, b := range []*bucket{hosts, services, networks, domains, certificates, backups} {
+		for _, b := range []*bucket{hosts, services, networks, domains, certificates, backups, hardware} {
 			if len(b.hits) == 0 {
 				continue
 			}
