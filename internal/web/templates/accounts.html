@@ -1,0 +1,31 @@
+{{define "content"}}
+<h1>Accounts</h1>
+<div class="toolbar"><a class="btn btn-primary" href="/accounts/new">+ New account</a></div>
+{{if .Accounts}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Kind</th><th>Username</th><th>Password manager</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {{range .Accounts}}
+    <tr>
+      <td><a href="/accounts/{{.ID}}">{{.Name}}</a></td>
+      <td>{{.Kind}}</td>
+      <td>{{.Username}}</td>
+      <td>{{.PasswordManager}}</td>
+      <td>{{.Status}}</td>
+      <td>
+        <a class="btn" href="/accounts/{{.ID}}/edit">Edit</a>
+        <form class="form-inline" method="post" action="/accounts/{{.ID}}/delete"
+              onsubmit="return confirm('Delete this account?');">
+          <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No accounts yet.</div></div>
+{{end}}
+{{end}}
