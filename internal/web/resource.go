@@ -290,3 +290,14 @@ func parseCertificate(r *http.Request, id int64) domain.Certificate {
 		Notes:     r.FormValue("notes"),
 	}
 }
+
+func parseBackup(r *http.Request, id int64) domain.Backup {
+	return domain.Backup{
+		ID:          id,
+		Source:      strings.TrimSpace(r.FormValue("source")),
+		Destination: strings.TrimSpace(r.FormValue("destination")),
+		Frequency:   strings.TrimSpace(r.FormValue("frequency")),
+		LastRun:     strings.TrimSpace(r.FormValue("last_run")),
+		Notes:       r.FormValue("notes"),
+	}
+}

@@ -2,11 +2,11 @@
 <h1>{{.Heading}}</h1>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
-  <label>Source (what is backed up)<input name="source" value="{{.Backup.Source}}" required></label>
-  <label>Destination<input name="destination" value="{{.Backup.Destination}}" placeholder="Backblaze B2"></label>
-  <label>Frequency<input name="frequency" value="{{.Backup.Frequency}}" placeholder="daily"></label>
-  <label>Last run<input type="date" name="last_run" value="{{.Backup.LastRun}}"></label>
-  <label>Notes<textarea name="notes">{{.Backup.Notes}}</textarea></label>
+  <label>Source (what is backed up)<input name="source" value="{{.Item.Source}}" required></label>
+  <label>Destination<input name="destination" value="{{.Item.Destination}}" placeholder="Backblaze B2"></label>
+  <label>Frequency<input name="frequency" value="{{.Item.Frequency}}" placeholder="daily"></label>
+  <label>Last run<input type="date" name="last_run" value="{{.Item.LastRun}}"></label>
+  <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
     <a class="btn" href="/backups">Cancel</a>

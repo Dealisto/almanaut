@@ -14,16 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type backupsPageData struct {
-	Title   string
-	Backups []domain.Backup
-}
-
-type backupFormData struct {
-	Title, Heading, Action, SubmitLabel, Error string
-	Backup                                     domain.Backup
-}
-
 type hardwarePageData struct {
 	Title    string
 	Hardware []domain.Hardware
@@ -197,6 +187,23 @@ func New(cfg Config) http.Handler {
 			newItem:  domain.Certificate{},
 			listTmpl: "certificates.html", formTmpl: "certificate_form.html",
 		},
+		resource[domain.Backup]{
+			name: "backups", sing: "backup", title: "Backups", heading: "Backup",
+			repo:  backups,
+			parse: parseBackup,
+			label: func(b domain.Backup) string { return b.Source },
+			id:    func(b domain.Backup) int64 { return b.ID },
+			notes: func(b domain.Backup) string { return b.Notes },
+			fields: func(b domain.Backup) []fieldRow {
+				return []fieldRow{
+					{"Destination", b.Destination},
+					{"Frequency", b.Frequency},
+					{"Last run", b.LastRun},
+				}
+			},
+			newItem:  domain.Backup{},
+			listTmpl: "backups.html", formTmpl: "backup_form.html",
+		},
 	}
 	r := chi.NewRouter()
 	r.Get("/", dashboard(cat, relationships))
@@ -206,14 +213,6 @@ func New(cfg Config) http.Handler {
 	r.Post("/tags", addTag(tags))
 	r.Post("/tags/delete", removeTag(tags))
 	r.Get("/tags", tagsOverview(tags, cat))
-
-	r.Get("/backups", listBackups(backups))
-	r.Get("/backups/new", newBackupForm())
-	r.Post("/backups", createBackup(backups))
-	r.Get("/backups/{id}", showBackup(backups, cat, tags, relationships))
-	r.Get("/backups/{id}/edit", editBackupForm(backups))
-	r.Post("/backups/{id}", updateBackup(backups))
-	r.Post("/backups/{id}/delete", deleteBackup(backups, relationships, tags))
 
 	r.Get("/hardware", listHardware(hardware))
 	r.Get("/hardware/new", newHardwareForm())
@@ -437,141 +436,6 @@ func deleteRelationship(rels *store.RelationshipRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/relationships", http.StatusSeeOther)
-	}
-}
-
-func listBackups(repo *store.BackupRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		backups, err := repo.List()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		render(w, "backups.html", backupsPageData{Title: "Backups", Backups: backups})
-	}
-}
-
-func newBackupForm() http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "backup_form.html", backupFormData{
-			Title: "New backup", Heading: "New backup", Action: "/backups", SubmitLabel: "Create",
-		})
-	}
-}
-
-func backupFromForm(req *http.Request) domain.Backup {
-	return domain.Backup{
-		Source:      strings.TrimSpace(req.FormValue("source")),
-		Destination: strings.TrimSpace(req.FormValue("destination")),
-		Frequency:   strings.TrimSpace(req.FormValue("frequency")),
-		LastRun:     strings.TrimSpace(req.FormValue("last_run")),
-		Notes:       req.FormValue("notes"),
-	}
-}
-
-func createBackup(repo *store.BackupRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		b := backupFromForm(req)
-		if err := b.Validate(); err != nil {
-			render(w, "backup_form.html", backupFormData{
-				Title: "New backup", Heading: "New backup", Action: "/backups",
-				SubmitLabel: "Create", Backup: b, Error: err.Error(),
-			})
-			return
-		}
-		if _, err := repo.Create(b); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/backups", http.StatusSeeOther)
-	}
-}
-
-func editBackupForm(repo *store.BackupRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		b, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "backup not found", http.StatusNotFound)
-			return
-		}
-		render(w, "backup_form.html", backupFormData{
-			Title: "Edit backup", Heading: "Edit backup", Action: fmt.Sprintf("/backups/%d", id),
-			SubmitLabel: "Save", Backup: b,
-		})
-	}
-}
-
-func updateBackup(repo *store.BackupRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		b := backupFromForm(req)
-		b.ID = id
-		if err := b.Validate(); err != nil {
-			render(w, "backup_form.html", backupFormData{
-				Title: "Edit backup", Heading: "Edit backup", Action: fmt.Sprintf("/backups/%d", id),
-				SubmitLabel: "Save", Backup: b, Error: err.Error(),
-			})
-			return
-		}
-		if err := repo.Update(b); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/backups", http.StatusSeeOther)
-	}
-}
-
-func deleteBackup(repo *store.BackupRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		if err := repo.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := rels.DeleteByEntity("backup", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := tags.DeleteByEntity("backup", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/backups", http.StatusSeeOther)
-	}
-}
-
-func showBackup(repo *store.BackupRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		b, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "backup not found", http.StatusNotFound)
-			return
-		}
-		fields := []fieldRow{
-			{"Destination", b.Destination},
-			{"Frequency", b.Frequency},
-			{"Last run", b.LastRun},
-		}
-		renderDetail(w, cat, tags, rels, "backup", id,
-			"Backup: "+b.Source, b.Notes, fmt.Sprintf("/backups/%d/edit", id), fields)
 	}
 }
 
