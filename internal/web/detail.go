@@ -80,23 +80,10 @@ func buildIPAMSection(u domain.NetworkUsage) ipamSection {
 	}
 }
 
-// renderDetail assembles and renders the shared detail page for one entity:
-// its caller-supplied fields, its rendered Markdown notes, its tags, and the
-// relationships that touch it (with the other endpoint resolved to a label).
-func renderDetail(
-	w http.ResponseWriter,
-	cat entityCatalog,
-	tags *store.TagRepo,
-	rels *store.RelationshipRepo,
-	entityType string, entityID int64,
-	heading, notes, editURL string,
-	fields []fieldRow,
-) {
-	renderDetailExtra(w, cat, tags, rels, entityType, entityID, heading, notes, editURL, fields, nil)
-}
-
-// renderDetailExtra is renderDetail with an optional IPAM section appended to
-// the page (nil for entities that have none).
+// renderDetailExtra assembles and renders the shared detail page for one entity:
+// its caller-supplied fields, its rendered Markdown notes, its tags, the
+// relationships that touch it (with the other endpoint resolved to a label),
+// and an optional IPAM section (nil for entities that have none).
 func renderDetailExtra(
 	w http.ResponseWriter,
 	cat entityCatalog,
