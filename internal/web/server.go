@@ -14,16 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type hardwarePageData struct {
-	Title    string
-	Hardware []domain.Hardware
-}
-
-type hardwareFormData struct {
-	Title, Heading, Action, SubmitLabel, Error string
-	Hardware                                   domain.Hardware
-}
-
 type subscriptionsPageData struct {
 	Title         string
 	Subscriptions []domain.Subscription
@@ -204,6 +194,28 @@ func New(cfg Config) http.Handler {
 			newItem:  domain.Backup{},
 			listTmpl: "backups.html", formTmpl: "backup_form.html",
 		},
+		resource[domain.Hardware]{
+			name: "hardware", sing: "hardware", title: "Hardware", heading: "Hardware",
+			repo:  hardware,
+			parse: parseHardware,
+			label: func(h domain.Hardware) string { return h.Name },
+			id:    func(h domain.Hardware) int64 { return h.ID },
+			notes: func(h domain.Hardware) string { return h.Notes },
+			fields: func(h domain.Hardware) []fieldRow {
+				return []fieldRow{
+					{"Kind", h.Kind},
+					{"Manufacturer", h.Manufacturer},
+					{"Model", h.Model},
+					{"Serial", h.Serial},
+					{"Location", h.Location},
+					{"Purchase date", h.PurchaseDate},
+					{"Warranty end", h.WarrantyEnd},
+					{"Status", h.Status},
+				}
+			},
+			newItem:  domain.Hardware{},
+			listTmpl: "hardware.html", formTmpl: "hardware_form.html",
+		},
 	}
 	r := chi.NewRouter()
 	r.Get("/", dashboard(cat, relationships))
@@ -213,14 +225,6 @@ func New(cfg Config) http.Handler {
 	r.Post("/tags", addTag(tags))
 	r.Post("/tags/delete", removeTag(tags))
 	r.Get("/tags", tagsOverview(tags, cat))
-
-	r.Get("/hardware", listHardware(hardware))
-	r.Get("/hardware/new", newHardwareForm())
-	r.Post("/hardware", createHardware(hardware))
-	r.Get("/hardware/{id}", showHardware(hardware, cat, tags, relationships))
-	r.Get("/hardware/{id}/edit", editHardwareForm(hardware))
-	r.Post("/hardware/{id}", updateHardware(hardware))
-	r.Post("/hardware/{id}/delete", deleteHardware(hardware, relationships, tags))
 
 	r.Get("/subscriptions", listSubscriptions(subscriptions))
 	r.Get("/subscriptions/new", newSubscriptionForm())
@@ -436,151 +440,6 @@ func deleteRelationship(rels *store.RelationshipRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/relationships", http.StatusSeeOther)
-	}
-}
-
-func listHardware(repo *store.HardwareRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		items, err := repo.List()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		render(w, "hardware.html", hardwarePageData{Title: "Hardware", Hardware: items})
-	}
-}
-
-func newHardwareForm() http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "hardware_form.html", hardwareFormData{
-			Title: "New hardware", Heading: "New hardware", Action: "/hardware", SubmitLabel: "Create",
-		})
-	}
-}
-
-func hardwareFromForm(req *http.Request) domain.Hardware {
-	return domain.Hardware{
-		Name:         strings.TrimSpace(req.FormValue("name")),
-		Kind:         strings.TrimSpace(req.FormValue("kind")),
-		Manufacturer: strings.TrimSpace(req.FormValue("manufacturer")),
-		Model:        strings.TrimSpace(req.FormValue("model")),
-		Serial:       strings.TrimSpace(req.FormValue("serial")),
-		Location:     strings.TrimSpace(req.FormValue("location")),
-		PurchaseDate: strings.TrimSpace(req.FormValue("purchase_date")),
-		WarrantyEnd:  strings.TrimSpace(req.FormValue("warranty_end")),
-		Status:       strings.TrimSpace(req.FormValue("status")),
-		Notes:        req.FormValue("notes"),
-	}
-}
-
-func createHardware(repo *store.HardwareRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		h := hardwareFromForm(req)
-		if err := h.Validate(); err != nil {
-			render(w, "hardware_form.html", hardwareFormData{
-				Title: "New hardware", Heading: "New hardware", Action: "/hardware",
-				SubmitLabel: "Create", Hardware: h, Error: err.Error(),
-			})
-			return
-		}
-		if _, err := repo.Create(h); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/hardware", http.StatusSeeOther)
-	}
-}
-
-func editHardwareForm(repo *store.HardwareRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		h, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "hardware not found", http.StatusNotFound)
-			return
-		}
-		render(w, "hardware_form.html", hardwareFormData{
-			Title: "Edit hardware", Heading: "Edit hardware", Action: fmt.Sprintf("/hardware/%d", id),
-			SubmitLabel: "Save", Hardware: h,
-		})
-	}
-}
-
-func updateHardware(repo *store.HardwareRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		h := hardwareFromForm(req)
-		h.ID = id
-		if err := h.Validate(); err != nil {
-			render(w, "hardware_form.html", hardwareFormData{
-				Title: "Edit hardware", Heading: "Edit hardware", Action: fmt.Sprintf("/hardware/%d", id),
-				SubmitLabel: "Save", Hardware: h, Error: err.Error(),
-			})
-			return
-		}
-		if err := repo.Update(h); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/hardware", http.StatusSeeOther)
-	}
-}
-
-func deleteHardware(repo *store.HardwareRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		if err := repo.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := rels.DeleteByEntity("hardware", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := tags.DeleteByEntity("hardware", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/hardware", http.StatusSeeOther)
-	}
-}
-
-func showHardware(repo *store.HardwareRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		h, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "hardware not found", http.StatusNotFound)
-			return
-		}
-		fields := []fieldRow{
-			{"Kind", h.Kind},
-			{"Manufacturer", h.Manufacturer},
-			{"Model", h.Model},
-			{"Serial", h.Serial},
-			{"Location", h.Location},
-			{"Purchase date", h.PurchaseDate},
-			{"Warranty end", h.WarrantyEnd},
-			{"Status", h.Status},
-		}
-		renderDetail(w, cat, tags, rels, "hardware", id,
-			"Hardware: "+h.Name, h.Notes, fmt.Sprintf("/hardware/%d/edit", id), fields)
 	}
 }
 

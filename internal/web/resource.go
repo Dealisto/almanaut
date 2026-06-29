@@ -301,3 +301,19 @@ func parseBackup(r *http.Request, id int64) domain.Backup {
 		Notes:       r.FormValue("notes"),
 	}
 }
+
+func parseHardware(r *http.Request, id int64) domain.Hardware {
+	return domain.Hardware{
+		ID:           id,
+		Name:         strings.TrimSpace(r.FormValue("name")),
+		Kind:         strings.TrimSpace(r.FormValue("kind")),
+		Manufacturer: strings.TrimSpace(r.FormValue("manufacturer")),
+		Model:        strings.TrimSpace(r.FormValue("model")),
+		Serial:       strings.TrimSpace(r.FormValue("serial")),
+		Location:     strings.TrimSpace(r.FormValue("location")),
+		PurchaseDate: strings.TrimSpace(r.FormValue("purchase_date")),
+		WarrantyEnd:  strings.TrimSpace(r.FormValue("warranty_end")),
+		Status:       strings.TrimSpace(r.FormValue("status")),
+		Notes:        r.FormValue("notes"),
+	}
+}

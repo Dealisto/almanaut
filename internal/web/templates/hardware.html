@@ -1,12 +1,12 @@
 {{define "content"}}
 <h1>Hardware</h1>
 <div class="toolbar"><a class="btn btn-primary" href="/hardware/new">+ New hardware</a></div>
-{{if .Hardware}}
+{{if .Items}}
 <div class="table-wrap">
 <table>
   <thead><tr><th>Name</th><th>Kind</th><th>Manufacturer</th><th>Model</th><th>Warranty end</th><th></th></tr></thead>
   <tbody>
-  {{range .Hardware}}
+  {{range .Items}}
     <tr>
       <td><a href="/hardware/{{.ID}}">{{.Name}}</a></td>
       <td>{{.Kind}}</td>
