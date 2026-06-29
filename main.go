@@ -44,6 +44,7 @@ func main() {
 		store.NewDomainRepo(db),
 		store.NewCertificateRepo(db),
 		store.NewBackupRepo(db),
+		store.NewHardwareRepo(db),
 		store.NewRelationshipRepo(db),
 		store.NewTagRepo(db),
 		db,

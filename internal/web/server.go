@@ -76,6 +76,16 @@ type backupFormData struct {
 	Backup                                     domain.Backup
 }
 
+type hardwarePageData struct {
+	Title    string
+	Hardware []domain.Hardware
+}
+
+type hardwareFormData struct {
+	Title, Heading, Action, SubmitLabel, Error string
+	Hardware                                   domain.Hardware
+}
+
 // New builds the HTTP handler with all routes wired to the given repos.
 func New(
 	hosts *store.HostRepo,
@@ -84,6 +94,7 @@ func New(
 	domains *store.DomainRepo,
 	certificates *store.CertificateRepo,
 	backups *store.BackupRepo,
+	hardware *store.HardwareRepo,
 	relationships *store.RelationshipRepo,
 	tags *store.TagRepo,
 	db *sql.DB,
@@ -96,6 +107,7 @@ func New(
 	cat := entityCatalog{
 		hosts: hosts, services: services, networks: networks,
 		domains: domains, certificates: certificates, backups: backups,
+		hardware: hardware,
 	}
 	r := chi.NewRouter()
 	r.Get("/", dashboard(cat, relationships))
@@ -150,11 +162,19 @@ func New(
 	r.Post("/backups/{id}", updateBackup(backups))
 	r.Post("/backups/{id}/delete", deleteBackup(backups, relationships, tags))
 
+	r.Get("/hardware", listHardware(hardware))
+	r.Get("/hardware/new", newHardwareForm())
+	r.Post("/hardware", createHardware(hardware))
+	r.Get("/hardware/{id}", showHardware(hardware, cat, tags, relationships))
+	r.Get("/hardware/{id}/edit", editHardwareForm(hardware))
+	r.Post("/hardware/{id}", updateHardware(hardware))
+	r.Post("/hardware/{id}/delete", deleteHardware(hardware, relationships, tags))
+
 	r.Get("/relationships", listRelationships(relationships, cat))
 	r.Post("/relationships", createRelationship(relationships, cat))
 	r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
 	r.Get("/impact", impactView(relationships, cat))
-	r.Get("/checks", healthChecks(services, certificates, relationships))
+	r.Get("/checks", healthChecks(services, certificates, hardware, relationships))
 	r.Get("/search", searchEntities(cat, tags))
 	r.Get("/data", showData())
 	r.Get("/export", exportData(db))
@@ -215,13 +235,14 @@ func impactView(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFun
 }
 
 type checksPageData struct {
-	Title            string
-	WithinDays       int
-	UnbackedServices []domain.Service
-	ExpiringCerts    []domain.Certificate
+	Title              string
+	WithinDays         int
+	UnbackedServices   []domain.Service
+	ExpiringCerts      []domain.Certificate
+	ExpiringWarranties []domain.Hardware
 }
 
-func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, hardware *store.HardwareRepo, rels *store.RelationshipRepo) http.HandlerFunc {
 	const withinDays = 30
 	return func(w http.ResponseWriter, req *http.Request) {
 		svcList, err := services.List()
@@ -234,16 +255,22 @@ func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, rel
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		hwList, err := hardware.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		relList, err := rels.List()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		render(w, "checks.html", checksPageData{
-			Title:            "Checks",
-			WithinDays:       withinDays,
-			UnbackedServices: domain.ServicesWithoutBackup(svcList, relList),
-			ExpiringCerts:    domain.ExpiringSoon(certList, time.Now(), withinDays),
+			Title:              "Checks",
+			WithinDays:         withinDays,
+			UnbackedServices:   domain.ServicesWithoutBackup(svcList, relList),
+			ExpiringCerts:      domain.ExpiringSoon(certList, time.Now(), withinDays),
+			ExpiringWarranties: domain.WarrantyExpiring(hwList, time.Now(), withinDays),
 		})
 	}
 }
@@ -1063,6 +1090,151 @@ func showBackup(repo *store.BackupRepo, cat entityCatalog, tags *store.TagRepo, 
 		}
 		renderDetail(w, cat, tags, rels, "backup", id,
 			"Backup: "+b.Source, b.Notes, fmt.Sprintf("/backups/%d/edit", id), fields)
+	}
+}
+
+func listHardware(repo *store.HardwareRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		items, err := repo.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		render(w, "hardware.html", hardwarePageData{Title: "Hardware", Hardware: items})
+	}
+}
+
+func newHardwareForm() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		render(w, "hardware_form.html", hardwareFormData{
+			Title: "New hardware", Heading: "New hardware", Action: "/hardware", SubmitLabel: "Create",
+		})
+	}
+}
+
+func hardwareFromForm(req *http.Request) domain.Hardware {
+	return domain.Hardware{
+		Name:         strings.TrimSpace(req.FormValue("name")),
+		Kind:         strings.TrimSpace(req.FormValue("kind")),
+		Manufacturer: strings.TrimSpace(req.FormValue("manufacturer")),
+		Model:        strings.TrimSpace(req.FormValue("model")),
+		Serial:       strings.TrimSpace(req.FormValue("serial")),
+		Location:     strings.TrimSpace(req.FormValue("location")),
+		PurchaseDate: strings.TrimSpace(req.FormValue("purchase_date")),
+		WarrantyEnd:  strings.TrimSpace(req.FormValue("warranty_end")),
+		Status:       strings.TrimSpace(req.FormValue("status")),
+		Notes:        req.FormValue("notes"),
+	}
+}
+
+func createHardware(repo *store.HardwareRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		h := hardwareFromForm(req)
+		if err := h.Validate(); err != nil {
+			render(w, "hardware_form.html", hardwareFormData{
+				Title: "New hardware", Heading: "New hardware", Action: "/hardware",
+				SubmitLabel: "Create", Hardware: h, Error: err.Error(),
+			})
+			return
+		}
+		if _, err := repo.Create(h); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/hardware", http.StatusSeeOther)
+	}
+}
+
+func editHardwareForm(repo *store.HardwareRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		h, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "hardware not found", http.StatusNotFound)
+			return
+		}
+		render(w, "hardware_form.html", hardwareFormData{
+			Title: "Edit hardware", Heading: "Edit hardware", Action: fmt.Sprintf("/hardware/%d", id),
+			SubmitLabel: "Save", Hardware: h,
+		})
+	}
+}
+
+func updateHardware(repo *store.HardwareRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		h := hardwareFromForm(req)
+		h.ID = id
+		if err := h.Validate(); err != nil {
+			render(w, "hardware_form.html", hardwareFormData{
+				Title: "Edit hardware", Heading: "Edit hardware", Action: fmt.Sprintf("/hardware/%d", id),
+				SubmitLabel: "Save", Hardware: h, Error: err.Error(),
+			})
+			return
+		}
+		if err := repo.Update(h); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/hardware", http.StatusSeeOther)
+	}
+}
+
+func deleteHardware(repo *store.HardwareRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := rels.DeleteByEntity("hardware", id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := tags.DeleteByEntity("hardware", id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/hardware", http.StatusSeeOther)
+	}
+}
+
+func showHardware(repo *store.HardwareRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		h, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "hardware not found", http.StatusNotFound)
+			return
+		}
+		fields := []fieldRow{
+			{"Kind", h.Kind},
+			{"Manufacturer", h.Manufacturer},
+			{"Model", h.Model},
+			{"Serial", h.Serial},
+			{"Location", h.Location},
+			{"Purchase date", h.PurchaseDate},
+			{"Warranty end", h.WarrantyEnd},
+			{"Status", h.Status},
+		}
+		renderDetail(w, cat, tags, rels, "hardware", id,
+			"Hardware: "+h.Name, h.Notes, fmt.Sprintf("/hardware/%d/edit", id), fields)
 	}
 }
 

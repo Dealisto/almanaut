@@ -68,6 +68,11 @@ func dashboard(cat entityCatalog, rels *store.RelationshipRepo) http.HandlerFunc
 			fail(err)
 			return
 		}
+		hardware, err := cat.hardware.List()
+		if err != nil {
+			fail(err)
+			return
+		}
 		relList, err := rels.List()
 		if err != nil {
 			fail(err)
@@ -81,6 +86,7 @@ func dashboard(cat entityCatalog, rels *store.RelationshipRepo) http.HandlerFunc
 			{"Domains", len(domains), "/domains"},
 			{"Certificates", len(certs), "/certificates"},
 			{"Backups", len(backups), "/backups"},
+			{"Hardware", len(hardware), "/hardware"},
 		}
 
 		expiring := domain.ExpiringSoon(certs, time.Now(), 30)
@@ -101,6 +107,14 @@ func dashboard(cat entityCatalog, rels *store.RelationshipRepo) http.HandlerFunc
 		for _, h := range down {
 			hostItems = append(hostItems, attentionItem{Label: h.Name, URL: fmt.Sprintf("/hosts/%d", h.ID)})
 		}
+		expiringHW := domain.WarrantyExpiring(hardware, time.Now(), 30)
+		hwItems := make([]attentionItem, 0, len(expiringHW))
+		for _, h := range expiringHW {
+			hwItems = append(hwItems, attentionItem{
+				Label: fmt.Sprintf("%s (%s)", h.Name, h.WarrantyEnd),
+				URL:   fmt.Sprintf("/hardware/%d", h.ID),
+			})
+		}
 
 		render(w, "dashboard.html", dashboardData{
 			Title:  "Dashboard",
@@ -109,6 +123,7 @@ func dashboard(cat entityCatalog, rels *store.RelationshipRepo) http.HandlerFunc
 				{Title: "Certificates expiring soon", MoreURL: "/checks", Items: certItems},
 				{Title: "Services without backup", MoreURL: "/checks", Items: svcItems},
 				{Title: "Hosts down", Items: hostItems},
+				{Title: "Hardware warranty expiring", MoreURL: "/checks", Items: hwItems},
 			},
 		})
 	}

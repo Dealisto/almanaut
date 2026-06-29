@@ -1,0 +1,20 @@
+{{define "content"}}
+<h1>{{.Heading}}</h1>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+<form class="stack" method="post" action="{{.Action}}">
+  <label>Name<input name="name" value="{{.Hardware.Name}}" required></label>
+  <label>Kind<input name="kind" value="{{.Hardware.Kind}}" placeholder="ups, switch, disk, nas…"></label>
+  <label>Manufacturer<input name="manufacturer" value="{{.Hardware.Manufacturer}}" placeholder="APC"></label>
+  <label>Model<input name="model" value="{{.Hardware.Model}}" placeholder="Smart-UPS 1500"></label>
+  <label>Serial<input name="serial" value="{{.Hardware.Serial}}"></label>
+  <label>Location<input name="location" value="{{.Hardware.Location}}" placeholder="rack-1"></label>
+  <label>Purchase date<input type="date" name="purchase_date" value="{{.Hardware.PurchaseDate}}"></label>
+  <label>Warranty end<input type="date" name="warranty_end" value="{{.Hardware.WarrantyEnd}}"></label>
+  <label>Status<input name="status" value="{{.Hardware.Status}}" placeholder="active, spare, retired"></label>
+  <label>Notes<textarea name="notes">{{.Hardware.Notes}}</textarea></label>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
+    <a class="btn" href="/hardware">Cancel</a>
+  </div>
+</form>
+{{end}}

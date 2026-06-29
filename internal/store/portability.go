@@ -17,6 +17,7 @@ type Snapshot struct {
 	Domains       []domain.Domain       `yaml:"domains"`
 	Certificates  []domain.Certificate  `yaml:"certificates"`
 	Backups       []domain.Backup       `yaml:"backups"`
+	Hardware      []domain.Hardware     `yaml:"hardware"`
 	Relationships []domain.Relationship `yaml:"relationships"`
 	Tags          []domain.Tag          `yaml:"tags"`
 }
@@ -48,6 +49,10 @@ func Export(db *sql.DB) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	hardware, err := NewHardwareRepo(db).List()
+	if err != nil {
+		return Snapshot{}, err
+	}
 	relationships, err := NewRelationshipRepo(db).List()
 	if err != nil {
 		return Snapshot{}, err
@@ -64,6 +69,7 @@ func Export(db *sql.DB) (Snapshot, error) {
 		Domains:       domains,
 		Certificates:  certificates,
 		Backups:       backups,
+		Hardware:      hardware,
 		Relationships: relationships,
 		Tags:          tags,
 	}, nil
@@ -104,6 +110,11 @@ func Import(db *sql.DB, snap Snapshot) error {
 			return fmt.Errorf("backup %d: %w", b.ID, err)
 		}
 	}
+	for _, h := range snap.Hardware {
+		if err := h.Validate(); err != nil {
+			return fmt.Errorf("hardware %d: %w", h.ID, err)
+		}
+	}
 	for _, rel := range snap.Relationships {
 		if err := rel.Validate(); err != nil {
 			return fmt.Errorf("relationship %d: %w", rel.ID, err)
@@ -121,7 +132,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 	}
 	defer tx.Rollback() // no-op once committed
 
-	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "relationships", "tags"} {
+	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "relationships", "tags"} {
 		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 			return fmt.Errorf("clear %s: %w", table, err)
 		}
@@ -186,6 +197,15 @@ func Import(db *sql.DB, snap Snapshot) error {
 			b.ID, b.Source, b.Destination, b.Frequency, b.LastRun, b.Notes,
 		); err != nil {
 			return fmt.Errorf("insert backup %d: %w", b.ID, err)
+		}
+	}
+	for _, h := range snap.Hardware {
+		if _, err := tx.Exec(
+			`INSERT INTO hardware (id, name, kind, manufacturer, model, serial, location, purchase_date, warranty_end, status, notes)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			h.ID, h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.PurchaseDate, h.WarrantyEnd, h.Status, h.Notes,
+		); err != nil {
+			return fmt.Errorf("insert hardware %d: %w", h.ID, err)
 		}
 	}
 	for _, rel := range snap.Relationships {

@@ -32,4 +32,20 @@
 {{else}}
 <div class="table-wrap"><div class="empty">No certificates expiring soon.</div></div>
 {{end}}
+
+<h2>Hardware warranties expiring within {{.WithinDays}} days</h2>
+{{if .ExpiringWarranties}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Kind</th><th>Warranty end</th></tr></thead>
+  <tbody>
+  {{range .ExpiringWarranties}}
+    <tr><td><a href="/hardware/{{.ID}}/edit">{{.Name}}</a></td><td>{{.Kind}}</td><td>{{.WarrantyEnd}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No hardware warranties expiring soon.</div></div>
+{{end}}
 {{end}}
