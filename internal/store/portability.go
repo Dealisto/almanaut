@@ -18,6 +18,7 @@ type Snapshot struct {
 	Certificates  []domain.Certificate  `yaml:"certificates"`
 	Backups       []domain.Backup       `yaml:"backups"`
 	Hardware      []domain.Hardware     `yaml:"hardware"`
+	Subscriptions []domain.Subscription `yaml:"subscriptions"`
 	Relationships []domain.Relationship `yaml:"relationships"`
 	Tags          []domain.Tag          `yaml:"tags"`
 }
@@ -53,6 +54,10 @@ func Export(db *sql.DB) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	subscriptions, err := NewSubscriptionRepo(db).List()
+	if err != nil {
+		return Snapshot{}, err
+	}
 	relationships, err := NewRelationshipRepo(db).List()
 	if err != nil {
 		return Snapshot{}, err
@@ -70,6 +75,7 @@ func Export(db *sql.DB) (Snapshot, error) {
 		Certificates:  certificates,
 		Backups:       backups,
 		Hardware:      hardware,
+		Subscriptions: subscriptions,
 		Relationships: relationships,
 		Tags:          tags,
 	}, nil
@@ -115,6 +121,11 @@ func Import(db *sql.DB, snap Snapshot) error {
 			return fmt.Errorf("hardware %d: %w", h.ID, err)
 		}
 	}
+	for _, s := range snap.Subscriptions {
+		if err := s.Validate(); err != nil {
+			return fmt.Errorf("subscription %d: %w", s.ID, err)
+		}
+	}
 	for _, rel := range snap.Relationships {
 		if err := rel.Validate(); err != nil {
 			return fmt.Errorf("relationship %d: %w", rel.ID, err)
@@ -132,7 +143,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 	}
 	defer tx.Rollback() // no-op once committed
 
-	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "relationships", "tags"} {
+	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "relationships", "tags"} {
 		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 			return fmt.Errorf("clear %s: %w", table, err)
 		}
@@ -206,6 +217,15 @@ func Import(db *sql.DB, snap Snapshot) error {
 			h.ID, h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.PurchaseDate, h.WarrantyEnd, h.Status, h.Notes,
 		); err != nil {
 			return fmt.Errorf("insert hardware %d: %w", h.ID, err)
+		}
+	}
+	for _, s := range snap.Subscriptions {
+		if _, err := tx.Exec(
+			`INSERT INTO subscriptions (id, name, kind, provider, amount, currency, billing_cycle, renewal_date, auto_renew, status, notes)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			s.ID, s.Name, s.Kind, s.Provider, s.Amount, s.Currency, s.BillingCycle, s.RenewalDate, boolToInt(s.AutoRenew), s.Status, s.Notes,
+		); err != nil {
+			return fmt.Errorf("insert subscription %d: %w", s.ID, err)
 		}
 	}
 	for _, rel := range snap.Relationships {
