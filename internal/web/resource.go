@@ -317,3 +317,19 @@ func parseHardware(r *http.Request, id int64) domain.Hardware {
 		Notes:        r.FormValue("notes"),
 	}
 }
+
+func parseSubscription(r *http.Request, id int64) domain.Subscription {
+	return domain.Subscription{
+		ID:           id,
+		Name:         strings.TrimSpace(r.FormValue("name")),
+		Kind:         strings.TrimSpace(r.FormValue("kind")),
+		Provider:     strings.TrimSpace(r.FormValue("provider")),
+		Amount:       strings.TrimSpace(r.FormValue("amount")),
+		Currency:     strings.TrimSpace(r.FormValue("currency")),
+		BillingCycle: strings.TrimSpace(r.FormValue("billing_cycle")),
+		RenewalDate:  strings.TrimSpace(r.FormValue("renewal_date")),
+		AutoRenew:    r.FormValue("auto_renew") == "on",
+		Status:       strings.TrimSpace(r.FormValue("status")),
+		Notes:        r.FormValue("notes"),
+	}
+}

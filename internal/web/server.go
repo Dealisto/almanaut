@@ -14,16 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type subscriptionsPageData struct {
-	Title         string
-	Subscriptions []domain.Subscription
-}
-
-type subscriptionFormData struct {
-	Title, Heading, Action, SubmitLabel, Error string
-	Subscription                               domain.Subscription
-}
-
 type accountsPageData struct {
 	Title    string
 	Accounts []domain.Account
@@ -216,6 +206,35 @@ func New(cfg Config) http.Handler {
 			newItem:  domain.Hardware{},
 			listTmpl: "hardware.html", formTmpl: "hardware_form.html",
 		},
+		resource[domain.Subscription]{
+			name: "subscriptions", sing: "subscription", title: "Subscriptions", heading: "Subscription",
+			repo:  subscriptions,
+			parse: parseSubscription,
+			label: func(s domain.Subscription) string { return s.Name },
+			id:    func(s domain.Subscription) int64 { return s.ID },
+			notes: func(s domain.Subscription) string { return s.Notes },
+			fields: func(s domain.Subscription) []fieldRow {
+				price := s.Amount
+				if s.Amount != "" && s.Currency != "" {
+					price = s.Amount + " " + s.Currency
+				}
+				autoRenew := "no"
+				if s.AutoRenew {
+					autoRenew = "yes"
+				}
+				return []fieldRow{
+					{"Kind", s.Kind},
+					{"Provider", s.Provider},
+					{"Amount", price},
+					{"Billing cycle", s.BillingCycle},
+					{"Renewal date", s.RenewalDate},
+					{"Auto-renew", autoRenew},
+					{"Status", s.Status},
+				}
+			},
+			newItem:  domain.Subscription{},
+			listTmpl: "subscriptions.html", formTmpl: "subscription_form.html",
+		},
 	}
 	r := chi.NewRouter()
 	r.Get("/", dashboard(cat, relationships))
@@ -225,14 +244,6 @@ func New(cfg Config) http.Handler {
 	r.Post("/tags", addTag(tags))
 	r.Post("/tags/delete", removeTag(tags))
 	r.Get("/tags", tagsOverview(tags, cat))
-
-	r.Get("/subscriptions", listSubscriptions(subscriptions))
-	r.Get("/subscriptions/new", newSubscriptionForm())
-	r.Post("/subscriptions", createSubscription(subscriptions))
-	r.Get("/subscriptions/{id}", showSubscription(subscriptions, cat, tags, relationships))
-	r.Get("/subscriptions/{id}/edit", editSubscriptionForm(subscriptions))
-	r.Post("/subscriptions/{id}", updateSubscription(subscriptions))
-	r.Post("/subscriptions/{id}/delete", deleteSubscription(subscriptions, relationships, tags))
 
 	r.Get("/accounts", listAccounts(accounts))
 	r.Get("/accounts/new", newAccountForm())
@@ -440,158 +451,6 @@ func deleteRelationship(rels *store.RelationshipRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/relationships", http.StatusSeeOther)
-	}
-}
-
-func listSubscriptions(repo *store.SubscriptionRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		subs, err := repo.List()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		render(w, "subscriptions.html", subscriptionsPageData{Title: "Subscriptions", Subscriptions: subs})
-	}
-}
-
-func newSubscriptionForm() http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "subscription_form.html", subscriptionFormData{
-			Title: "New subscription", Heading: "New subscription", Action: "/subscriptions", SubmitLabel: "Create",
-		})
-	}
-}
-
-func subscriptionFromForm(req *http.Request) domain.Subscription {
-	return domain.Subscription{
-		Name:         strings.TrimSpace(req.FormValue("name")),
-		Kind:         strings.TrimSpace(req.FormValue("kind")),
-		Provider:     strings.TrimSpace(req.FormValue("provider")),
-		Amount:       strings.TrimSpace(req.FormValue("amount")),
-		Currency:     strings.TrimSpace(req.FormValue("currency")),
-		BillingCycle: strings.TrimSpace(req.FormValue("billing_cycle")),
-		RenewalDate:  strings.TrimSpace(req.FormValue("renewal_date")),
-		AutoRenew:    req.FormValue("auto_renew") == "on",
-		Status:       strings.TrimSpace(req.FormValue("status")),
-		Notes:        req.FormValue("notes"),
-	}
-}
-
-func createSubscription(repo *store.SubscriptionRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		s := subscriptionFromForm(req)
-		if err := s.Validate(); err != nil {
-			render(w, "subscription_form.html", subscriptionFormData{
-				Title: "New subscription", Heading: "New subscription", Action: "/subscriptions",
-				SubmitLabel: "Create", Subscription: s, Error: err.Error(),
-			})
-			return
-		}
-		if _, err := repo.Create(s); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/subscriptions", http.StatusSeeOther)
-	}
-}
-
-func editSubscriptionForm(repo *store.SubscriptionRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		s, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "subscription not found", http.StatusNotFound)
-			return
-		}
-		render(w, "subscription_form.html", subscriptionFormData{
-			Title: "Edit subscription", Heading: "Edit subscription", Action: fmt.Sprintf("/subscriptions/%d", id),
-			SubmitLabel: "Save", Subscription: s,
-		})
-	}
-}
-
-func updateSubscription(repo *store.SubscriptionRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		s := subscriptionFromForm(req)
-		s.ID = id
-		if err := s.Validate(); err != nil {
-			render(w, "subscription_form.html", subscriptionFormData{
-				Title: "Edit subscription", Heading: "Edit subscription", Action: fmt.Sprintf("/subscriptions/%d", id),
-				SubmitLabel: "Save", Subscription: s, Error: err.Error(),
-			})
-			return
-		}
-		if err := repo.Update(s); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/subscriptions", http.StatusSeeOther)
-	}
-}
-
-func deleteSubscription(repo *store.SubscriptionRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		if err := repo.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := rels.DeleteByEntity("subscription", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := tags.DeleteByEntity("subscription", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/subscriptions", http.StatusSeeOther)
-	}
-}
-
-func showSubscription(repo *store.SubscriptionRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		s, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "subscription not found", http.StatusNotFound)
-			return
-		}
-		price := s.Amount
-		if s.Amount != "" && s.Currency != "" {
-			price = s.Amount + " " + s.Currency
-		}
-		autoRenew := "no"
-		if s.AutoRenew {
-			autoRenew = "yes"
-		}
-		fields := []fieldRow{
-			{"Kind", s.Kind},
-			{"Provider", s.Provider},
-			{"Amount", price},
-			{"Billing cycle", s.BillingCycle},
-			{"Renewal date", s.RenewalDate},
-			{"Auto-renew", autoRenew},
-			{"Status", s.Status},
-		}
-		renderDetail(w, cat, tags, rels, "subscription", id,
-			"Subscription: "+s.Name, s.Notes, fmt.Sprintf("/subscriptions/%d/edit", id), fields)
 	}
 }
 
