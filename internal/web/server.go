@@ -106,26 +106,36 @@ type accountFormData struct {
 	Account                                    domain.Account
 }
 
+// Config bundles everything New needs to build the HTTP handler. Using a struct
+// instead of positional parameters prevents transposing same-typed repos.
+type Config struct {
+	Hosts         *store.HostRepo
+	Services      *store.ServiceRepo
+	Networks      *store.NetworkRepo
+	Domains       *store.DomainRepo
+	Certificates  *store.CertificateRepo
+	Backups       *store.BackupRepo
+	Hardware      *store.HardwareRepo
+	Subscriptions *store.SubscriptionRepo
+	Accounts      *store.AccountRepo
+	Relationships *store.RelationshipRepo
+	Tags          *store.TagRepo
+	DB            *sql.DB
+	Docker        dockerScanner
+	NetScan       networkScanner
+	NetOpts       NetDiscoveryOptions
+	Proxmox       proxmoxScanner
+	PVEOpts       ProxmoxOptions
+}
+
 // New builds the HTTP handler with all routes wired to the given repos.
-func New(
-	hosts *store.HostRepo,
-	services *store.ServiceRepo,
-	networks *store.NetworkRepo,
-	domains *store.DomainRepo,
-	certificates *store.CertificateRepo,
-	backups *store.BackupRepo,
-	hardware *store.HardwareRepo,
-	subscriptions *store.SubscriptionRepo,
-	accounts *store.AccountRepo,
-	relationships *store.RelationshipRepo,
-	tags *store.TagRepo,
-	db *sql.DB,
-	docker dockerScanner,
-	netscan networkScanner,
-	netOpts NetDiscoveryOptions,
-	proxmox proxmoxScanner,
-	pveOpts ProxmoxOptions,
-) http.Handler {
+func New(cfg Config) http.Handler {
+	hosts, services, networks := cfg.Hosts, cfg.Services, cfg.Networks
+	domains, certificates, backups := cfg.Domains, cfg.Certificates, cfg.Backups
+	hardware, subscriptions, accounts := cfg.Hardware, cfg.Subscriptions, cfg.Accounts
+	relationships, tags, db := cfg.Relationships, cfg.Tags, cfg.DB
+	docker, netscan, netOpts := cfg.Docker, cfg.NetScan, cfg.NetOpts
+	proxmox, pveOpts := cfg.Proxmox, cfg.PVEOpts
 	cat := entityCatalog{
 		hosts: hosts, services: services, networks: networks,
 		domains: domains, certificates: certificates, backups: backups,
