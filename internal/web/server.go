@@ -14,16 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type certificatesPageData struct {
-	Title        string
-	Certificates []domain.Certificate
-}
-
-type certificateFormData struct {
-	Title, Heading, Action, SubmitLabel, Error string
-	Certificate                                domain.Certificate
-}
-
 type backupsPageData struct {
 	Title   string
 	Backups []domain.Backup
@@ -186,6 +176,27 @@ func New(cfg Config) http.Handler {
 			newItem:  domain.Domain{},
 			listTmpl: "domains.html", formTmpl: "domain_form.html",
 		},
+		resource[domain.Certificate]{
+			name: "certificates", sing: "certificate", title: "Certificates", heading: "Certificate",
+			repo:  certificates,
+			parse: parseCertificate,
+			label: func(c domain.Certificate) string { return c.Subject },
+			id:    func(c domain.Certificate) int64 { return c.ID },
+			notes: func(c domain.Certificate) string { return c.Notes },
+			fields: func(c domain.Certificate) []fieldRow {
+				autoRenew := "no"
+				if c.AutoRenew {
+					autoRenew = "yes"
+				}
+				return []fieldRow{
+					{"Issuer", c.Issuer},
+					{"Expires on", c.ExpiresOn},
+					{"Auto-renew", autoRenew},
+				}
+			},
+			newItem:  domain.Certificate{},
+			listTmpl: "certificates.html", formTmpl: "certificate_form.html",
+		},
 	}
 	r := chi.NewRouter()
 	r.Get("/", dashboard(cat, relationships))
@@ -195,14 +206,6 @@ func New(cfg Config) http.Handler {
 	r.Post("/tags", addTag(tags))
 	r.Post("/tags/delete", removeTag(tags))
 	r.Get("/tags", tagsOverview(tags, cat))
-
-	r.Get("/certificates", listCertificates(certificates))
-	r.Get("/certificates/new", newCertificateForm())
-	r.Post("/certificates", createCertificate(certificates))
-	r.Get("/certificates/{id}", showCertificate(certificates, cat, tags, relationships))
-	r.Get("/certificates/{id}/edit", editCertificateForm(certificates))
-	r.Post("/certificates/{id}", updateCertificate(certificates))
-	r.Post("/certificates/{id}/delete", deleteCertificate(certificates, relationships, tags))
 
 	r.Get("/backups", listBackups(backups))
 	r.Get("/backups/new", newBackupForm())
@@ -434,119 +437,6 @@ func deleteRelationship(rels *store.RelationshipRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/relationships", http.StatusSeeOther)
-	}
-}
-
-func listCertificates(repo *store.CertificateRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		certs, err := repo.List()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		render(w, "certificates.html", certificatesPageData{Title: "Certificates", Certificates: certs})
-	}
-}
-
-func newCertificateForm() http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "certificate_form.html", certificateFormData{
-			Title: "New certificate", Heading: "New certificate", Action: "/certificates", SubmitLabel: "Create",
-		})
-	}
-}
-
-func certificateFromForm(req *http.Request) domain.Certificate {
-	return domain.Certificate{
-		Subject:   strings.TrimSpace(req.FormValue("subject")),
-		Issuer:    strings.TrimSpace(req.FormValue("issuer")),
-		ExpiresOn: strings.TrimSpace(req.FormValue("expires_on")),
-		AutoRenew: req.FormValue("auto_renew") == "on",
-		Notes:     req.FormValue("notes"),
-	}
-}
-
-func createCertificate(repo *store.CertificateRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		c := certificateFromForm(req)
-		if err := c.Validate(); err != nil {
-			render(w, "certificate_form.html", certificateFormData{
-				Title: "New certificate", Heading: "New certificate", Action: "/certificates",
-				SubmitLabel: "Create", Certificate: c, Error: err.Error(),
-			})
-			return
-		}
-		if _, err := repo.Create(c); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/certificates", http.StatusSeeOther)
-	}
-}
-
-func editCertificateForm(repo *store.CertificateRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		c, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "certificate not found", http.StatusNotFound)
-			return
-		}
-		render(w, "certificate_form.html", certificateFormData{
-			Title: "Edit certificate", Heading: "Edit certificate", Action: fmt.Sprintf("/certificates/%d", id),
-			SubmitLabel: "Save", Certificate: c,
-		})
-	}
-}
-
-func updateCertificate(repo *store.CertificateRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		c := certificateFromForm(req)
-		c.ID = id
-		if err := c.Validate(); err != nil {
-			render(w, "certificate_form.html", certificateFormData{
-				Title: "Edit certificate", Heading: "Edit certificate", Action: fmt.Sprintf("/certificates/%d", id),
-				SubmitLabel: "Save", Certificate: c, Error: err.Error(),
-			})
-			return
-		}
-		if err := repo.Update(c); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/certificates", http.StatusSeeOther)
-	}
-}
-
-func deleteCertificate(repo *store.CertificateRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		if err := repo.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := rels.DeleteByEntity("certificate", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := tags.DeleteByEntity("certificate", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/certificates", http.StatusSeeOther)
 	}
 }
 
@@ -979,32 +869,6 @@ func showSubscription(repo *store.SubscriptionRepo, cat entityCatalog, tags *sto
 		}
 		renderDetail(w, cat, tags, rels, "subscription", id,
 			"Subscription: "+s.Name, s.Notes, fmt.Sprintf("/subscriptions/%d/edit", id), fields)
-	}
-}
-
-func showCertificate(repo *store.CertificateRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		c, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "certificate not found", http.StatusNotFound)
-			return
-		}
-		autoRenew := "no"
-		if c.AutoRenew {
-			autoRenew = "yes"
-		}
-		fields := []fieldRow{
-			{"Issuer", c.Issuer},
-			{"Expires on", c.ExpiresOn},
-			{"Auto-renew", autoRenew},
-		}
-		renderDetail(w, cat, tags, rels, "certificate", id,
-			"Certificate: "+c.Subject, c.Notes, fmt.Sprintf("/certificates/%d/edit", id), fields)
 	}
 }
 

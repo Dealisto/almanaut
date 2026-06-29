@@ -279,3 +279,14 @@ func parseDomain(r *http.Request, id int64) domain.Domain {
 		Notes:    r.FormValue("notes"),
 	}
 }
+
+func parseCertificate(r *http.Request, id int64) domain.Certificate {
+	return domain.Certificate{
+		ID:        id,
+		Subject:   strings.TrimSpace(r.FormValue("subject")),
+		Issuer:    strings.TrimSpace(r.FormValue("issuer")),
+		ExpiresOn: strings.TrimSpace(r.FormValue("expires_on")),
+		AutoRenew: r.FormValue("auto_renew") == "on",
+		Notes:     r.FormValue("notes"),
+	}
+}
