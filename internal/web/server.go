@@ -14,16 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type domainsPageData struct {
-	Title   string
-	Domains []domain.Domain
-}
-
-type domainFormData struct {
-	Title, Heading, Action, SubmitLabel, Error string
-	Domain                                     domain.Domain
-}
-
 type certificatesPageData struct {
 	Title        string
 	Certificates []domain.Certificate
@@ -181,6 +171,21 @@ func New(cfg Config) http.Handler {
 				return nil
 			},
 		},
+		resource[domain.Domain]{
+			name: "domains", sing: "domain", title: "Domains", heading: "Domain",
+			repo:  domains,
+			parse: parseDomain,
+			label: func(d domain.Domain) string { return d.FQDN },
+			id:    func(d domain.Domain) int64 { return d.ID },
+			notes: func(d domain.Domain) string { return d.Notes },
+			fields: func(d domain.Domain) []fieldRow {
+				return []fieldRow{
+					{"Provider", d.Provider},
+				}
+			},
+			newItem:  domain.Domain{},
+			listTmpl: "domains.html", formTmpl: "domain_form.html",
+		},
 	}
 	r := chi.NewRouter()
 	r.Get("/", dashboard(cat, relationships))
@@ -190,14 +195,6 @@ func New(cfg Config) http.Handler {
 	r.Post("/tags", addTag(tags))
 	r.Post("/tags/delete", removeTag(tags))
 	r.Get("/tags", tagsOverview(tags, cat))
-
-	r.Get("/domains", listDomains(domains))
-	r.Get("/domains/new", newDomainForm())
-	r.Post("/domains", createDomain(domains))
-	r.Get("/domains/{id}", showDomain(domains, cat, tags, relationships))
-	r.Get("/domains/{id}/edit", editDomainForm(domains))
-	r.Post("/domains/{id}", updateDomain(domains))
-	r.Post("/domains/{id}/delete", deleteDomain(domains, relationships, tags))
 
 	r.Get("/certificates", listCertificates(certificates))
 	r.Get("/certificates/new", newCertificateForm())
@@ -437,117 +434,6 @@ func deleteRelationship(rels *store.RelationshipRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/relationships", http.StatusSeeOther)
-	}
-}
-
-func listDomains(repo *store.DomainRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		domains, err := repo.List()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		render(w, "domains.html", domainsPageData{Title: "Domains", Domains: domains})
-	}
-}
-
-func newDomainForm() http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "domain_form.html", domainFormData{
-			Title: "New domain", Heading: "New domain", Action: "/domains", SubmitLabel: "Create",
-		})
-	}
-}
-
-func domainFromForm(req *http.Request) domain.Domain {
-	return domain.Domain{
-		FQDN:     strings.TrimSpace(req.FormValue("fqdn")),
-		Provider: strings.TrimSpace(req.FormValue("provider")),
-		Notes:    req.FormValue("notes"),
-	}
-}
-
-func createDomain(repo *store.DomainRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		d := domainFromForm(req)
-		if err := d.Validate(); err != nil {
-			render(w, "domain_form.html", domainFormData{
-				Title: "New domain", Heading: "New domain", Action: "/domains",
-				SubmitLabel: "Create", Domain: d, Error: err.Error(),
-			})
-			return
-		}
-		if _, err := repo.Create(d); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/domains", http.StatusSeeOther)
-	}
-}
-
-func editDomainForm(repo *store.DomainRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		d, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "domain not found", http.StatusNotFound)
-			return
-		}
-		render(w, "domain_form.html", domainFormData{
-			Title: "Edit domain", Heading: "Edit domain", Action: fmt.Sprintf("/domains/%d", id),
-			SubmitLabel: "Save", Domain: d,
-		})
-	}
-}
-
-func updateDomain(repo *store.DomainRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		d := domainFromForm(req)
-		d.ID = id
-		if err := d.Validate(); err != nil {
-			render(w, "domain_form.html", domainFormData{
-				Title: "Edit domain", Heading: "Edit domain", Action: fmt.Sprintf("/domains/%d", id),
-				SubmitLabel: "Save", Domain: d, Error: err.Error(),
-			})
-			return
-		}
-		if err := repo.Update(d); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/domains", http.StatusSeeOther)
-	}
-}
-
-func deleteDomain(repo *store.DomainRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		if err := repo.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := rels.DeleteByEntity("domain", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := tags.DeleteByEntity("domain", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/domains", http.StatusSeeOther)
 	}
 }
 
@@ -1093,26 +979,6 @@ func showSubscription(repo *store.SubscriptionRepo, cat entityCatalog, tags *sto
 		}
 		renderDetail(w, cat, tags, rels, "subscription", id,
 			"Subscription: "+s.Name, s.Notes, fmt.Sprintf("/subscriptions/%d/edit", id), fields)
-	}
-}
-
-func showDomain(repo *store.DomainRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		d, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "domain not found", http.StatusNotFound)
-			return
-		}
-		fields := []fieldRow{
-			{"Provider", d.Provider},
-		}
-		renderDetail(w, cat, tags, rels, "domain", id,
-			"Domain: "+d.FQDN, d.Notes, fmt.Sprintf("/domains/%d/edit", id), fields)
 	}
 }
 

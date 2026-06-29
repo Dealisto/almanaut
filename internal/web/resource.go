@@ -270,3 +270,12 @@ func parseNetwork(r *http.Request, id int64) domain.Network {
 		Notes:   r.FormValue("notes"),
 	}
 }
+
+func parseDomain(r *http.Request, id int64) domain.Domain {
+	return domain.Domain{
+		ID:       id,
+		FQDN:     strings.TrimSpace(r.FormValue("fqdn")),
+		Provider: strings.TrimSpace(r.FormValue("provider")),
+		Notes:    r.FormValue("notes"),
+	}
+}
