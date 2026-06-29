@@ -82,3 +82,23 @@ func WarrantyExpiring(hw []Hardware, now time.Time, withinDays int) []Hardware {
 	sort.Slice(out, func(i, j int) bool { return out[i].WarrantyEnd < out[j].WarrantyEnd })
 	return out
 }
+
+// RenewalsDue returns the subscriptions whose RenewalDate is on or before
+// now+withinDays (including already overdue), sorted by RenewalDate ascending.
+// Subscriptions with an empty or unparseable RenewalDate are skipped.
+func RenewalsDue(subs []Subscription, now time.Time, withinDays int) []Subscription {
+	cutoff := now.AddDate(0, 0, withinDays)
+	out := []Subscription{}
+	for _, s := range subs {
+		due, err := time.Parse(DateLayout, s.RenewalDate)
+		if err != nil {
+			continue
+		}
+		if !due.After(cutoff) { // due <= cutoff
+			out = append(out, s)
+		}
+	}
+	// RenewalDate is YYYY-MM-DD, which sorts lexically in chronological order.
+	sort.Slice(out, func(i, j int) bool { return out[i].RenewalDate < out[j].RenewalDate })
+	return out
+}

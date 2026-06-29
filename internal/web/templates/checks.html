@@ -48,4 +48,20 @@
 {{else}}
 <div class="table-wrap"><div class="empty">No hardware warranties expiring soon.</div></div>
 {{end}}
+
+<h2>Subscriptions renewing within {{.WithinDays}} days</h2>
+{{if .RenewalsDue}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Provider</th><th>Amount</th><th>Renewal</th></tr></thead>
+  <tbody>
+  {{range .RenewalsDue}}
+    <tr><td><a href="/subscriptions/{{.ID}}/edit">{{.Name}}</a></td><td>{{.Provider}}</td><td>{{.Amount}}{{if .Currency}} {{.Currency}}{{end}}</td><td>{{.RenewalDate}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No subscriptions renewing soon.</div></div>
+{{end}}
 {{end}}

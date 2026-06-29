@@ -1,0 +1,20 @@
+{{define "content"}}
+<h1>{{.Heading}}</h1>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+<form class="stack" method="post" action="{{.Action}}">
+  <label>Name<input name="name" value="{{.Subscription.Name}}" required></label>
+  <label>Kind<input name="kind" value="{{.Subscription.Kind}}" placeholder="vps, domain, software license…"></label>
+  <label>Provider<input name="provider" value="{{.Subscription.Provider}}" placeholder="Hetzner, Namecheap…"></label>
+  <label>Amount<input name="amount" value="{{.Subscription.Amount}}" placeholder="12.99"></label>
+  <label>Currency<input name="currency" value="{{.Subscription.Currency}}" placeholder="CAD, USD…"></label>
+  <label>Billing cycle<input name="billing_cycle" value="{{.Subscription.BillingCycle}}" placeholder="monthly, yearly, one-time"></label>
+  <label>Renewal date<input type="date" name="renewal_date" value="{{.Subscription.RenewalDate}}"></label>
+  <label><input type="checkbox" name="auto_renew" {{if .Subscription.AutoRenew}}checked{{end}}> Auto-renew</label>
+  <label>Status<input name="status" value="{{.Subscription.Status}}" placeholder="active, cancelled"></label>
+  <label>Notes<textarea name="notes">{{.Subscription.Notes}}</textarea></label>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
+    <a class="btn" href="/subscriptions">Cancel</a>
+  </div>
+</form>
+{{end}}

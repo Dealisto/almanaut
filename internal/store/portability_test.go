@@ -129,6 +129,44 @@ func TestImportInvalidRollsBack(t *testing.T) {
 	}
 }
 
+func TestPortabilitySubscriptionRoundTrip(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+	if err := Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	if _, err := NewSubscriptionRepo(db).Create(domain.Subscription{
+		Name: "Hetzner VPS", Kind: "vps", Amount: "12.99", Currency: "EUR",
+		BillingCycle: "monthly", RenewalDate: "2027-01-15", AutoRenew: true,
+	}); err != nil {
+		t.Fatalf("seed subscription: %v", err)
+	}
+
+	snap, err := Export(db)
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if len(snap.Subscriptions) != 1 || snap.Subscriptions[0].Name != "Hetzner VPS" {
+		t.Fatalf("export subscriptions = %+v", snap.Subscriptions)
+	}
+
+	if err := Import(db, snap); err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	list, err := NewSubscriptionRepo(db).List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 1 || list[0].Amount != "12.99" || !list[0].AutoRenew {
+		t.Fatalf("after import: %+v", list)
+	}
+}
+
 func TestPortabilityHardwareRoundTrip(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := Open(dbPath)

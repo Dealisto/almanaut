@@ -63,10 +63,11 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 		certificates := &bucket{typ: "certificate", path: "/certificates", heading: "Certificates"}
 		backups := &bucket{typ: "backup", path: "/backups", heading: "Backups"}
 		hardware := &bucket{typ: "hardware", path: "/hardware", heading: "Hardware"}
+		subscriptions := &bucket{typ: "subscription", path: "/subscriptions", heading: "Subscriptions"}
 		buckets := map[string]*bucket{
 			"host": hosts, "service": services, "network": networks,
 			"domain": domains, "certificate": certificates, "backup": backups,
-			"hardware": hardware,
+			"hardware": hardware, "subscription": subscriptions,
 		}
 
 		seen := map[string]bool{}      // dedupe by "type:id"
@@ -161,6 +162,18 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 			}
 		}
 
+		subscriptionList, err := cat.subscriptions.List()
+		if err != nil {
+			fail(err)
+			return
+		}
+		for _, s := range subscriptionList {
+			labelOf[fmt.Sprintf("subscription:%d", s.ID)] = s.Name
+			if matchesQuery([]string{s.Name, s.Kind, s.Provider, s.Currency, s.BillingCycle, s.Status, s.Notes}, q) {
+				add(subscriptions, s.ID, s.Name)
+			}
+		}
+
 		// Fold in tag matches: a matching tag pulls its entity into that group.
 		tagged, err := tags.Search(q)
 		if err != nil {
@@ -179,7 +192,7 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 			add(b, tg.EntityID, label)
 		}
 
-		for _, b := range []*bucket{hosts, services, networks, domains, certificates, backups, hardware} {
+		for _, b := range []*bucket{hosts, services, networks, domains, certificates, backups, hardware, subscriptions} {
 			if len(b.hits) == 0 {
 				continue
 			}

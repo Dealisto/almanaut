@@ -86,6 +86,16 @@ type hardwareFormData struct {
 	Hardware                                   domain.Hardware
 }
 
+type subscriptionsPageData struct {
+	Title         string
+	Subscriptions []domain.Subscription
+}
+
+type subscriptionFormData struct {
+	Title, Heading, Action, SubmitLabel, Error string
+	Subscription                               domain.Subscription
+}
+
 // New builds the HTTP handler with all routes wired to the given repos.
 func New(
 	hosts *store.HostRepo,
@@ -95,6 +105,7 @@ func New(
 	certificates *store.CertificateRepo,
 	backups *store.BackupRepo,
 	hardware *store.HardwareRepo,
+	subscriptions *store.SubscriptionRepo,
 	relationships *store.RelationshipRepo,
 	tags *store.TagRepo,
 	db *sql.DB,
@@ -107,7 +118,7 @@ func New(
 	cat := entityCatalog{
 		hosts: hosts, services: services, networks: networks,
 		domains: domains, certificates: certificates, backups: backups,
-		hardware: hardware,
+		hardware: hardware, subscriptions: subscriptions,
 	}
 	r := chi.NewRouter()
 	r.Get("/", dashboard(cat, relationships))
@@ -170,11 +181,19 @@ func New(
 	r.Post("/hardware/{id}", updateHardware(hardware))
 	r.Post("/hardware/{id}/delete", deleteHardware(hardware, relationships, tags))
 
+	r.Get("/subscriptions", listSubscriptions(subscriptions))
+	r.Get("/subscriptions/new", newSubscriptionForm())
+	r.Post("/subscriptions", createSubscription(subscriptions))
+	r.Get("/subscriptions/{id}", showSubscription(subscriptions, cat, tags, relationships))
+	r.Get("/subscriptions/{id}/edit", editSubscriptionForm(subscriptions))
+	r.Post("/subscriptions/{id}", updateSubscription(subscriptions))
+	r.Post("/subscriptions/{id}/delete", deleteSubscription(subscriptions, relationships, tags))
+
 	r.Get("/relationships", listRelationships(relationships, cat))
 	r.Post("/relationships", createRelationship(relationships, cat))
 	r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
 	r.Get("/impact", impactView(relationships, cat))
-	r.Get("/checks", healthChecks(services, certificates, hardware, relationships))
+	r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
 	r.Get("/search", searchEntities(cat, tags))
 	r.Get("/data", showData())
 	r.Get("/export", exportData(db))
@@ -240,9 +259,10 @@ type checksPageData struct {
 	UnbackedServices   []domain.Service
 	ExpiringCerts      []domain.Certificate
 	ExpiringWarranties []domain.Hardware
+	RenewalsDue        []domain.Subscription
 }
 
-func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, hardware *store.HardwareRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, hardware *store.HardwareRepo, subscriptions *store.SubscriptionRepo, rels *store.RelationshipRepo) http.HandlerFunc {
 	const withinDays = 30
 	return func(w http.ResponseWriter, req *http.Request) {
 		svcList, err := services.List()
@@ -260,6 +280,11 @@ func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, har
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		subList, err := subscriptions.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		relList, err := rels.List()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -271,6 +296,7 @@ func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, har
 			UnbackedServices:   domain.ServicesWithoutBackup(svcList, relList),
 			ExpiringCerts:      domain.ExpiringSoon(certList, time.Now(), withinDays),
 			ExpiringWarranties: domain.WarrantyExpiring(hwList, time.Now(), withinDays),
+			RenewalsDue:        domain.RenewalsDue(subList, time.Now(), withinDays),
 		})
 	}
 }
@@ -1235,6 +1261,158 @@ func showHardware(repo *store.HardwareRepo, cat entityCatalog, tags *store.TagRe
 		}
 		renderDetail(w, cat, tags, rels, "hardware", id,
 			"Hardware: "+h.Name, h.Notes, fmt.Sprintf("/hardware/%d/edit", id), fields)
+	}
+}
+
+func listSubscriptions(repo *store.SubscriptionRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		subs, err := repo.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		render(w, "subscriptions.html", subscriptionsPageData{Title: "Subscriptions", Subscriptions: subs})
+	}
+}
+
+func newSubscriptionForm() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		render(w, "subscription_form.html", subscriptionFormData{
+			Title: "New subscription", Heading: "New subscription", Action: "/subscriptions", SubmitLabel: "Create",
+		})
+	}
+}
+
+func subscriptionFromForm(req *http.Request) domain.Subscription {
+	return domain.Subscription{
+		Name:         strings.TrimSpace(req.FormValue("name")),
+		Kind:         strings.TrimSpace(req.FormValue("kind")),
+		Provider:     strings.TrimSpace(req.FormValue("provider")),
+		Amount:       strings.TrimSpace(req.FormValue("amount")),
+		Currency:     strings.TrimSpace(req.FormValue("currency")),
+		BillingCycle: strings.TrimSpace(req.FormValue("billing_cycle")),
+		RenewalDate:  strings.TrimSpace(req.FormValue("renewal_date")),
+		AutoRenew:    req.FormValue("auto_renew") == "on",
+		Status:       strings.TrimSpace(req.FormValue("status")),
+		Notes:        req.FormValue("notes"),
+	}
+}
+
+func createSubscription(repo *store.SubscriptionRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		s := subscriptionFromForm(req)
+		if err := s.Validate(); err != nil {
+			render(w, "subscription_form.html", subscriptionFormData{
+				Title: "New subscription", Heading: "New subscription", Action: "/subscriptions",
+				SubmitLabel: "Create", Subscription: s, Error: err.Error(),
+			})
+			return
+		}
+		if _, err := repo.Create(s); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/subscriptions", http.StatusSeeOther)
+	}
+}
+
+func editSubscriptionForm(repo *store.SubscriptionRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		s, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "subscription not found", http.StatusNotFound)
+			return
+		}
+		render(w, "subscription_form.html", subscriptionFormData{
+			Title: "Edit subscription", Heading: "Edit subscription", Action: fmt.Sprintf("/subscriptions/%d", id),
+			SubmitLabel: "Save", Subscription: s,
+		})
+	}
+}
+
+func updateSubscription(repo *store.SubscriptionRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		s := subscriptionFromForm(req)
+		s.ID = id
+		if err := s.Validate(); err != nil {
+			render(w, "subscription_form.html", subscriptionFormData{
+				Title: "Edit subscription", Heading: "Edit subscription", Action: fmt.Sprintf("/subscriptions/%d", id),
+				SubmitLabel: "Save", Subscription: s, Error: err.Error(),
+			})
+			return
+		}
+		if err := repo.Update(s); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/subscriptions", http.StatusSeeOther)
+	}
+}
+
+func deleteSubscription(repo *store.SubscriptionRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := repo.Delete(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := rels.DeleteByEntity("subscription", id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := tags.DeleteByEntity("subscription", id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, req, "/subscriptions", http.StatusSeeOther)
+	}
+}
+
+func showSubscription(repo *store.SubscriptionRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		s, err := repo.Get(id)
+		if err != nil {
+			http.Error(w, "subscription not found", http.StatusNotFound)
+			return
+		}
+		price := s.Amount
+		if s.Amount != "" && s.Currency != "" {
+			price = s.Amount + " " + s.Currency
+		}
+		autoRenew := "no"
+		if s.AutoRenew {
+			autoRenew = "yes"
+		}
+		fields := []fieldRow{
+			{"Kind", s.Kind},
+			{"Provider", s.Provider},
+			{"Amount", price},
+			{"Billing cycle", s.BillingCycle},
+			{"Renewal date", s.RenewalDate},
+			{"Auto-renew", autoRenew},
+			{"Status", s.Status},
+		}
+		renderDetail(w, cat, tags, rels, "subscription", id,
+			"Subscription: "+s.Name, s.Notes, fmt.Sprintf("/subscriptions/%d/edit", id), fields)
 	}
 }
 
