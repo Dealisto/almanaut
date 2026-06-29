@@ -193,7 +193,7 @@ func New(
 	r.Post("/relationships", createRelationship(relationships, cat))
 	r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
 	r.Get("/impact", impactView(relationships, cat))
-	r.Get("/checks", healthChecks(services, certificates, hardware, relationships))
+	r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
 	r.Get("/search", searchEntities(cat, tags))
 	r.Get("/data", showData())
 	r.Get("/export", exportData(db))
@@ -259,9 +259,10 @@ type checksPageData struct {
 	UnbackedServices   []domain.Service
 	ExpiringCerts      []domain.Certificate
 	ExpiringWarranties []domain.Hardware
+	RenewalsDue        []domain.Subscription
 }
 
-func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, hardware *store.HardwareRepo, rels *store.RelationshipRepo) http.HandlerFunc {
+func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, hardware *store.HardwareRepo, subscriptions *store.SubscriptionRepo, rels *store.RelationshipRepo) http.HandlerFunc {
 	const withinDays = 30
 	return func(w http.ResponseWriter, req *http.Request) {
 		svcList, err := services.List()
@@ -279,6 +280,11 @@ func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, har
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		subList, err := subscriptions.List()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		relList, err := rels.List()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -290,6 +296,7 @@ func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, har
 			UnbackedServices:   domain.ServicesWithoutBackup(svcList, relList),
 			ExpiringCerts:      domain.ExpiringSoon(certList, time.Now(), withinDays),
 			ExpiringWarranties: domain.WarrantyExpiring(hwList, time.Now(), withinDays),
+			RenewalsDue:        domain.RenewalsDue(subList, time.Now(), withinDays),
 		})
 	}
 }
