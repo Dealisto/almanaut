@@ -19,6 +19,7 @@ type Snapshot struct {
 	Backups       []domain.Backup       `yaml:"backups"`
 	Hardware      []domain.Hardware     `yaml:"hardware"`
 	Subscriptions []domain.Subscription `yaml:"subscriptions"`
+	Accounts      []domain.Account      `yaml:"accounts"`
 	Relationships []domain.Relationship `yaml:"relationships"`
 	Tags          []domain.Tag          `yaml:"tags"`
 }
@@ -58,6 +59,10 @@ func Export(db *sql.DB) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	accounts, err := NewAccountRepo(db).List()
+	if err != nil {
+		return Snapshot{}, err
+	}
 	relationships, err := NewRelationshipRepo(db).List()
 	if err != nil {
 		return Snapshot{}, err
@@ -76,6 +81,7 @@ func Export(db *sql.DB) (Snapshot, error) {
 		Backups:       backups,
 		Hardware:      hardware,
 		Subscriptions: subscriptions,
+		Accounts:      accounts,
 		Relationships: relationships,
 		Tags:          tags,
 	}, nil
@@ -126,6 +132,11 @@ func Import(db *sql.DB, snap Snapshot) error {
 			return fmt.Errorf("subscription %d: %w", s.ID, err)
 		}
 	}
+	for _, a := range snap.Accounts {
+		if err := a.Validate(); err != nil {
+			return fmt.Errorf("account %d: %w", a.ID, err)
+		}
+	}
 	for _, rel := range snap.Relationships {
 		if err := rel.Validate(); err != nil {
 			return fmt.Errorf("relationship %d: %w", rel.ID, err)
@@ -143,7 +154,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 	}
 	defer tx.Rollback() // no-op once committed
 
-	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "relationships", "tags"} {
+	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "relationships", "tags"} {
 		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 			return fmt.Errorf("clear %s: %w", table, err)
 		}
@@ -226,6 +237,15 @@ func Import(db *sql.DB, snap Snapshot) error {
 			s.ID, s.Name, s.Kind, s.Provider, s.Amount, s.Currency, s.BillingCycle, s.RenewalDate, boolToInt(s.AutoRenew), s.Status, s.Notes,
 		); err != nil {
 			return fmt.Errorf("insert subscription %d: %w", s.ID, err)
+		}
+	}
+	for _, a := range snap.Accounts {
+		if _, err := tx.Exec(
+			`INSERT INTO accounts (id, name, kind, username, password_manager, secret_ref, url, status, notes)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			a.ID, a.Name, a.Kind, a.Username, a.PasswordManager, a.SecretRef, a.URL, a.Status, a.Notes,
+		); err != nil {
+			return fmt.Errorf("insert account %d: %w", a.ID, err)
 		}
 	}
 	for _, rel := range snap.Relationships {
