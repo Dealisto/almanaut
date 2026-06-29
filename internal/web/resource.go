@@ -333,3 +333,17 @@ func parseSubscription(r *http.Request, id int64) domain.Subscription {
 		Notes:        r.FormValue("notes"),
 	}
 }
+
+func parseAccount(r *http.Request, id int64) domain.Account {
+	return domain.Account{
+		ID:              id,
+		Name:            strings.TrimSpace(r.FormValue("name")),
+		Kind:            strings.TrimSpace(r.FormValue("kind")),
+		Username:        strings.TrimSpace(r.FormValue("username")),
+		PasswordManager: strings.TrimSpace(r.FormValue("password_manager")),
+		SecretRef:       strings.TrimSpace(r.FormValue("secret_ref")),
+		URL:             strings.TrimSpace(r.FormValue("url")),
+		Status:          strings.TrimSpace(r.FormValue("status")),
+		Notes:           r.FormValue("notes"),
+	}
+}

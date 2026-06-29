@@ -14,16 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type accountsPageData struct {
-	Title    string
-	Accounts []domain.Account
-}
-
-type accountFormData struct {
-	Title, Heading, Action, SubmitLabel, Error string
-	Account                                    domain.Account
-}
-
 // Config bundles everything New needs to build the HTTP handler. Using a struct
 // instead of positional parameters prevents transposing same-typed repos.
 type Config struct {
@@ -235,6 +225,26 @@ func New(cfg Config) http.Handler {
 			newItem:  domain.Subscription{},
 			listTmpl: "subscriptions.html", formTmpl: "subscription_form.html",
 		},
+		resource[domain.Account]{
+			name: "accounts", sing: "account", title: "Accounts", heading: "Account",
+			repo:  accounts,
+			parse: parseAccount,
+			label: func(a domain.Account) string { return a.Name },
+			id:    func(a domain.Account) int64 { return a.ID },
+			notes: func(a domain.Account) string { return a.Notes },
+			fields: func(a domain.Account) []fieldRow {
+				return []fieldRow{
+					{"Kind", a.Kind},
+					{"Username", a.Username},
+					{"Password manager", a.PasswordManager},
+					{"Secret ref", a.SecretRef},
+					{"URL", a.URL},
+					{"Status", a.Status},
+				}
+			},
+			newItem:  domain.Account{},
+			listTmpl: "accounts.html", formTmpl: "account_form.html",
+		},
 	}
 	r := chi.NewRouter()
 	r.Get("/", dashboard(cat, relationships))
@@ -244,14 +254,6 @@ func New(cfg Config) http.Handler {
 	r.Post("/tags", addTag(tags))
 	r.Post("/tags/delete", removeTag(tags))
 	r.Get("/tags", tagsOverview(tags, cat))
-
-	r.Get("/accounts", listAccounts(accounts))
-	r.Get("/accounts/new", newAccountForm())
-	r.Post("/accounts", createAccount(accounts))
-	r.Get("/accounts/{id}", showAccount(accounts, cat, tags, relationships))
-	r.Get("/accounts/{id}/edit", editAccountForm(accounts))
-	r.Post("/accounts/{id}", updateAccount(accounts))
-	r.Post("/accounts/{id}/delete", deleteAccount(accounts, relationships, tags))
 
 	r.Get("/relationships", listRelationships(relationships, cat))
 	r.Post("/relationships", createRelationship(relationships, cat))
@@ -548,149 +550,6 @@ func removeTag(tags *store.TagRepo) http.HandlerFunc {
 		entityType := req.FormValue("entity_type")
 		entityID, _ := strconv.ParseInt(req.FormValue("entity_id"), 10, 64)
 		http.Redirect(w, req, fmt.Sprintf("/%ss/%d", entityType, entityID), http.StatusSeeOther)
-	}
-}
-
-func accountFromForm(req *http.Request) domain.Account {
-	return domain.Account{
-		Name:            strings.TrimSpace(req.FormValue("name")),
-		Kind:            strings.TrimSpace(req.FormValue("kind")),
-		Username:        strings.TrimSpace(req.FormValue("username")),
-		PasswordManager: strings.TrimSpace(req.FormValue("password_manager")),
-		SecretRef:       strings.TrimSpace(req.FormValue("secret_ref")),
-		URL:             strings.TrimSpace(req.FormValue("url")),
-		Status:          strings.TrimSpace(req.FormValue("status")),
-		Notes:           req.FormValue("notes"),
-	}
-}
-
-func listAccounts(repo *store.AccountRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		accounts, err := repo.List()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		render(w, "accounts.html", accountsPageData{Title: "Accounts", Accounts: accounts})
-	}
-}
-
-func newAccountForm() http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "account_form.html", accountFormData{
-			Title: "New account", Heading: "New account",
-			Action: "/accounts", SubmitLabel: "Create",
-		})
-	}
-}
-
-func createAccount(repo *store.AccountRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		a := accountFromForm(req)
-		if err := a.Validate(); err != nil {
-			render(w, "account_form.html", accountFormData{
-				Title: "New account", Heading: "New account", Action: "/accounts",
-				SubmitLabel: "Create", Account: a, Error: err.Error(),
-			})
-			return
-		}
-		if _, err := repo.Create(a); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/accounts", http.StatusSeeOther)
-	}
-}
-
-func showAccount(repo *store.AccountRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		a, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		fields := []fieldRow{
-			{"Kind", a.Kind},
-			{"Username", a.Username},
-			{"Password manager", a.PasswordManager},
-			{"Secret ref", a.SecretRef},
-			{"URL", a.URL},
-			{"Status", a.Status},
-		}
-		renderDetail(w, cat, tags, rels, "account", id,
-			"Account: "+a.Name, a.Notes, fmt.Sprintf("/accounts/%d/edit", id), fields)
-	}
-}
-
-func editAccountForm(repo *store.AccountRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		a, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		render(w, "account_form.html", accountFormData{
-			Title: "Edit account", Heading: "Edit account",
-			Action: fmt.Sprintf("/accounts/%d", id), SubmitLabel: "Save", Account: a,
-		})
-	}
-}
-
-func updateAccount(repo *store.AccountRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		a := accountFromForm(req)
-		a.ID = id
-		if err := a.Validate(); err != nil {
-			render(w, "account_form.html", accountFormData{
-				Title: "Edit account", Heading: "Edit account",
-				Action: fmt.Sprintf("/accounts/%d", id), SubmitLabel: "Save",
-				Account: a, Error: err.Error(),
-			})
-			return
-		}
-		if err := repo.Update(a); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/accounts", http.StatusSeeOther)
-	}
-}
-
-func deleteAccount(repo *store.AccountRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		if err := repo.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := rels.DeleteByEntity("account", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := tags.DeleteByEntity("account", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/accounts", http.StatusSeeOther)
 	}
 }
 
