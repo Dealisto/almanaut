@@ -14,17 +14,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type hostsPageData struct {
-	Title string
-	Hosts []domain.Host
-}
-
-type hostFormData struct {
-	Title, Heading, Action, SubmitLabel, Error string
-	Host                                       domain.Host
-	Types                                      []string
-}
-
 type servicesPageData struct {
 	Title    string
 	Services []domain.Service
@@ -141,15 +130,31 @@ func New(cfg Config) http.Handler {
 		domains: domains, certificates: certificates, backups: backups,
 		hardware: hardware, subscriptions: subscriptions, accounts: accounts,
 	}
+	deps := handlerDeps{cat: cat, tags: tags, rels: relationships}
+	resources := []mountable{
+		resource[domain.Host]{
+			name: "hosts", sing: "host", title: "Hosts", heading: "Host",
+			repo:  hosts,
+			parse: parseHost,
+			label: func(h domain.Host) string { return h.Name },
+			id:    func(h domain.Host) int64 { return h.ID },
+			notes: func(h domain.Host) string { return h.Notes },
+			fields: func(h domain.Host) []fieldRow {
+				return []fieldRow{
+					{"Type", h.Type}, {"OS", h.OS}, {"CPU", h.CPU}, {"RAM", h.RAM},
+					{"Disk", h.Disk}, {"Status", h.Status}, {"IPs", strings.Join(h.IPs, ", ")},
+				}
+			},
+			newItem:  domain.Host{Type: "physical"},
+			listTmpl: "hosts.html", formTmpl: "host_form.html",
+			extras: func() map[string]any { return map[string]any{"Types": domain.HostTypes} },
+		},
+	}
 	r := chi.NewRouter()
 	r.Get("/", dashboard(cat, relationships))
-	r.Get("/hosts", listHosts(hosts))
-	r.Get("/hosts/new", newHostForm())
-	r.Post("/hosts", createHost(hosts))
-	r.Get("/hosts/{id}", showHost(hosts, cat, tags, relationships))
-	r.Get("/hosts/{id}/edit", editHostForm(hosts))
-	r.Post("/hosts/{id}", updateHost(hosts))
-	r.Post("/hosts/{id}/delete", deleteHost(hosts, relationships, tags))
+	for _, rs := range resources {
+		rs.mount(r, deps)
+	}
 	r.Post("/tags", addTag(tags))
 	r.Post("/tags/delete", removeTag(tags))
 	r.Get("/tags", tagsOverview(tags, cat))
@@ -416,148 +421,6 @@ func deleteRelationship(rels *store.RelationshipRepo) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/relationships", http.StatusSeeOther)
-	}
-}
-
-func listHosts(repo *store.HostRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		hosts, err := repo.List()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		render(w, "hosts.html", hostsPageData{Title: "Hosts", Hosts: hosts})
-	}
-}
-
-func newHostForm() http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "host_form.html", hostFormData{
-			Title:       "New host",
-			Heading:     "New host",
-			Action:      "/hosts",
-			SubmitLabel: "Create",
-			Host:        domain.Host{Type: "physical"},
-			Types:       domain.HostTypes,
-		})
-	}
-}
-
-func createHost(repo *store.HostRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		host := domain.Host{
-			Name:   strings.TrimSpace(req.FormValue("name")),
-			Type:   req.FormValue("type"),
-			OS:     req.FormValue("os"),
-			CPU:    req.FormValue("cpu"),
-			RAM:    req.FormValue("ram"),
-			Disk:   req.FormValue("disk"),
-			Status: req.FormValue("status"),
-			Notes:  req.FormValue("notes"),
-			IPs:    parseIPs(req.FormValue("ips")),
-		}
-		if err := host.Validate(); err != nil {
-			render(w, "host_form.html", hostFormData{
-				Title:       "New host",
-				Heading:     "New host",
-				Action:      "/hosts",
-				SubmitLabel: "Create",
-				Host:        host,
-				Types:       domain.HostTypes,
-				Error:       err.Error(),
-			})
-			return
-		}
-		if _, err := repo.Create(host); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
-	}
-}
-
-func editHostForm(repo *store.HostRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		host, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "host not found", http.StatusNotFound)
-			return
-		}
-		render(w, "host_form.html", hostFormData{
-			Title:       "Edit host",
-			Heading:     "Edit host",
-			Action:      fmt.Sprintf("/hosts/%d", id),
-			SubmitLabel: "Save",
-			Host:        host,
-			Types:       domain.HostTypes,
-		})
-	}
-}
-
-func updateHost(repo *store.HostRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		host := domain.Host{
-			ID:     id,
-			Name:   strings.TrimSpace(req.FormValue("name")),
-			Type:   req.FormValue("type"),
-			OS:     req.FormValue("os"),
-			CPU:    req.FormValue("cpu"),
-			RAM:    req.FormValue("ram"),
-			Disk:   req.FormValue("disk"),
-			Status: req.FormValue("status"),
-			Notes:  req.FormValue("notes"),
-			IPs:    parseIPs(req.FormValue("ips")),
-		}
-		if err := host.Validate(); err != nil {
-			render(w, "host_form.html", hostFormData{
-				Title:       "Edit host",
-				Heading:     "Edit host",
-				Action:      fmt.Sprintf("/hosts/%d", id),
-				SubmitLabel: "Save",
-				Host:        host,
-				Types:       domain.HostTypes,
-				Error:       err.Error(),
-			})
-			return
-		}
-		if err := repo.Update(host); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
-	}
-}
-
-func deleteHost(repo *store.HostRepo, rels *store.RelationshipRepo, tags *store.TagRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		if err := repo.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := rels.DeleteByEntity("host", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := tags.DeleteByEntity("host", id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
 	}
 }
 
@@ -1442,32 +1305,6 @@ func showSubscription(repo *store.SubscriptionRepo, cat entityCatalog, tags *sto
 		}
 		renderDetail(w, cat, tags, rels, "subscription", id,
 			"Subscription: "+s.Name, s.Notes, fmt.Sprintf("/subscriptions/%d/edit", id), fields)
-	}
-}
-
-func showHost(repo *store.HostRepo, cat entityCatalog, tags *store.TagRepo, rels *store.RelationshipRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
-			return
-		}
-		h, err := repo.Get(id)
-		if err != nil {
-			http.Error(w, "host not found", http.StatusNotFound)
-			return
-		}
-		fields := []fieldRow{
-			{"Type", h.Type},
-			{"OS", h.OS},
-			{"CPU", h.CPU},
-			{"RAM", h.RAM},
-			{"Disk", h.Disk},
-			{"Status", h.Status},
-			{"IPs", strings.Join(h.IPs, ", ")},
-		}
-		renderDetail(w, cat, tags, rels, "host", id,
-			"Host: "+h.Name, h.Notes, fmt.Sprintf("/hosts/%d/edit", id), fields)
 	}
 }
 
