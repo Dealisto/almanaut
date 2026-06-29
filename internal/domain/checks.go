@@ -62,3 +62,23 @@ func HostsDown(hosts []Host) []Host {
 	}
 	return out
 }
+
+// WarrantyExpiring returns the hardware whose WarrantyEnd date is on or before
+// now+withinDays (including already-expired), sorted by WarrantyEnd ascending.
+// Hardware with an empty or unparseable WarrantyEnd is skipped.
+func WarrantyExpiring(hw []Hardware, now time.Time, withinDays int) []Hardware {
+	cutoff := now.AddDate(0, 0, withinDays)
+	out := []Hardware{}
+	for _, h := range hw {
+		end, err := time.Parse(DateLayout, h.WarrantyEnd)
+		if err != nil {
+			continue
+		}
+		if !end.After(cutoff) { // end <= cutoff
+			out = append(out, h)
+		}
+	}
+	// WarrantyEnd is YYYY-MM-DD, which sorts lexically in chronological order.
+	sort.Slice(out, func(i, j int) bool { return out[i].WarrantyEnd < out[j].WarrantyEnd })
+	return out
+}

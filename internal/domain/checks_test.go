@@ -55,3 +55,22 @@ func TestHostsDown(t *testing.T) {
 		t.Errorf("wrong hosts or order: %+v", down)
 	}
 }
+
+func TestWarrantyExpiring(t *testing.T) {
+	now := time.Date(2026, 6, 28, 0, 0, 0, 0, time.UTC)
+	hw := []Hardware{
+		{ID: 1, Name: "expired", WarrantyEnd: "2026-01-01"},
+		{ID: 2, Name: "soon", WarrantyEnd: "2026-07-10"},
+		{ID: 3, Name: "far", WarrantyEnd: "2030-01-01"},
+		{ID: 4, Name: "none", WarrantyEnd: ""},
+		{ID: 5, Name: "bad", WarrantyEnd: "whenever"},
+	}
+	got := WarrantyExpiring(hw, now, 30)
+	if len(got) != 2 {
+		t.Fatalf("got %d items, want 2: %+v", len(got), got)
+	}
+	// sorted ascending by date: expired (2026-01-01) before soon (2026-07-10)
+	if got[0].Name != "expired" || got[1].Name != "soon" {
+		t.Errorf("unexpected order: %s, %s", got[0].Name, got[1].Name)
+	}
+}
