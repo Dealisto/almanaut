@@ -74,3 +74,21 @@ func TestWarrantyExpiring(t *testing.T) {
 		t.Errorf("unexpected order: %s, %s", got[0].Name, got[1].Name)
 	}
 }
+
+func TestRenewalsDue(t *testing.T) {
+	now := time.Date(2026, 6, 29, 0, 0, 0, 0, time.UTC)
+	subs := []Subscription{
+		{ID: 1, Name: "overdue", RenewalDate: "2026-01-01"},
+		{ID: 2, Name: "soon", RenewalDate: "2026-07-10"},
+		{ID: 3, Name: "far", RenewalDate: "2030-01-01"},
+		{ID: 4, Name: "none", RenewalDate: ""},
+		{ID: 5, Name: "bad", RenewalDate: "whenever"},
+	}
+	got := RenewalsDue(subs, now, 30)
+	if len(got) != 2 {
+		t.Fatalf("got %d items, want 2: %+v", len(got), got)
+	}
+	if got[0].Name != "overdue" || got[1].Name != "soon" {
+		t.Errorf("unexpected order: %s, %s", got[0].Name, got[1].Name)
+	}
+}
