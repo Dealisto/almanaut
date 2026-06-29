@@ -61,7 +61,7 @@ func newTestServerFull(t *testing.T, docker dockerScanner, netscan networkScanne
 	}
 	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db),
 		store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db),
-		store.NewHardwareRepo(db), store.NewSubscriptionRepo(db),
+		store.NewHardwareRepo(db), store.NewSubscriptionRepo(db), store.NewAccountRepo(db),
 		store.NewRelationshipRepo(db), store.NewTagRepo(db), db,
 		docker, netscan, opts, fakeProxmoxScanner{}, ProxmoxOptions{})
 }
@@ -98,7 +98,7 @@ func newTestServerProxmoxRepos(t *testing.T, pve proxmoxScanner, opts ProxmoxOpt
 	rels := store.NewRelationshipRepo(db)
 	srv := New(hosts, store.NewServiceRepo(db), store.NewNetworkRepo(db),
 		store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db),
-		store.NewHardwareRepo(db), store.NewSubscriptionRepo(db),
+		store.NewHardwareRepo(db), store.NewSubscriptionRepo(db), store.NewAccountRepo(db),
 		rels, store.NewTagRepo(db), db,
 		fakeScanner{}, fakeNetworkScanner{}, NetDiscoveryOptions{}, pve, opts)
 	return srv, hosts, rels
@@ -1328,7 +1328,7 @@ func newTestServerDockerDB(t *testing.T, scanner dockerScanner) (http.Handler, *
 	}
 	srv := New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db),
 		store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db),
-		store.NewHardwareRepo(db), store.NewSubscriptionRepo(db),
+		store.NewHardwareRepo(db), store.NewSubscriptionRepo(db), store.NewAccountRepo(db),
 		store.NewRelationshipRepo(db), store.NewTagRepo(db), db,
 		scanner, fakeNetworkScanner{}, NetDiscoveryOptions{}, fakeProxmoxScanner{}, ProxmoxOptions{})
 	return srv, db
@@ -1520,5 +1520,47 @@ func TestCreateSubscriptionInvalidShowsError(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "name is required") {
 		t.Errorf("invalid POST body missing validation error")
+	}
+}
+
+func TestCreateAndListAccount(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := url.Values{
+		"name":             {"Proxmox root"},
+		"kind":             {"admin"},
+		"username":         {"root@pam"},
+		"password_manager": {"Bitwarden"},
+		"secret_ref":       {"Homelab > Proxmox"},
+		"status":           {"active"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/accounts", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /accounts status = %d, want 303", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/accounts", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /accounts status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Proxmox root") {
+		t.Errorf("GET /accounts missing created account; body:\n%s", rec.Body.String())
+	}
+}
+
+func TestCreateAccountInvalidShowsError(t *testing.T) {
+	srv := newTestServer(t)
+
+	rec := postForm(t, srv, "/accounts", url.Values{"name": {"   "}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("invalid POST /accounts status = %d, want 200 (form re-render)", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "name is required") {
+		t.Errorf("expected validation error in body; got:\n%s", rec.Body.String())
 	}
 }

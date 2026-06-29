@@ -167,6 +167,49 @@ func TestPortabilitySubscriptionRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPortabilityAccountRoundTrip(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+	if err := Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	acc := domain.Account{
+		Name: "Grafana admin", Kind: "admin", Username: "admin",
+		PasswordManager: "Bitwarden", SecretRef: "Homelab > Grafana",
+		URL: "https://grafana.lan", Status: "active", Notes: "shared",
+	}
+	id, err := NewAccountRepo(db).Create(acc)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	snap, err := Export(db)
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if len(snap.Accounts) != 1 || snap.Accounts[0].Name != "Grafana admin" {
+		t.Fatalf("export accounts = %+v", snap.Accounts)
+	}
+
+	if err := Import(db, snap); err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+
+	got, err := NewAccountRepo(db).Get(id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	acc.ID = id
+	if got != acc {
+		t.Errorf("round-trip mismatch:\n got  %+v\n want %+v", got, acc)
+	}
+}
+
 func TestPortabilityHardwareRoundTrip(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := Open(dbPath)

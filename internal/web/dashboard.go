@@ -78,6 +78,11 @@ func dashboard(cat entityCatalog, rels *store.RelationshipRepo) http.HandlerFunc
 			fail(err)
 			return
 		}
+		accounts, err := cat.accounts.List()
+		if err != nil {
+			fail(err)
+			return
+		}
 		relList, err := rels.List()
 		if err != nil {
 			fail(err)
@@ -93,6 +98,7 @@ func dashboard(cat entityCatalog, rels *store.RelationshipRepo) http.HandlerFunc
 			{"Backups", len(backups), "/backups"},
 			{"Hardware", len(hardware), "/hardware"},
 			{"Subscriptions", len(subscriptions), "/subscriptions"},
+			{"Accounts", len(accounts), "/accounts"},
 		}
 
 		expiring := domain.ExpiringSoon(certs, time.Now(), 30)
