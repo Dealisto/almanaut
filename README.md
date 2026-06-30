@@ -41,6 +41,11 @@ unauthenticated and intended for a trusted LAN or an authenticated reverse proxy
 Basic auth transmits credentials base64-encoded (not encrypted), so terminate TLS
 in front of Almanaut when exposing it beyond localhost.
 
+Note that `/export` returns the **entire inventory**, including account entries
+(usernames, password-manager names, and secret references). In the default
+unauthenticated mode anyone who can reach the server can download it, so enable
+auth (or an authenticated reverse proxy) before storing anything sensitive.
+
 ## Health & version
 
 Two unauthenticated endpoints are always available (they bypass basic auth so

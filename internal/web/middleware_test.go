@@ -11,6 +11,48 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+func TestSecurityHeadersSet(t *testing.T) {
+	h := securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	want := map[string]string{
+		"X-Content-Type-Options": "nosniff",
+		"X-Frame-Options":        "DENY",
+		"Referrer-Policy":        "no-referrer",
+	}
+	for k, v := range want {
+		if got := rec.Header().Get(k); got != v {
+			t.Errorf("header %s = %q, want %q", k, got, v)
+		}
+	}
+	csp := rec.Header().Get("Content-Security-Policy")
+	for _, want := range []string{"default-src 'self'", "frame-ancestors 'none'", "form-action 'self'", "object-src 'none'"} {
+		if !strings.Contains(csp, want) {
+			t.Errorf("CSP %q missing %q", csp, want)
+		}
+	}
+}
+
+// Headers must be applied through the full middleware stack, including on the
+// unauthenticated /healthz endpoint.
+func TestSecurityHeadersWiredOnServer(t *testing.T) {
+	srv := newTestServer(t)
+	for _, path := range []string{"/hosts", "/healthz"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+			t.Errorf("GET %s: missing nosniff header", path)
+		}
+		if rec.Header().Get("Content-Security-Policy") == "" {
+			t.Errorf("GET %s: missing Content-Security-Policy header", path)
+		}
+	}
+}
+
 func TestRecovererReturns500AndLogsPanic(t *testing.T) {
 	var buf bytes.Buffer
 	logger := log.New(&buf, "", 0)
