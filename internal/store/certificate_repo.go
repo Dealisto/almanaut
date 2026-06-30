@@ -27,13 +27,6 @@ func (r *CertificateRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
-}
-
 // Create inserts c and returns its new ID.
 func (r *CertificateRepo) Create(c domain.Certificate) (int64, error) {
 	res, err := r.db.Exec(
