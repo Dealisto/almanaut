@@ -27,6 +27,15 @@ func (r *AccountRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
+// Count returns the number of accounts.
+func (r *AccountRepo) Count() (int, error) {
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM accounts`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count accounts: %w", err)
+	}
+	return n, nil
+}
+
 const accountColumns = `id, name, kind, username, password_manager, secret_ref, url, status, notes`
 
 // Create inserts a and returns its new ID.

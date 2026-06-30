@@ -27,6 +27,15 @@ func (r *NetworkRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
+// Count returns the number of networks.
+func (r *NetworkRepo) Count() (int, error) {
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM networks`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count networks: %w", err)
+	}
+	return n, nil
+}
+
 // Create inserts n and returns its new ID.
 func (r *NetworkRepo) Create(n domain.Network) (int64, error) {
 	res, err := r.db.Exec(
