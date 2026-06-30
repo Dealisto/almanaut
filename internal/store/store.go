@@ -17,5 +17,13 @@ func Open(dbPath string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
+	// SQLite allows only one writer at a time. Capping the pool at a single
+	// connection serializes writes in Go rather than relying on busy_timeout to
+	// absorb SQLITE_BUSY collisions between concurrent writers. For this app's
+	// load a single connection is the simplest contention-free choice; keep it
+	// open so the per-connection pragmas above are not re-established repeatedly.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxIdleTime(0)
 	return db, nil
 }
