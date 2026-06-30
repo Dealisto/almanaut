@@ -92,59 +92,21 @@ func Export(db *sql.DB) (Snapshot, error) {
 // error), then clears all tables and re-inserts each row with its original id
 // so relationship and tag references stay valid. Any failure rolls back.
 func Import(db *sql.DB, snap Snapshot) error {
-	for _, h := range snap.Hosts {
-		if err := h.Validate(); err != nil {
-			return fmt.Errorf("host %d: %w", h.ID, err)
-		}
-	}
-	for _, s := range snap.Services {
-		if err := s.Validate(); err != nil {
-			return fmt.Errorf("service %d: %w", s.ID, err)
-		}
-	}
-	for _, n := range snap.Networks {
-		if err := n.Validate(); err != nil {
-			return fmt.Errorf("network %d: %w", n.ID, err)
-		}
-	}
-	for _, d := range snap.Domains {
-		if err := d.Validate(); err != nil {
-			return fmt.Errorf("domain %d: %w", d.ID, err)
-		}
-	}
-	for _, c := range snap.Certificates {
-		if err := c.Validate(); err != nil {
-			return fmt.Errorf("certificate %d: %w", c.ID, err)
-		}
-	}
-	for _, b := range snap.Backups {
-		if err := b.Validate(); err != nil {
-			return fmt.Errorf("backup %d: %w", b.ID, err)
-		}
-	}
-	for _, h := range snap.Hardware {
-		if err := h.Validate(); err != nil {
-			return fmt.Errorf("hardware %d: %w", h.ID, err)
-		}
-	}
-	for _, s := range snap.Subscriptions {
-		if err := s.Validate(); err != nil {
-			return fmt.Errorf("subscription %d: %w", s.ID, err)
-		}
-	}
-	for _, a := range snap.Accounts {
-		if err := a.Validate(); err != nil {
-			return fmt.Errorf("account %d: %w", a.ID, err)
-		}
-	}
-	for _, rel := range snap.Relationships {
-		if err := rel.Validate(); err != nil {
-			return fmt.Errorf("relationship %d: %w", rel.ID, err)
-		}
-	}
-	for _, tg := range snap.Tags {
-		if err := tg.Validate(); err != nil {
-			return fmt.Errorf("tag %d: %w", tg.ID, err)
+	for _, err := range []error{
+		validateAll("host", snap.Hosts, func(h domain.Host) int64 { return h.ID }),
+		validateAll("service", snap.Services, func(s domain.Service) int64 { return s.ID }),
+		validateAll("network", snap.Networks, func(n domain.Network) int64 { return n.ID }),
+		validateAll("domain", snap.Domains, func(d domain.Domain) int64 { return d.ID }),
+		validateAll("certificate", snap.Certificates, func(c domain.Certificate) int64 { return c.ID }),
+		validateAll("backup", snap.Backups, func(b domain.Backup) int64 { return b.ID }),
+		validateAll("hardware", snap.Hardware, func(h domain.Hardware) int64 { return h.ID }),
+		validateAll("subscription", snap.Subscriptions, func(s domain.Subscription) int64 { return s.ID }),
+		validateAll("account", snap.Accounts, func(a domain.Account) int64 { return a.ID }),
+		validateAll("relationship", snap.Relationships, func(r domain.Relationship) int64 { return r.ID }),
+		validateAll("tag", snap.Tags, func(t domain.Tag) int64 { return t.ID }),
+	} {
+		if err != nil {
+			return err
 		}
 	}
 
@@ -160,6 +122,14 @@ func Import(db *sql.DB, snap Snapshot) error {
 		}
 	}
 
+	// insert runs one INSERT and tags any failure with the entity label and id.
+	insert := func(label string, id int64, query string, args ...any) error {
+		if _, err := tx.Exec(query, args...); err != nil {
+			return fmt.Errorf("insert %s %d: %w", label, id, err)
+		}
+		return nil
+	}
+
 	for _, h := range snap.Hosts {
 		ips := h.IPs
 		if ips == nil {
@@ -169,105 +139,105 @@ func Import(db *sql.DB, snap Snapshot) error {
 		if err != nil {
 			return fmt.Errorf("marshal ips for host %d: %w", h.ID, err)
 		}
-		if _, err := tx.Exec(
+		if err := insert("host", h.ID,
 			`INSERT INTO hosts (id, name, type, os, cpu, ram, disk, status, ips, notes)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			h.ID, h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(raw), h.Notes,
-		); err != nil {
-			return fmt.Errorf("insert host %d: %w", h.ID, err)
+			h.ID, h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(raw), h.Notes); err != nil {
+			return err
 		}
 	}
 	for _, s := range snap.Services {
-		if _, err := tx.Exec(
+		if err := insert("service", s.ID,
 			`INSERT INTO services (id, name, kind, url, ports, category, notes)
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			s.ID, s.Name, s.Kind, s.URL, s.Ports, s.Category, s.Notes,
-		); err != nil {
-			return fmt.Errorf("insert service %d: %w", s.ID, err)
+			s.ID, s.Name, s.Kind, s.URL, s.Ports, s.Category, s.Notes); err != nil {
+			return err
 		}
 	}
 	for _, n := range snap.Networks {
-		if _, err := tx.Exec(
+		if err := insert("network", n.ID,
 			`INSERT INTO networks (id, name, cidr, vlan, gateway, notes)
 			 VALUES (?, ?, ?, ?, ?, ?)`,
-			n.ID, n.Name, n.CIDR, n.VLAN, n.Gateway, n.Notes,
-		); err != nil {
-			return fmt.Errorf("insert network %d: %w", n.ID, err)
+			n.ID, n.Name, n.CIDR, n.VLAN, n.Gateway, n.Notes); err != nil {
+			return err
 		}
 	}
 	for _, d := range snap.Domains {
-		if _, err := tx.Exec(
+		if err := insert("domain", d.ID,
 			`INSERT INTO domains (id, fqdn, provider, notes) VALUES (?, ?, ?, ?)`,
-			d.ID, d.FQDN, d.Provider, d.Notes,
-		); err != nil {
-			return fmt.Errorf("insert domain %d: %w", d.ID, err)
+			d.ID, d.FQDN, d.Provider, d.Notes); err != nil {
+			return err
 		}
 	}
 	for _, c := range snap.Certificates {
-		if _, err := tx.Exec(
+		if err := insert("certificate", c.ID,
 			`INSERT INTO certificates (id, subject, issuer, expires_on, auto_renew, notes)
 			 VALUES (?, ?, ?, ?, ?, ?)`,
-			c.ID, c.Subject, c.Issuer, c.ExpiresOn, boolToInt(c.AutoRenew), c.Notes,
-		); err != nil {
-			return fmt.Errorf("insert certificate %d: %w", c.ID, err)
+			c.ID, c.Subject, c.Issuer, c.ExpiresOn, boolToInt(c.AutoRenew), c.Notes); err != nil {
+			return err
 		}
 	}
 	for _, b := range snap.Backups {
-		if _, err := tx.Exec(
+		if err := insert("backup", b.ID,
 			`INSERT INTO backups (id, source, destination, frequency, last_run, notes)
 			 VALUES (?, ?, ?, ?, ?, ?)`,
-			b.ID, b.Source, b.Destination, b.Frequency, b.LastRun, b.Notes,
-		); err != nil {
-			return fmt.Errorf("insert backup %d: %w", b.ID, err)
+			b.ID, b.Source, b.Destination, b.Frequency, b.LastRun, b.Notes); err != nil {
+			return err
 		}
 	}
 	for _, h := range snap.Hardware {
-		if _, err := tx.Exec(
+		if err := insert("hardware", h.ID,
 			`INSERT INTO hardware (id, name, kind, manufacturer, model, serial, location, purchase_date, warranty_end, status, notes)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			h.ID, h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.PurchaseDate, h.WarrantyEnd, h.Status, h.Notes,
-		); err != nil {
-			return fmt.Errorf("insert hardware %d: %w", h.ID, err)
+			h.ID, h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.PurchaseDate, h.WarrantyEnd, h.Status, h.Notes); err != nil {
+			return err
 		}
 	}
 	for _, s := range snap.Subscriptions {
-		if _, err := tx.Exec(
+		if err := insert("subscription", s.ID,
 			`INSERT INTO subscriptions (id, name, kind, provider, amount, currency, billing_cycle, renewal_date, auto_renew, status, notes)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			s.ID, s.Name, s.Kind, s.Provider, s.Amount, s.Currency, s.BillingCycle, s.RenewalDate, boolToInt(s.AutoRenew), s.Status, s.Notes,
-		); err != nil {
-			return fmt.Errorf("insert subscription %d: %w", s.ID, err)
+			s.ID, s.Name, s.Kind, s.Provider, s.Amount, s.Currency, s.BillingCycle, s.RenewalDate, boolToInt(s.AutoRenew), s.Status, s.Notes); err != nil {
+			return err
 		}
 	}
 	for _, a := range snap.Accounts {
-		if _, err := tx.Exec(
+		if err := insert("account", a.ID,
 			`INSERT INTO accounts (id, name, kind, username, password_manager, secret_ref, url, status, notes)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			a.ID, a.Name, a.Kind, a.Username, a.PasswordManager, a.SecretRef, a.URL, a.Status, a.Notes,
-		); err != nil {
-			return fmt.Errorf("insert account %d: %w", a.ID, err)
+			a.ID, a.Name, a.Kind, a.Username, a.PasswordManager, a.SecretRef, a.URL, a.Status, a.Notes); err != nil {
+			return err
 		}
 	}
 	for _, rel := range snap.Relationships {
-		if _, err := tx.Exec(
+		if err := insert("relationship", rel.ID,
 			`INSERT INTO relationships (id, from_type, from_id, to_type, to_id, kind)
 			 VALUES (?, ?, ?, ?, ?, ?)`,
-			rel.ID, rel.FromType, rel.FromID, rel.ToType, rel.ToID, rel.Kind,
-		); err != nil {
-			return fmt.Errorf("insert relationship %d: %w", rel.ID, err)
+			rel.ID, rel.FromType, rel.FromID, rel.ToType, rel.ToID, rel.Kind); err != nil {
+			return err
 		}
 	}
 	for _, tg := range snap.Tags {
-		if _, err := tx.Exec(
+		if err := insert("tag", tg.ID,
 			`INSERT INTO tags (id, entity_type, entity_id, name) VALUES (?, ?, ?, ?)`,
-			tg.ID, tg.EntityType, tg.EntityID, tg.Name,
-		); err != nil {
-			return fmt.Errorf("insert tag %d: %w", tg.ID, err)
+			tg.ID, tg.EntityType, tg.EntityID, tg.Name); err != nil {
+			return err
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
+}
+
+// validateAll validates every item, returning the first failure tagged with the
+// entity label and id. id extracts the record id for the error message.
+func validateAll[T interface{ Validate() error }](label string, items []T, id func(T) int64) error {
+	for _, it := range items {
+		if err := it.Validate(); err != nil {
+			return fmt.Errorf("%s %d: %w", label, id(it), err)
+		}
 	}
 	return nil
 }
