@@ -2,6 +2,7 @@
 <h1>{{.Heading}}</h1>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
+{{ csrfField }}
   <label>Name<input name="name" value="{{.Item.Name}}" required></label>
   <label>Kind<input name="kind" value="{{.Item.Kind}}" placeholder="vps, domain, software license…"></label>
   <label>Provider<input name="provider" value="{{.Item.Provider}}" placeholder="Hetzner, Namecheap…"></label>

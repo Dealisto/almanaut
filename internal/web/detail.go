@@ -86,6 +86,7 @@ func buildIPAMSection(u domain.NetworkUsage) ipamSection {
 // and an optional IPAM section (nil for entities that have none).
 func renderDetailExtra(
 	w http.ResponseWriter,
+	r *http.Request,
 	cat entityCatalog,
 	tags *store.TagRepo,
 	rels *store.RelationshipRepo,
@@ -127,7 +128,7 @@ func renderDetailExtra(
 		related = append(related, relatedItem{Text: text})
 	}
 
-	render(w, "detail.html", detailData{
+	render(w, r, "detail.html", detailData{
 		Title:      heading,
 		Heading:    heading,
 		EntityType: entityType,

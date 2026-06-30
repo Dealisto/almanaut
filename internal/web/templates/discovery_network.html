@@ -2,6 +2,7 @@
 <h1>Network discovery</h1>
 <p>Scan a subnet to discover live hosts and their open ports. Discovery proposes; you confirm. Manual data is never overwritten.</p>
 <form class="stack" method="post" action="/discovery/network/scan">
+{{ csrfField }}
   <label>Subnet (CIDR)
     <input type="text" name="subnet" value="{{.Subnet}}" placeholder="192.168.1.0/24" required>
   </label>
@@ -14,6 +15,7 @@
 {{if .Scanned}}
 {{if .Rows}}
 <form method="post" action="/discovery/network/import">
+{{ csrfField }}
   <label>Import discovered hosts as type
     <select name="type">
       {{range .Types}}<option value="{{.}}"{{if eq . $.SelectedType}} selected{{end}}>{{.}}</option>{{end}}

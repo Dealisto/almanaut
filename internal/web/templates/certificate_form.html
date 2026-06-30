@@ -2,6 +2,7 @@
 <h1>{{.Heading}}</h1>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
+{{ csrfField }}
   <label>Subject<input name="subject" value="{{.Item.Subject}}" placeholder="*.example.com" required></label>
   <label>Issuer<input name="issuer" value="{{.Item.Issuer}}" placeholder="Let's Encrypt"></label>
   <label>Expires on<input type="date" name="expires_on" value="{{.Item.ExpiresOn}}" required></label>

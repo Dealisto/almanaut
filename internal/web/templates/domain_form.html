@@ -2,6 +2,7 @@
 <h1>{{.Heading}}</h1>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
+{{ csrfField }}
   <label>FQDN<input name="fqdn" value="{{.Item.FQDN}}" placeholder="jellyfin.example.com" required></label>
   <label>DNS provider<input name="provider" value="{{.Item.Provider}}"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>

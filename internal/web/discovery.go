@@ -66,7 +66,7 @@ type dockerReviewData struct {
 
 func discoveryLanding(opts NetDiscoveryOptions, pve ProxmoxOptions) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "discovery.html", discoveryLandingData{
+		render(w, req, "discovery.html", discoveryLandingData{
 			Title: "Discover", NetworkEnabled: opts.Enabled, ProxmoxEnabled: pve.Enabled,
 		})
 	}
@@ -85,7 +85,7 @@ func scanDocker(scanner dockerScanner, services *store.ServiceRepo, hosts *store
 		containers, err := scanner.Containers(req.Context())
 		if err != nil {
 			data.Error = "Could not reach the Docker socket: " + err.Error()
-			render(w, "discovery_docker.html", data)
+			render(w, req, "discovery_docker.html", data)
 			return
 		}
 		existing, err := services.List()
@@ -105,7 +105,7 @@ func scanDocker(scanner dockerScanner, services *store.ServiceRepo, hosts *store
 				AlreadyTracked: p.AlreadyTracked,
 			})
 		}
-		render(w, "discovery_docker.html", data)
+		render(w, req, "discovery_docker.html", data)
 	}
 }
 
@@ -132,7 +132,7 @@ func networkForm(opts NetDiscoveryOptions) http.HandlerFunc {
 			http.NotFound(w, req)
 			return
 		}
-		render(w, "discovery_network.html", networkDiscoveryData{
+		render(w, req, "discovery_network.html", networkDiscoveryData{
 			Title: "Network discovery", Subnet: opts.DefaultSubnet,
 			Types: domain.HostTypes, SelectedType: "physical",
 		})
@@ -157,7 +157,7 @@ func scanNetwork(netscan networkScanner, hosts *store.HostRepo, opts NetDiscover
 		}
 		if subnet == "" {
 			data.Error = "Subnet is required."
-			render(w, "discovery_network.html", data)
+			render(w, req, "discovery_network.html", data)
 			return
 		}
 		var ports []int
@@ -165,7 +165,7 @@ func scanNetwork(netscan networkScanner, hosts *store.HostRepo, opts NetDiscover
 			p, err := discovery.ParsePorts(portsInput)
 			if err != nil {
 				data.Error = "Invalid ports: " + err.Error()
-				render(w, "discovery_network.html", data)
+				render(w, req, "discovery_network.html", data)
 				return
 			}
 			ports = p
@@ -173,7 +173,7 @@ func scanNetwork(netscan networkScanner, hosts *store.HostRepo, opts NetDiscover
 		scanned, err := netscan.Scan(req.Context(), subnet, ports)
 		if err != nil {
 			data.Error = "Scan failed: " + err.Error()
-			render(w, "discovery_network.html", data)
+			render(w, req, "discovery_network.html", data)
 			return
 		}
 		existing, err := hosts.List()
@@ -190,7 +190,7 @@ func scanNetwork(netscan networkScanner, hosts *store.HostRepo, opts NetDiscover
 				IP: p.IP, Name: p.Host.Name, Ports: p.Ports, AlreadyTracked: p.AlreadyTracked,
 			})
 		}
-		render(w, "discovery_network.html", data)
+		render(w, req, "discovery_network.html", data)
 	}
 }
 
@@ -277,7 +277,7 @@ func scanProxmox(scanner proxmoxScanner, hosts *store.HostRepo, opts ProxmoxOpti
 		res, err := scanner.Resources(req.Context())
 		if err != nil {
 			data.Error = "Could not reach the Proxmox API: " + err.Error()
-			render(w, "discovery_proxmox.html", data)
+			render(w, req, "discovery_proxmox.html", data)
 			return
 		}
 		existing, err := hosts.List()
@@ -294,7 +294,7 @@ func scanProxmox(scanner proxmoxScanner, hosts *store.HostRepo, opts ProxmoxOpti
 				CPU: p.Host.CPU, RAM: p.Host.RAM, Disk: p.Host.Disk, AlreadyTracked: p.AlreadyTracked,
 			})
 		}
-		render(w, "discovery_proxmox.html", data)
+		render(w, req, "discovery_proxmox.html", data)
 	}
 }
 

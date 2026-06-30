@@ -103,11 +103,11 @@ func (rs resource[T]) list(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	render(w, rs.listTmpl, listData[T]{Title: rs.title, Items: items})
+	render(w, req, rs.listTmpl, listData[T]{Title: rs.title, Items: items})
 }
 
 func (rs resource[T]) newForm(w http.ResponseWriter, req *http.Request) {
-	render(w, rs.formTmpl, formData[T]{
+	render(w, req, rs.formTmpl, formData[T]{
 		Title:       "New " + rs.sing,
 		Heading:     "New " + rs.sing,
 		Action:      rs.basePath(),
@@ -120,7 +120,7 @@ func (rs resource[T]) newForm(w http.ResponseWriter, req *http.Request) {
 func (rs resource[T]) create(w http.ResponseWriter, req *http.Request) {
 	item := rs.parse(req, 0)
 	if err := item.Validate(); err != nil {
-		render(w, rs.formTmpl, formData[T]{
+		render(w, req, rs.formTmpl, formData[T]{
 			Title: "New " + rs.sing, Heading: "New " + rs.sing,
 			Action: rs.basePath(), SubmitLabel: "Create",
 			Item: item, Extras: rs.extraData(), Error: err.Error(),
@@ -144,7 +144,7 @@ func (rs resource[T]) editForm(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, rs.sing+" not found", http.StatusNotFound)
 		return
 	}
-	render(w, rs.formTmpl, formData[T]{
+	render(w, req, rs.formTmpl, formData[T]{
 		Title: "Edit " + rs.sing, Heading: "Edit " + rs.sing,
 		Action: fmt.Sprintf("%s/%d", rs.basePath(), id), SubmitLabel: "Save",
 		Item: item, Extras: rs.extraData(),
@@ -158,7 +158,7 @@ func (rs resource[T]) update(w http.ResponseWriter, req *http.Request) {
 	}
 	item := rs.parse(req, id)
 	if err := item.Validate(); err != nil {
-		render(w, rs.formTmpl, formData[T]{
+		render(w, req, rs.formTmpl, formData[T]{
 			Title: "Edit " + rs.sing, Heading: "Edit " + rs.sing,
 			Action: fmt.Sprintf("%s/%d", rs.basePath(), id), SubmitLabel: "Save",
 			Item: item, Extras: rs.extraData(), Error: err.Error(),
@@ -187,7 +187,7 @@ func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
 		if rs.ipam != nil {
 			ipam = rs.ipam(item)
 		}
-		renderDetailExtra(w, d.cat, d.tags, d.rels, rs.sing, id,
+		renderDetailExtra(w, req, d.cat, d.tags, d.rels, rs.sing, id,
 			rs.heading+": "+rs.label(item), rs.notes(item),
 			fmt.Sprintf("%s/%d/edit", rs.basePath(), id), rs.fields(item), ipam)
 	}

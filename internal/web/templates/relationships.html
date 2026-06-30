@@ -3,6 +3,7 @@
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 {{if .Options}}
 <form class="stack" method="post" action="/relationships">
+{{ csrfField }}
   <label>From
     <select name="from">{{range .Options}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
   </label>
@@ -30,6 +31,7 @@
       <td>
         <form class="form-inline" method="post" action="/relationships/{{.ID}}/delete"
               onsubmit="return confirm('Delete this relationship?');">
+          {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
       </td>

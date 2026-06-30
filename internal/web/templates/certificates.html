@@ -16,6 +16,7 @@
         <a class="btn" href="/certificates/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/certificates/{{.ID}}/delete"
               onsubmit="return confirm('Delete this certificate?');">
+          {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
       </td>

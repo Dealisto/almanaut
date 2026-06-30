@@ -17,7 +17,7 @@ type dataPageData struct {
 
 func showData() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, "data.html", dataPageData{
+		render(w, req, "data.html", dataPageData{
 			Title:    "Data",
 			Imported: req.URL.Query().Get("imported") == "1",
 		})
@@ -70,11 +70,11 @@ func importData(db *sql.DB) http.HandlerFunc {
 		}
 		var snap store.Snapshot
 		if err := yaml.Unmarshal(raw, &snap); err != nil {
-			render(w, "data.html", dataPageData{Title: "Data", Error: "invalid YAML: " + err.Error()})
+			render(w, req, "data.html", dataPageData{Title: "Data", Error: "invalid YAML: " + err.Error()})
 			return
 		}
 		if err := store.Import(db, snap); err != nil {
-			render(w, "data.html", dataPageData{Title: "Data", Error: err.Error()})
+			render(w, req, "data.html", dataPageData{Title: "Data", Error: err.Error()})
 			return
 		}
 		http.Redirect(w, req, "/data?imported=1", http.StatusSeeOther)

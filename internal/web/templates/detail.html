@@ -45,6 +45,7 @@
   {{range .Tags}}
     <span class="tag">#{{.Name}}
       <form class="form-inline" method="post" action="/tags/delete">
+        {{ csrfField }}
         <input type="hidden" name="id" value="{{.ID}}">
         <input type="hidden" name="entity_type" value="{{.EntityType}}">
         <input type="hidden" name="entity_id" value="{{.EntityID}}">
@@ -54,6 +55,7 @@
   {{else}}<em>No tags.</em>{{end}}
 </div>
 <form class="form-inline" method="post" action="/tags">
+  {{ csrfField }}
   <input type="hidden" name="entity_type" value="{{.EntityType}}">
   <input type="hidden" name="entity_id" value="{{.EntityID}}">
   <input name="tag" placeholder="add a tag" required>

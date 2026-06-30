@@ -3,6 +3,7 @@
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 {{if .Rows}}
 <form method="post" action="/discovery/proxmox/import">
+{{ csrfField }}
   <label><input type="checkbox" name="link" value="on" checked> Link VMs/LXC to their Proxmox node</label>
   <div class="table-wrap">
   <table>

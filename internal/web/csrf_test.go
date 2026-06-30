@@ -1,10 +1,13 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/Dealisto/almanaut/internal/domain"
 )
 
 // passThrough records whether the wrapped handler was reached.
@@ -92,5 +95,44 @@ func TestCSRFTokenFromContextIsSet(t *testing.T) {
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
 	if seen == "" {
 		t.Fatal("csrfTokenFrom(ctx) must return the per-request token inside the chain")
+	}
+}
+
+func TestCSRFRoundTripGeneratedToken(t *testing.T) {
+	// generate a real token and use it as both cookie and form field; the handler must be reached.
+	tok, err := generateCSRFToken()
+	if err != nil {
+		t.Fatalf("generateCSRFToken: %v", err)
+	}
+	var reached bool
+	h := csrfProtect(passThrough(&reached))
+
+	body := strings.NewReader(csrfFieldName + "=" + tok)
+	req := httptest.NewRequest(http.MethodPost, "/hosts", body)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: tok})
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if !reached || rec.Code != http.StatusOK {
+		t.Fatalf("round-trip with generated token must pass: reached=%v code=%d", reached, rec.Code)
+	}
+}
+
+func TestRenderInjectsCSRFField(t *testing.T) {
+	// Build a request whose context carries a known token, render a form page,
+	// and assert the hidden field is present with that token.
+	r := httptest.NewRequest(http.MethodGet, "/hosts/new", nil)
+	r = r.WithContext(context.WithValue(r.Context(), csrfCtxKey{}, "tok-xyz"))
+	rec := httptest.NewRecorder()
+	render(rec, r, "host_form.html", formData[domain.Host]{
+		Title: "New host", Heading: "New host",
+		Action: "/hosts", SubmitLabel: "Create",
+		Item:   domain.Host{Type: "physical"},
+		Extras: map[string]any{"Types": domain.HostTypes},
+	})
+	body := rec.Body.String()
+	if !strings.Contains(body, `name="csrf_token"`) || !strings.Contains(body, "tok-xyz") {
+		t.Fatalf("rendered form missing csrf field with token; got:\n%s", body)
 	}
 }

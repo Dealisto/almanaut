@@ -305,7 +305,7 @@ func impactView(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFun
 			typ, id, perr := parseRef(ref)
 			if perr != nil {
 				data.Error = perr.Error()
-				render(w, "impact.html", data)
+				render(w, req, "impact.html", data)
 				return
 			}
 			labels := labelMap(opts)
@@ -321,7 +321,7 @@ func impactView(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFun
 				data.Impacted = append(data.Impacted, labelOrFallback(labels, r.Type, r.ID))
 			}
 		}
-		render(w, "impact.html", data)
+		render(w, req, "impact.html", data)
 	}
 }
 
@@ -362,7 +362,7 @@ func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, har
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		render(w, "checks.html", checksPageData{
+		render(w, req, "checks.html", checksPageData{
 			Title:              "Checks",
 			WithinDays:         withinDays,
 			UnbackedServices:   domain.ServicesWithoutBackup(svcList, relList),
@@ -386,7 +386,7 @@ type relationshipsPageData struct {
 	Error         string
 }
 
-func renderRelationships(w http.ResponseWriter, rels *store.RelationshipRepo, cat entityCatalog, errMsg string) {
+func renderRelationships(w http.ResponseWriter, r *http.Request, rels *store.RelationshipRepo, cat entityCatalog, errMsg string) {
 	opts, err := cat.options()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -407,7 +407,7 @@ func renderRelationships(w http.ResponseWriter, rels *store.RelationshipRepo, ca
 			ToLabel:   labelOrFallback(labels, rel.ToType, rel.ToID),
 		})
 	}
-	render(w, "relationships.html", relationshipsPageData{
+	render(w, r, "relationships.html", relationshipsPageData{
 		Title: "Relationships", Relationships: views, Options: opts,
 		Kinds: domain.RelationshipKinds, Error: errMsg,
 	})
@@ -415,7 +415,7 @@ func renderRelationships(w http.ResponseWriter, rels *store.RelationshipRepo, ca
 
 func listRelationships(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		renderRelationships(w, rels, cat, "")
+		renderRelationships(w, req, rels, cat, "")
 	}
 }
 
@@ -428,15 +428,15 @@ func createRelationship(rels *store.RelationshipRepo, cat entityCatalog) http.Ha
 			ToType: toType, ToID: toID, Kind: req.FormValue("kind"),
 		}
 		if errFrom != nil {
-			renderRelationships(w, rels, cat, errFrom.Error())
+			renderRelationships(w, req, rels, cat, errFrom.Error())
 			return
 		}
 		if errTo != nil {
-			renderRelationships(w, rels, cat, errTo.Error())
+			renderRelationships(w, req, rels, cat, errTo.Error())
 			return
 		}
 		if err := rel.Validate(); err != nil {
-			renderRelationships(w, rels, cat, err.Error())
+			renderRelationships(w, req, rels, cat, err.Error())
 			return
 		}
 		if _, err := rels.Create(rel); err != nil {
@@ -486,7 +486,7 @@ func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			render(w, "tags_overview.html", tagsOverviewData{Title: "Tags", Counts: counts})
+			render(w, req, "tags_overview.html", tagsOverviewData{Title: "Tags", Counts: counts})
 			return
 		}
 
@@ -515,7 +515,7 @@ func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 		if selected == "" {
 			selected = raw
 		}
-		render(w, "tags_overview.html", tagsOverviewData{
+		render(w, req, "tags_overview.html", tagsOverviewData{
 			Title: "Tags", Selected: selected, Entities: entities,
 		})
 	}

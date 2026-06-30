@@ -141,7 +141,7 @@ func dashboard(
 			})
 		}
 
-		render(w, "dashboard.html", dashboardData{
+		render(w, req, "dashboard.html", dashboardData{
 			Title:  "Dashboard",
 			Counts: counts,
 			Groups: []attentionGroup{

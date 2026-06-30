@@ -59,6 +59,10 @@ func csrfProtect(next http.Handler) http.Handler {
 		}
 
 		if !csrfSafeMethod(r.Method) {
+			// The token alphabet is URL-safe base64 (base64.RawURLEncoding → [A-Za-z0-9-_]),
+			// so r.FormValue's percent-decoding is a no-op vs the raw cookie value.
+			// Any future encoding change (e.g. standard base64 with +/=) must reconsider
+			// this comparison path, since form encoding would transform those characters.
 			submitted := r.FormValue(csrfFieldName)
 			if submitted == "" || subtle.ConstantTimeCompare([]byte(submitted), []byte(token)) != 1 {
 				http.Error(w, "invalid CSRF token", http.StatusForbidden)
