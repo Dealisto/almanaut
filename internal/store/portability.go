@@ -25,66 +25,41 @@ type Snapshot struct {
 }
 
 // Export gathers the entire inventory into a Snapshot, reusing the existing
-// per-repo List() read paths.
+// per-repo List() read paths. The first List error (in field order) is
+// returned; later lists short-circuit once err is set.
 func Export(db *sql.DB) (Snapshot, error) {
-	hosts, err := NewHostRepo(db).List()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	services, err := NewServiceRepo(db).List()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	networks, err := NewNetworkRepo(db).List()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	domains, err := NewDomainRepo(db).List()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	certificates, err := NewCertificateRepo(db).List()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	backups, err := NewBackupRepo(db).List()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	hardware, err := NewHardwareRepo(db).List()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	subscriptions, err := NewSubscriptionRepo(db).List()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	accounts, err := NewAccountRepo(db).List()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	relationships, err := NewRelationshipRepo(db).List()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	tags, err := NewTagRepo(db).List()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	return Snapshot{
+	var err error
+	snap := Snapshot{
 		Version:       1,
-		Hosts:         hosts,
-		Services:      services,
-		Networks:      networks,
-		Domains:       domains,
-		Certificates:  certificates,
-		Backups:       backups,
-		Hardware:      hardware,
-		Subscriptions: subscriptions,
-		Accounts:      accounts,
-		Relationships: relationships,
-		Tags:          tags,
-	}, nil
+		Hosts:         exportList(&err, NewHostRepo(db).List),
+		Services:      exportList(&err, NewServiceRepo(db).List),
+		Networks:      exportList(&err, NewNetworkRepo(db).List),
+		Domains:       exportList(&err, NewDomainRepo(db).List),
+		Certificates:  exportList(&err, NewCertificateRepo(db).List),
+		Backups:       exportList(&err, NewBackupRepo(db).List),
+		Hardware:      exportList(&err, NewHardwareRepo(db).List),
+		Subscriptions: exportList(&err, NewSubscriptionRepo(db).List),
+		Accounts:      exportList(&err, NewAccountRepo(db).List),
+		Relationships: exportList(&err, NewRelationshipRepo(db).List),
+		Tags:          exportList(&err, NewTagRepo(db).List),
+	}
+	if err != nil {
+		return Snapshot{}, err
+	}
+	return snap, nil
+}
+
+// exportList calls list and records any error in *err, returning nil once a
+// prior list has already failed so the caller keeps the first error.
+func exportList[T any](err *error, list func() ([]T, error)) []T {
+	if *err != nil {
+		return nil
+	}
+	items, e := list()
+	if e != nil {
+		*err = e
+	}
+	return items
 }
 
 // Import replaces the entire inventory with snap, in a single transaction.
