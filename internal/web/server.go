@@ -253,6 +253,7 @@ func New(cfg Config) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(requestLogger(logger))
 	r.Use(recoverer(logger))
+	r.Use(csrfProtect)
 	r.Get("/", dashboard(hosts, services, networks, domains, certificates, backups, hardware, subscriptions, accounts, relationships))
 	for _, rs := range resources {
 		rs.mount(r, deps)
