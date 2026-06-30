@@ -39,7 +39,10 @@ When `ALMANAUT_AUTH_USER` and `ALMANAUT_AUTH_PASS` are both set, every page
 requires those credentials via HTTP Basic auth. When either is unset, Almanaut is
 unauthenticated and intended for a trusted LAN or an authenticated reverse proxy.
 Basic auth transmits credentials base64-encoded (not encrypted), so terminate TLS
-in front of Almanaut when exposing it beyond localhost.
+in front of Almanaut when exposing it beyond localhost. Almanaut also does not
+rate-limit or lock out failed logins, so do not expose it directly to the
+internet — keep it behind a reverse proxy (which can add throttling and TLS) or a
+VPN.
 
 Note that `/export` returns the **entire inventory**, including account entries
 (usernames, password-manager names, and secret references). In the default
