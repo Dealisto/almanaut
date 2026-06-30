@@ -1339,6 +1339,7 @@ func newTestServerDockerDB(t *testing.T, scanner dockerScanner) (http.Handler, *
 		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
 		Hardware: store.NewHardwareRepo(db), Subscriptions: store.NewSubscriptionRepo(db), Accounts: store.NewAccountRepo(db),
 		Relationships: store.NewRelationshipRepo(db), Tags: store.NewTagRepo(db), DB: db,
+		Logger: log.New(io.Discard, "", 0),
 		Docker: scanner, NetScan: fakeNetworkScanner{}, NetOpts: NetDiscoveryOptions{}, Proxmox: fakeProxmoxScanner{}, PVEOpts: ProxmoxOptions{},
 	})
 	return srv, db

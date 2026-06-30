@@ -13,6 +13,7 @@ import (
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 // Config bundles everything New needs to build the HTTP handler. Using a struct
@@ -249,6 +250,8 @@ func New(cfg Config) http.Handler {
 	if logger == nil {
 		logger = log.Default()
 	}
+	r.Use(middleware.RequestID)
+	r.Use(requestLogger(logger))
 	r.Use(recoverer(logger))
 	r.Get("/", dashboard(hosts, services, networks, domains, certificates, backups, hardware, subscriptions, accounts, relationships))
 	for _, rs := range resources {
