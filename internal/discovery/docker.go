@@ -6,10 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Port is a published container port mapping.
@@ -41,6 +43,9 @@ type DockerClient struct {
 func NewSocketClient(path string) *DockerClient {
 	return &DockerClient{
 		httpClient: &http.Client{
+			// Bound the whole request like the Proxmox client: a daemon that
+			// accepts the connection then stalls must not hold the goroutine open.
+			Timeout: 15 * time.Second,
 			Transport: &http.Transport{
 				DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 					var d net.Dialer
@@ -82,7 +87,10 @@ func (c *DockerClient) Containers(ctx context.Context) ([]Container, error) {
 		return nil, fmt.Errorf("docker API status %d", resp.StatusCode)
 	}
 	var raw []apiContainer
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	// Cap the response so a hostile or malfunctioning endpoint cannot exhaust
+	// memory; a real container list is far below this (matches the Proxmox cap).
+	const maxBody = 16 << 20 // 16 MiB
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&raw); err != nil {
 		return nil, fmt.Errorf("decode containers: %w", err)
 	}
 	out := make([]Container, 0, len(raw))
