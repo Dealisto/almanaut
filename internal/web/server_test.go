@@ -5,6 +5,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -64,6 +66,7 @@ func newTestServerFull(t *testing.T, docker dockerScanner, netscan networkScanne
 		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
 		Hardware: store.NewHardwareRepo(db), Subscriptions: store.NewSubscriptionRepo(db), Accounts: store.NewAccountRepo(db),
 		Relationships: store.NewRelationshipRepo(db), Tags: store.NewTagRepo(db), DB: db,
+		Logger: log.New(io.Discard, "", 0),
 		Docker: docker, NetScan: netscan, NetOpts: opts, Proxmox: fakeProxmoxScanner{}, PVEOpts: ProxmoxOptions{},
 	})
 }
@@ -103,6 +106,7 @@ func newTestServerProxmoxRepos(t *testing.T, pve proxmoxScanner, opts ProxmoxOpt
 		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
 		Hardware: store.NewHardwareRepo(db), Subscriptions: store.NewSubscriptionRepo(db), Accounts: store.NewAccountRepo(db),
 		Relationships: rels, Tags: store.NewTagRepo(db), DB: db,
+		Logger: log.New(io.Discard, "", 0),
 		Docker: fakeScanner{}, NetScan: fakeNetworkScanner{}, NetOpts: NetDiscoveryOptions{}, Proxmox: pve, PVEOpts: opts,
 	})
 	return srv, hosts, rels
@@ -1335,6 +1339,7 @@ func newTestServerDockerDB(t *testing.T, scanner dockerScanner) (http.Handler, *
 		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
 		Hardware: store.NewHardwareRepo(db), Subscriptions: store.NewSubscriptionRepo(db), Accounts: store.NewAccountRepo(db),
 		Relationships: store.NewRelationshipRepo(db), Tags: store.NewTagRepo(db), DB: db,
+		Logger: log.New(io.Discard, "", 0),
 		Docker: scanner, NetScan: fakeNetworkScanner{}, NetOpts: NetDiscoveryOptions{}, Proxmox: fakeProxmoxScanner{}, PVEOpts: ProxmoxOptions{},
 	})
 	return srv, db
