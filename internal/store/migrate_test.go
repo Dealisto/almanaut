@@ -67,6 +67,7 @@ func TestMigrateCreatesIndexes(t *testing.T) {
 		"idx_relationships_from",
 		"idx_relationships_to",
 		"idx_tags_entity",
+		"idx_tags_name",
 	} {
 		var name string
 		err := db.QueryRow(
