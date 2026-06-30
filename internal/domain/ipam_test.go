@@ -176,6 +176,44 @@ func TestBuildIPAMLargeSubnetCountedNotEnumerated(t *testing.T) {
 	}
 }
 
+func TestBuildNetworkUsageMatchesBuildIPAM(t *testing.T) {
+	// BuildNetworkUsage must produce, for the target network, exactly what the
+	// corresponding entry of BuildIPAM produces — including the longest-prefix
+	// rule: 10.1.2.3 belongs to the more-specific /24, not the /8.
+	networks := []Network{
+		{ID: 1, Name: "big", CIDR: "10.0.0.0/8", Gateway: "10.0.0.1"},
+		{ID: 2, Name: "small", CIDR: "10.1.2.0/24", Gateway: "10.1.2.1"},
+		{ID: 3, Name: "lan", CIDR: "192.168.1.0/24"},
+	}
+	hosts := []Host{
+		{ID: 10, Name: "a", IPs: []string{"10.1.2.3"}}, // most-specific: small
+		{ID: 11, Name: "b", IPs: []string{"10.9.9.9"}}, // only in big
+		{ID: 12, Name: "c", IPs: []string{"192.168.1.5"}},
+	}
+	report := BuildIPAM(networks, hosts)
+	for _, want := range report.Networks {
+		got, ok := BuildNetworkUsage(want.Network.ID, networks, hosts)
+		if !ok {
+			t.Fatalf("BuildNetworkUsage(%d) ok=false, want true", want.Network.ID)
+		}
+		if got.UsedCount != want.UsedCount || got.TotalUsable != want.TotalUsable ||
+			got.FreeCount != want.FreeCount || got.NextFree != want.NextFree ||
+			got.Unbounded != want.Unbounded {
+			t.Errorf("network %d: BuildNetworkUsage = %+v, want %+v", want.Network.ID, got, want)
+		}
+		if len(got.Used) != len(want.Used) {
+			t.Errorf("network %d: Used len = %d, want %d", want.Network.ID, len(got.Used), len(want.Used))
+		}
+	}
+}
+
+func TestBuildNetworkUsageUnknownTarget(t *testing.T) {
+	networks := []Network{{ID: 1, CIDR: "192.168.1.0/24"}}
+	if _, ok := BuildNetworkUsage(99, networks, nil); ok {
+		t.Error("BuildNetworkUsage for unknown id returned ok=true, want false")
+	}
+}
+
 func TestBuildIPAMNextFreeSkipsGateway(t *testing.T) {
 	// The gateway is reserved: NextFree must not suggest it.
 	networks := []Network{{ID: 1, CIDR: "192.168.1.0/24", Gateway: "192.168.1.1"}}

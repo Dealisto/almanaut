@@ -112,11 +112,9 @@ func New(cfg Config) http.Handler {
 				if err != nil {
 					return nil
 				}
-				for _, u := range domain.BuildIPAM(nets, hostList).Networks {
-					if u.Network.ID == n.ID {
-						s := buildIPAMSection(u)
-						return &s
-					}
+				if u, ok := domain.BuildNetworkUsage(n.ID, nets, hostList); ok {
+					s := buildIPAMSection(u)
+					return &s
 				}
 				return nil
 			},

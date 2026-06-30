@@ -39,6 +39,36 @@ type IPAMReport struct {
 // attributed to the network whose CIDR contains it with the longest prefix
 // (most specific), mirroring routing; IPs in no known network are unassigned.
 func BuildIPAM(networks []Network, hosts []Host) IPAMReport {
+	used, unassigned := attribute(networks, hosts)
+	report := IPAMReport{Unassigned: sortAllocs(unassigned)}
+	for i, n := range networks {
+		report.Networks = append(report.Networks, buildUsage(n, sortAllocs(used[i])))
+	}
+	return report
+}
+
+// BuildNetworkUsage derives the IP occupancy of a single network — the one
+// being viewed — without running the per-network capacity/next-free
+// enumeration for every other network (which can scan up to 2^16 addresses
+// each). Attribution still runs across all networks so the longest-prefix rule
+// matches BuildIPAM exactly: an IP that belongs to a more-specific subnet is
+// not counted here. ok is false if no network with targetID exists.
+func BuildNetworkUsage(targetID int64, networks []Network, hosts []Host) (NetworkUsage, bool) {
+	used, _ := attribute(networks, hosts)
+	for i, n := range networks {
+		if n.ID == targetID {
+			return buildUsage(n, sortAllocs(used[i])), true
+		}
+	}
+	return NetworkUsage{}, false
+}
+
+// attribute assigns each host IP to the index of the network containing it with
+// the longest prefix (most specific), returning the per-network allocations and
+// the IPs that fall in no known network. It is the shared core of BuildIPAM and
+// BuildNetworkUsage so both apply identical longest-prefix and tie-breaking
+// rules.
+func attribute(networks []Network, hosts []Host) (map[int][]Allocation, []Allocation) {
 	type parsedNet struct {
 		idx  int
 		ipn  *net.IPNet
@@ -76,12 +106,7 @@ func BuildIPAM(networks []Network, hosts []Host) IPAMReport {
 			used[best] = append(used[best], alloc)
 		}
 	}
-
-	report := IPAMReport{Unassigned: sortAllocs(unassigned)}
-	for i, n := range networks {
-		report.Networks = append(report.Networks, buildUsage(n, sortAllocs(used[i])))
-	}
-	return report
+	return used, unassigned
 }
 
 // buildUsage computes the derived stats for one network from its (already
