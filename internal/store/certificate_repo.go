@@ -70,14 +70,14 @@ func (r *CertificateRepo) List() ([]domain.Certificate, error) {
 
 // Update overwrites the certificate with c.ID with the values in c.
 func (r *CertificateRepo) Update(c domain.Certificate) error {
-	_, err := r.db.Exec(
+	res, err := r.db.Exec(
 		`UPDATE certificates SET subject=?, issuer=?, expires_on=?, auto_renew=?, notes=? WHERE id=?`,
 		c.Subject, c.Issuer, c.ExpiresOn, boolToInt(c.AutoRenew), c.Notes, c.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update certificate: %w", err)
 	}
-	return nil
+	return rowsAffectedOrNotFound(res)
 }
 
 // Delete removes the certificate with the given id.
@@ -92,7 +92,7 @@ func scanCertificate(s scanner) (domain.Certificate, error) {
 	var c domain.Certificate
 	var autoRenew int64
 	if err := s.Scan(&c.ID, &c.Subject, &c.Issuer, &c.ExpiresOn, &autoRenew, &c.Notes); err != nil {
-		return domain.Certificate{}, fmt.Errorf("scan certificate: %w", err)
+		return domain.Certificate{}, notFound(fmt.Errorf("scan certificate: %w", err))
 	}
 	c.AutoRenew = autoRenew != 0
 	return c, nil

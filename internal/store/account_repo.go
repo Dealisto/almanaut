@@ -77,14 +77,14 @@ func (r *AccountRepo) List() ([]domain.Account, error) {
 
 // Update overwrites the account with a.ID with the values in a.
 func (r *AccountRepo) Update(a domain.Account) error {
-	_, err := r.db.Exec(
+	res, err := r.db.Exec(
 		`UPDATE accounts SET name=?, kind=?, username=?, password_manager=?, secret_ref=?, url=?, status=?, notes=? WHERE id=?`,
 		a.Name, a.Kind, a.Username, a.PasswordManager, a.SecretRef, a.URL, a.Status, a.Notes, a.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update account: %w", err)
 	}
-	return nil
+	return rowsAffectedOrNotFound(res)
 }
 
 // Delete removes the account with the given id.
@@ -98,7 +98,7 @@ func (r *AccountRepo) Delete(id int64) error {
 func scanAccount(s scanner) (domain.Account, error) {
 	var a domain.Account
 	if err := s.Scan(&a.ID, &a.Name, &a.Kind, &a.Username, &a.PasswordManager, &a.SecretRef, &a.URL, &a.Status, &a.Notes); err != nil {
-		return domain.Account{}, fmt.Errorf("scan account: %w", err)
+		return domain.Account{}, notFound(fmt.Errorf("scan account: %w", err))
 	}
 	return a, nil
 }

@@ -78,14 +78,14 @@ func (r *NetworkRepo) List() ([]domain.Network, error) {
 
 // Update overwrites the network with n.ID with the values in n.
 func (r *NetworkRepo) Update(n domain.Network) error {
-	_, err := r.db.Exec(
+	res, err := r.db.Exec(
 		`UPDATE networks SET name=?, cidr=?, vlan=?, gateway=?, notes=? WHERE id=?`,
 		n.Name, n.CIDR, n.VLAN, n.Gateway, n.Notes, n.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update network: %w", err)
 	}
-	return nil
+	return rowsAffectedOrNotFound(res)
 }
 
 // Delete removes the network with the given id.
@@ -99,7 +99,7 @@ func (r *NetworkRepo) Delete(id int64) error {
 func scanNetwork(s scanner) (domain.Network, error) {
 	var n domain.Network
 	if err := s.Scan(&n.ID, &n.Name, &n.CIDR, &n.VLAN, &n.Gateway, &n.Notes); err != nil {
-		return domain.Network{}, fmt.Errorf("scan network: %w", err)
+		return domain.Network{}, notFound(fmt.Errorf("scan network: %w", err))
 	}
 	return n, nil
 }

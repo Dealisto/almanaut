@@ -79,14 +79,14 @@ func (r *BackupRepo) List() ([]domain.Backup, error) {
 
 // Update overwrites the backup with b.ID with the values in b.
 func (r *BackupRepo) Update(b domain.Backup) error {
-	_, err := r.db.Exec(
+	res, err := r.db.Exec(
 		`UPDATE backups SET source=?, destination=?, frequency=?, last_run=?, notes=? WHERE id=?`,
 		b.Source, b.Destination, b.Frequency, b.LastRun, b.Notes, b.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update backup: %w", err)
 	}
-	return nil
+	return rowsAffectedOrNotFound(res)
 }
 
 // Delete removes the backup with the given id.
@@ -100,7 +100,7 @@ func (r *BackupRepo) Delete(id int64) error {
 func scanBackup(s scanner) (domain.Backup, error) {
 	var b domain.Backup
 	if err := s.Scan(&b.ID, &b.Source, &b.Destination, &b.Frequency, &b.LastRun, &b.Notes); err != nil {
-		return domain.Backup{}, fmt.Errorf("scan backup: %w", err)
+		return domain.Backup{}, notFound(fmt.Errorf("scan backup: %w", err))
 	}
 	return b, nil
 }
