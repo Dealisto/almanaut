@@ -13,6 +13,20 @@ type DBTX interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
 
+// scanner is satisfied by both *sql.Row and *sql.Rows, letting a scanX helper
+// serve both Get (single row) and List (row iteration).
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+// boolToInt maps a Go bool to the 0/1 integer SQLite stores for it.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // WithTx runs fn inside a single transaction, committing if fn returns nil and
 // rolling back if it returns an error or panics.
 func WithTx(db *sql.DB, fn func(*sql.Tx) error) error {

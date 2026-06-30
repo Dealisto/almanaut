@@ -107,11 +107,6 @@ func (r *HostRepo) Delete(id int64) error {
 	return nil
 }
 
-// scanner is satisfied by both *sql.Row and *sql.Rows.
-type scanner interface {
-	Scan(dest ...any) error
-}
-
 func scanHost(s scanner) (domain.Host, error) {
 	var h domain.Host
 	var ipsJSON string
