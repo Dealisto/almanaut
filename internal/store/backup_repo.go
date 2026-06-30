@@ -27,6 +27,15 @@ func (r *BackupRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
+// Count returns the number of backups.
+func (r *BackupRepo) Count() (int, error) {
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM backups`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count backups: %w", err)
+	}
+	return n, nil
+}
+
 // Create inserts b and returns its new ID.
 func (r *BackupRepo) Create(b domain.Backup) (int64, error) {
 	res, err := r.db.Exec(

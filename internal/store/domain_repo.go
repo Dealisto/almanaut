@@ -27,6 +27,15 @@ func (r *DomainRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
+// Count returns the number of domains.
+func (r *DomainRepo) Count() (int, error) {
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM domains`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count domains: %w", err)
+	}
+	return n, nil
+}
+
 // Create inserts d and returns its new ID.
 func (r *DomainRepo) Create(d domain.Domain) (int64, error) {
 	res, err := r.db.Exec(

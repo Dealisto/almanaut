@@ -48,22 +48,7 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo) http.HandlerFunc
 			fail(err)
 			return
 		}
-		networks, err := repos.networks.List()
-		if err != nil {
-			fail(err)
-			return
-		}
-		domains, err := repos.domains.List()
-		if err != nil {
-			fail(err)
-			return
-		}
 		certs, err := repos.certificates.List()
-		if err != nil {
-			fail(err)
-			return
-		}
-		backups, err := repos.backups.List()
 		if err != nil {
 			fail(err)
 			return
@@ -78,12 +63,29 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo) http.HandlerFunc
 			fail(err)
 			return
 		}
-		accounts, err := repos.accounts.List()
+		relList, err := rels.List()
 		if err != nil {
 			fail(err)
 			return
 		}
-		relList, err := rels.List()
+		// Networks, domains, backups, and accounts feed only count cards, so a
+		// COUNT(*) avoids loading every row just to take its length.
+		networkCount, err := repos.networks.Count()
+		if err != nil {
+			fail(err)
+			return
+		}
+		domainCount, err := repos.domains.Count()
+		if err != nil {
+			fail(err)
+			return
+		}
+		backupCount, err := repos.backups.Count()
+		if err != nil {
+			fail(err)
+			return
+		}
+		accountCount, err := repos.accounts.Count()
 		if err != nil {
 			fail(err)
 			return
@@ -92,13 +94,13 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo) http.HandlerFunc
 		counts := []countCard{
 			{"Hosts", len(hosts), "/hosts"},
 			{"Services", len(services), "/services"},
-			{"Networks", len(networks), "/networks"},
-			{"Domains", len(domains), "/domains"},
+			{"Networks", networkCount, "/networks"},
+			{"Domains", domainCount, "/domains"},
 			{"Certificates", len(certs), "/certificates"},
-			{"Backups", len(backups), "/backups"},
+			{"Backups", backupCount, "/backups"},
 			{"Hardware", len(hardware), "/hardware"},
 			{"Subscriptions", len(subscriptions), "/subscriptions"},
-			{"Accounts", len(accounts), "/accounts"},
+			{"Accounts", accountCount, "/accounts"},
 		}
 
 		expiring := domain.ExpiringSoon(certs, time.Now(), 30)

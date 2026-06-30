@@ -60,3 +60,19 @@ func TestNetworkRepoCRUD(t *testing.T) {
 		t.Fatalf("List len after delete = %d, want 0", len(list))
 	}
 }
+
+func TestNetworkRepoCount(t *testing.T) {
+	repo := newNetworkRepo(t)
+
+	if n, err := repo.Count(); err != nil || n != 0 {
+		t.Fatalf("Count on empty = (%d, %v), want (0, nil)", n, err)
+	}
+	for _, cidr := range []string{"10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24"} {
+		if _, err := repo.Create(domain.Network{Name: cidr, CIDR: cidr}); err != nil {
+			t.Fatalf("Create %s: %v", cidr, err)
+		}
+	}
+	if n, err := repo.Count(); err != nil || n != 3 {
+		t.Fatalf("Count = (%d, %v), want (3, nil)", n, err)
+	}
+}
