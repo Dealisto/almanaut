@@ -27,24 +27,37 @@ type Snapshot struct {
 // Export gathers the entire inventory into a Snapshot, reusing the existing
 // per-repo List() read paths. The first List error (in field order) is
 // returned; later lists short-circuit once err is set.
+//
+// All eleven lists run inside a single read transaction so the snapshot is
+// internally consistent: without it a concurrent write between two lists could
+// produce a YAML dump with, say, a relationship pointing at a host that the
+// hosts list no longer contains — a corruption only discovered at re-import.
+// WAL gives the transaction a stable view, and reading through the tx keeps
+// every list on the one connection (no second-connection deadlock).
 func Export(db *sql.DB) (Snapshot, error) {
-	var err error
+	tx, err := db.Begin()
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback() // read-only: always roll back, nothing to commit
+
+	var listErr error
 	snap := Snapshot{
 		Version:       1,
-		Hosts:         exportList(&err, NewHostRepo(db).List),
-		Services:      exportList(&err, NewServiceRepo(db).List),
-		Networks:      exportList(&err, NewNetworkRepo(db).List),
-		Domains:       exportList(&err, NewDomainRepo(db).List),
-		Certificates:  exportList(&err, NewCertificateRepo(db).List),
-		Backups:       exportList(&err, NewBackupRepo(db).List),
-		Hardware:      exportList(&err, NewHardwareRepo(db).List),
-		Subscriptions: exportList(&err, NewSubscriptionRepo(db).List),
-		Accounts:      exportList(&err, NewAccountRepo(db).List),
-		Relationships: exportList(&err, NewRelationshipRepo(db).List),
-		Tags:          exportList(&err, NewTagRepo(db).List),
+		Hosts:         exportList(&listErr, NewHostRepo(db).WithTx(tx).List),
+		Services:      exportList(&listErr, NewServiceRepo(db).WithTx(tx).List),
+		Networks:      exportList(&listErr, NewNetworkRepo(db).WithTx(tx).List),
+		Domains:       exportList(&listErr, NewDomainRepo(db).WithTx(tx).List),
+		Certificates:  exportList(&listErr, NewCertificateRepo(db).WithTx(tx).List),
+		Backups:       exportList(&listErr, NewBackupRepo(db).WithTx(tx).List),
+		Hardware:      exportList(&listErr, NewHardwareRepo(db).WithTx(tx).List),
+		Subscriptions: exportList(&listErr, NewSubscriptionRepo(db).WithTx(tx).List),
+		Accounts:      exportList(&listErr, NewAccountRepo(db).WithTx(tx).List),
+		Relationships: exportList(&listErr, NewRelationshipRepo(db).WithTx(tx).List),
+		Tags:          exportList(&listErr, NewTagRepo(db).WithTx(tx).List),
 	}
-	if err != nil {
-		return Snapshot{}, err
+	if listErr != nil {
+		return Snapshot{}, listErr
 	}
 	return snap, nil
 }
