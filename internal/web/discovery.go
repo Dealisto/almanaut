@@ -205,21 +205,22 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) 
 			return
 		}
 		hostType := req.FormValue("type")
-		existing, err := hosts.List()
-		if err != nil {
-			serverError(w, req, err)
-			return
-		}
-		// Re-check tracked IPs against live data; guards double-submit and
-		// concurrent manual entry.
-		tracked := make(map[string]bool)
-		for _, h := range existing {
-			for _, ip := range h.IPs {
-				tracked[ip] = true
-			}
-		}
 		txErr := store.WithTx(db, func(tx *sql.Tx) error {
 			hr := hosts.WithTx(tx)
+			// Build the tracked-IP set inside the transaction so the uniqueness
+			// check and the inserts share one consistent view. Listing outside the
+			// tx let two concurrent submits (or a double-click) each read "IP absent"
+			// and both insert it, creating a duplicate host.
+			existing, err := hr.List()
+			if err != nil {
+				return err
+			}
+			tracked := make(map[string]bool)
+			for _, h := range existing {
+				for _, ip := range h.IPs {
+					tracked[ip] = true
+				}
+			}
 			for _, v := range req.Form["host"] {
 				// Each value is "ip|name|ports". PTR hostnames and IPs are LDH/
 				// numeric (no "|"), and SplitN caps at 3 so a "|" in ports is kept.
@@ -321,24 +322,26 @@ func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.Re
 			http.Error(w, "could not reach the Proxmox API: "+err.Error(), http.StatusBadGateway)
 			return
 		}
-		existing, err := hosts.List()
-		if err != nil {
-			serverError(w, req, err)
-			return
-		}
 		// resource id -> node name, to resolve a guest's node after import.
 		nodeOf := make(map[string]string)
 		for _, r := range res {
 			nodeOf[r.ID] = r.Node
 		}
 
-		proposals := discovery.ProposeProxmoxHosts(res, existing)
-
 		// One transaction covers host creation and guest linking, so a link
 		// failure rolls back the hosts created in the same submit too.
 		txErr := store.WithTx(db, func(tx *sql.Tx) error {
 			hr := hosts.WithTx(tx)
 			rl := rels.WithTx(tx)
+
+			// List inside the tx so AlreadyTracked and the inserts share one
+			// consistent view; listing outside let a concurrent submit or a
+			// double-click import the same guest twice.
+			existing, err := hr.List()
+			if err != nil {
+				return err
+			}
+			proposals := discovery.ProposeProxmoxHosts(res, existing)
 
 			// createdID maps each imported host's Proxmox resource id to its new DB
 			// id. Keying on the resource id (not the name) keeps guest linking exact:
@@ -439,19 +442,20 @@ func importDocker(scanner dockerScanner, services *store.ServiceRepo, rels *stor
 			http.Error(w, "could not reach the Docker socket: "+err.Error(), http.StatusBadGateway)
 			return
 		}
-		existing, err := services.List()
-		if err != nil {
-			serverError(w, req, err)
-			return
-		}
-		proposals := discovery.ProposeServices(containers, existing)
-
 		// The whole import is one transaction: any failure rolls back every
 		// service/relationship written in this submit, so no orphan Service
 		// can survive a failed relationship.
 		txErr := store.WithTx(db, func(tx *sql.Tx) error {
 			svc := services.WithTx(tx)
 			rl := rels.WithTx(tx)
+			// List inside the tx so AlreadyTracked and the inserts share one
+			// consistent view; listing outside let a concurrent submit or a
+			// double-click import the same container twice.
+			existing, err := svc.List()
+			if err != nil {
+				return err
+			}
+			proposals := discovery.ProposeServices(containers, existing)
 			for _, p := range proposals {
 				// ProposeServices recomputes AlreadyTracked against the freshly-listed
 				// services, so skipping tracked rows also guards against double-submit.
