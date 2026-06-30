@@ -22,18 +22,21 @@ type Proposal struct {
 func ProposeServices(containers []Container, existing []domain.Service) []Proposal {
 	tracked := make(map[string]bool, len(existing))
 	for _, s := range existing {
-		tracked[normalizeName(s.Name)] = true
+		tracked[NormalizeName(s.Name)] = true
 	}
 	out := make([]Proposal, 0, len(containers))
 	for _, c := range containers {
 		out = append(out, Proposal{
 			ContainerID:    c.ID,
 			Service:        serviceFromContainer(c),
-			AlreadyTracked: tracked[normalizeName(c.Name)],
+			AlreadyTracked: tracked[NormalizeName(c.Name)],
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
-		return out[i].Service.Name < out[j].Service.Name
+		if out[i].Service.Name != out[j].Service.Name {
+			return out[i].Service.Name < out[j].Service.Name
+		}
+		return out[i].ContainerID < out[j].ContainerID // stable order for duplicate names
 	})
 	return out
 }
@@ -63,7 +66,11 @@ func provenance(image string) string {
 	return "Discovered from Docker. Image: " + image
 }
 
-func normalizeName(s string) string {
+// NormalizeName canonicalizes an entity name for case-insensitive,
+// whitespace-insensitive matching (e.g. comparing a discovered name against an
+// existing one). It is exported so the import handlers match names the same way
+// the proposal step does.
+func NormalizeName(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
 
@@ -138,7 +145,7 @@ type ProxmoxProposal struct {
 func ProposeProxmoxHosts(res []ProxmoxResource, existing []domain.Host) []ProxmoxProposal {
 	tracked := make(map[string]bool, len(existing))
 	for _, h := range existing {
-		tracked[normalizeName(h.Name)] = true
+		tracked[NormalizeName(h.Name)] = true
 	}
 	out := make([]ProxmoxProposal, 0, len(res))
 	for _, r := range res {
@@ -146,7 +153,7 @@ func ProposeProxmoxHosts(res []ProxmoxResource, existing []domain.Host) []Proxmo
 		out = append(out, ProxmoxProposal{
 			ID:             r.ID,
 			Host:           h,
-			AlreadyTracked: tracked[normalizeName(h.Name)],
+			AlreadyTracked: tracked[NormalizeName(h.Name)],
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -155,7 +162,10 @@ func ProposeProxmoxHosts(res []ProxmoxResource, existing []domain.Host) []Proxmo
 		if ni != nj {
 			return ni // nodes first
 		}
-		return normalizeName(out[i].Host.Name) < normalizeName(out[j].Host.Name)
+		if ai, aj := NormalizeName(out[i].Host.Name), NormalizeName(out[j].Host.Name); ai != aj {
+			return ai < aj
+		}
+		return out[i].ID < out[j].ID // stable order for duplicate names (ID is unique)
 	})
 	return out
 }

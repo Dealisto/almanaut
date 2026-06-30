@@ -368,11 +368,11 @@ func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.Re
 				// points at the wrong host, never data loss.
 				nodeIDByName := make(map[string]int64)
 				for _, h := range existing {
-					nodeIDByName[normalizeName(h.Name)] = h.ID
+					nodeIDByName[discovery.NormalizeName(h.Name)] = h.ID
 				}
 				for _, p := range proposals {
 					if id, ok := createdID[p.ID]; ok && p.Host.Type == "physical" {
-						nodeIDByName[normalizeName(p.Host.Name)] = id
+						nodeIDByName[discovery.NormalizeName(p.Host.Name)] = id
 					}
 				}
 				// Link only freshly-imported guests, so re-import never duplicates edges.
@@ -381,7 +381,7 @@ func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.Re
 					if !ok || (p.Host.Type != "vm" && p.Host.Type != "lxc") {
 						continue
 					}
-					nodeID, ok := nodeIDByName[normalizeName(nodeOf[p.ID])]
+					nodeID, ok := nodeIDByName[discovery.NormalizeName(nodeOf[p.ID])]
 					if !ok || nodeID == guestID {
 						continue
 					}
@@ -405,10 +405,6 @@ func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.Re
 		}
 		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
 	}
-}
-
-func normalizeName(s string) string {
-	return strings.ToLower(strings.TrimSpace(s))
 }
 
 // errInvalidRel marks a relationship that failed Validate during an import, so
