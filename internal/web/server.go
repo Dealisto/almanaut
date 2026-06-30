@@ -247,7 +247,7 @@ func New(cfg Config) http.Handler {
 		},
 	}
 	cat := entityCatalog{resources: resources}
-	deps := handlerDeps{cat: cat, tags: tags, rels: relationships}
+	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, db: db}
 	r := chi.NewRouter()
 	logger := cfg.Logger
 	if logger == nil {

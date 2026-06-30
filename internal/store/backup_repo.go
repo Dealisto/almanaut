@@ -22,6 +22,11 @@ func (r *BackupRepo) WithTx(tx *sql.Tx) *BackupRepo {
 	return &BackupRepo{db: tx}
 }
 
+// DeleteTx removes the backup with the given id within tx.
+func (r *BackupRepo) DeleteTx(tx *sql.Tx, id int64) error {
+	return r.WithTx(tx).Delete(id)
+}
+
 // Create inserts b and returns its new ID.
 func (r *BackupRepo) Create(b domain.Backup) (int64, error) {
 	res, err := r.db.Exec(

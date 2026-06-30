@@ -22,6 +22,11 @@ func (r *ServiceRepo) WithTx(tx *sql.Tx) *ServiceRepo {
 	return &ServiceRepo{db: tx}
 }
 
+// DeleteTx removes the service with the given id within tx.
+func (r *ServiceRepo) DeleteTx(tx *sql.Tx, id int64) error {
+	return r.WithTx(tx).Delete(id)
+}
+
 // Create inserts s and returns its new ID.
 func (r *ServiceRepo) Create(s domain.Service) (int64, error) {
 	res, err := r.db.Exec(

@@ -1182,6 +1182,32 @@ func TestDeleteEntityCleansUpRelationshipsAndTags(t *testing.T) {
 	}
 }
 
+func TestDeleteEntityRollsBackOnFailure(t *testing.T) {
+	srv, db := newTestServerDockerDB(t, fakeScanner{})
+	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}})
+	postForm(t, srv, "/services", url.Values{"name": {"jellyfin"}, "kind": {"container"}})
+	postForm(t, srv, "/relationships", url.Values{"from": {"service:1"}, "to": {"host:1"}, "kind": {"runs on"}})
+
+	// Drop the table the cascade's last step needs so tags.DeleteByEntity fails
+	// after the host and relationship deletes have already run in the tx.
+	if _, err := db.Exec(`DROP TABLE tags`); err != nil {
+		t.Fatalf("drop tags: %v", err)
+	}
+
+	rec := postForm(t, srv, "/hosts/1/delete", url.Values{})
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("delete with broken tags table = %d, want 500", rec.Code)
+	}
+
+	// Nothing was committed: the host must survive the rolled-back cascade.
+	req := httptest.NewRequest(http.MethodGet, "/hosts", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), "proxmox") {
+		t.Error("host was deleted despite the cascade rolling back")
+	}
+}
+
 func TestGlobalSearch(t *testing.T) {
 	srv := newTestServer(t)
 	// host:1 — matches by name, by note content, and by IP; also carries a tag.

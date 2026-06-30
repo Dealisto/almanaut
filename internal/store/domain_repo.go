@@ -22,6 +22,11 @@ func (r *DomainRepo) WithTx(tx *sql.Tx) *DomainRepo {
 	return &DomainRepo{db: tx}
 }
 
+// DeleteTx removes the domain with the given id within tx.
+func (r *DomainRepo) DeleteTx(tx *sql.Tx, id int64) error {
+	return r.WithTx(tx).Delete(id)
+}
+
 // Create inserts d and returns its new ID.
 func (r *DomainRepo) Create(d domain.Domain) (int64, error) {
 	res, err := r.db.Exec(

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,13 +13,15 @@ import (
 )
 
 // crud is the subset of every *store.XRepo that the generic handlers need.
-// Each store repo satisfies it directly (uniform Create/Get/List/Update/Delete).
+// Each store repo satisfies it directly (uniform Create/Get/List/Update/Delete,
+// plus DeleteTx so deletion can run inside the cascade transaction).
 type crud[T any] interface {
 	List() ([]T, error)
 	Get(id int64) (T, error)
 	Create(T) (int64, error)
 	Update(T) error
 	Delete(id int64) error
+	DeleteTx(tx *sql.Tx, id int64) error
 }
 
 // validatable is satisfied by every domain entity (value-receiver Validate).
@@ -42,6 +45,7 @@ type handlerDeps struct {
 	cat  entityCatalog
 	tags *store.TagRepo
 	rels *store.RelationshipRepo
+	db   *sql.DB
 }
 
 // resource describes one entity. Only the genuinely entity-specific behavior
@@ -199,15 +203,18 @@ func (rs resource[T]) del(d handlerDeps) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		if err := rs.repo.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := d.rels.DeleteByEntity(rs.sing, id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if err := d.tags.DeleteByEntity(rs.sing, id); err != nil {
+		// Delete the entity and its relationship/tag edges atomically: a partial
+		// failure would otherwise orphan edges that then render as "(deleted)".
+		err := store.WithTx(d.db, func(tx *sql.Tx) error {
+			if err := rs.repo.DeleteTx(tx, id); err != nil {
+				return err
+			}
+			if err := d.rels.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
+				return err
+			}
+			return d.tags.WithTx(tx).DeleteByEntity(rs.sing, id)
+		})
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

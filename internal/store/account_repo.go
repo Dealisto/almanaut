@@ -22,6 +22,11 @@ func (r *AccountRepo) WithTx(tx *sql.Tx) *AccountRepo {
 	return &AccountRepo{db: tx}
 }
 
+// DeleteTx removes the account with the given id within tx.
+func (r *AccountRepo) DeleteTx(tx *sql.Tx, id int64) error {
+	return r.WithTx(tx).Delete(id)
+}
+
 const accountColumns = `id, name, kind, username, password_manager, secret_ref, url, status, notes`
 
 // Create inserts a and returns its new ID.

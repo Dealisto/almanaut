@@ -22,6 +22,11 @@ func (r *NetworkRepo) WithTx(tx *sql.Tx) *NetworkRepo {
 	return &NetworkRepo{db: tx}
 }
 
+// DeleteTx removes the network with the given id within tx.
+func (r *NetworkRepo) DeleteTx(tx *sql.Tx, id int64) error {
+	return r.WithTx(tx).Delete(id)
+}
+
 // Create inserts n and returns its new ID.
 func (r *NetworkRepo) Create(n domain.Network) (int64, error) {
 	res, err := r.db.Exec(
