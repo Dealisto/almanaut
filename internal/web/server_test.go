@@ -1074,6 +1074,33 @@ func uploadImport(t *testing.T, srv http.Handler, yamlDoc string, confirm bool) 
 	return rec
 }
 
+func TestImportRejectsOversizeUpload(t *testing.T) {
+	srv := newTestServer(t)
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("file", "import.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// One byte past the ceiling is enough; the multipart envelope adds more, so
+	// the declared Content-Length exceeds maxRequestBytes and limitBody rejects it.
+	if _, err := fw.Write(bytes.Repeat([]byte("a"), maxRequestBytes+1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteField(csrfFieldName, csrfTestToken); err != nil {
+		t.Fatal(err)
+	}
+	mw.Close()
+	req := httptest.NewRequest(http.MethodPost, "/import", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: csrfTestToken})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("oversize import = %d, want 413; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestDashboard(t *testing.T) {
 	srv := newTestServer(t)
 	postForm(t, srv, "/hosts", url.Values{"name": {"proxmox"}, "type": {"physical"}, "status": {"running"}})
