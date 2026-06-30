@@ -223,3 +223,18 @@ func TestBuildIPAMNextFreeSkipsGateway(t *testing.T) {
 		t.Errorf("NextFree = %q, want 192.168.1.2 (gateway .1 skipped)", u.NextFree)
 	}
 }
+
+// TestBuildIPAMNextFreeLargerSubnet exercises the streaming nextFree walk over a
+// /22 (1024 addresses): the network address is skipped, the gateway and an
+// assigned host are taken, so the first free address is .3.
+func TestBuildIPAMNextFreeLargerSubnet(t *testing.T) {
+	networks := []Network{{ID: 1, CIDR: "10.0.0.0/22", Gateway: "10.0.0.1"}}
+	hosts := []Host{{ID: 1, Name: "a", IPs: []string{"10.0.0.2"}}}
+	u := BuildIPAM(networks, hosts).Networks[0]
+	if u.TotalUsable != 1022 { // 1024 - network - broadcast
+		t.Errorf("TotalUsable = %d, want 1022", u.TotalUsable)
+	}
+	if u.NextFree != "10.0.0.3" {
+		t.Errorf("NextFree = %q, want 10.0.0.3", u.NextFree)
+	}
+}

@@ -13,6 +13,23 @@ import (
 func Impact(repo *RelationshipRepo, startType string, startID int64) ([]domain.EntityRef, error) {
 	refKey := func(t string, id int64) string { return fmt.Sprintf("%s:%d", t, id) }
 
+	// Load every relationship once and index dependency edges by their "to"
+	// endpoint, then traverse in memory. The previous BFS ran one ListByTo query
+	// per visited node, so a dense dependency subgraph cost one round-trip per
+	// node; this is a single query regardless of subgraph size.
+	all, err := repo.List()
+	if err != nil {
+		return nil, err
+	}
+	dependentsOf := make(map[string][]domain.EntityRef)
+	for _, e := range all {
+		if !domain.IsDependencyKind(e.Kind) {
+			continue
+		}
+		k := refKey(e.ToType, e.ToID)
+		dependentsOf[k] = append(dependentsOf[k], domain.EntityRef{Type: e.FromType, ID: e.FromID})
+	}
+
 	visited := map[string]bool{refKey(startType, startID): true}
 	result := []domain.EntityRef{}
 	queue := []domain.EntityRef{{Type: startType, ID: startID}}
@@ -20,23 +37,14 @@ func Impact(repo *RelationshipRepo, startType string, startID int64) ([]domain.E
 	for len(queue) > 0 {
 		cur := queue[0]
 		queue = queue[1:]
-
-		edges, err := repo.ListByTo(cur.Type, cur.ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, e := range edges {
-			if !domain.IsDependencyKind(e.Kind) {
-				continue
-			}
-			k := refKey(e.FromType, e.FromID)
+		for _, dep := range dependentsOf[refKey(cur.Type, cur.ID)] {
+			k := refKey(dep.Type, dep.ID)
 			if visited[k] {
 				continue
 			}
 			visited[k] = true
-			ref := domain.EntityRef{Type: e.FromType, ID: e.FromID}
-			result = append(result, ref)
-			queue = append(queue, ref)
+			result = append(result, dep)
+			queue = append(queue, dep)
 		}
 	}
 	return result, nil

@@ -39,7 +39,7 @@ type IPAMReport struct {
 // attributed to the network whose CIDR contains it with the longest prefix
 // (most specific), mirroring routing; IPs in no known network are unassigned.
 func BuildIPAM(networks []Network, hosts []Host) IPAMReport {
-	used, unassigned := attribute(networks, hosts)
+	used, unassigned := attribute(networks, hosts, -1)
 	report := IPAMReport{Unassigned: sortAllocs(unassigned)}
 	for i, n := range networks {
 		report.Networks = append(report.Networks, buildUsage(n, sortAllocs(used[i])))
@@ -54,13 +54,21 @@ func BuildIPAM(networks []Network, hosts []Host) IPAMReport {
 // matches BuildIPAM exactly: an IP that belongs to a more-specific subnet is
 // not counted here. ok is false if no network with targetID exists.
 func BuildNetworkUsage(targetID int64, networks []Network, hosts []Host) (NetworkUsage, bool) {
-	used, _ := attribute(networks, hosts)
+	targetIdx := -1
 	for i, n := range networks {
 		if n.ID == targetID {
-			return buildUsage(n, sortAllocs(used[i])), true
+			targetIdx = i
+			break
 		}
 	}
-	return NetworkUsage{}, false
+	if targetIdx < 0 {
+		return NetworkUsage{}, false
+	}
+	// Attribution still scans every network (longest-prefix needs them all), but
+	// only the target's allocations are collected — no slices are built for the
+	// networks we are about to discard.
+	used, _ := attribute(networks, hosts, targetIdx)
+	return buildUsage(networks[targetIdx], sortAllocs(used[targetIdx])), true
 }
 
 // attribute assigns each host IP to the index of the network containing it with
@@ -68,7 +76,12 @@ func BuildNetworkUsage(targetID int64, networks []Network, hosts []Host) (Networ
 // the IPs that fall in no known network. It is the shared core of BuildIPAM and
 // BuildNetworkUsage so both apply identical longest-prefix and tie-breaking
 // rules.
-func attribute(networks []Network, hosts []Host) (map[int][]Allocation, []Allocation) {
+//
+// onlyIdx limits what is collected: -1 keeps every network's allocations plus
+// the unassigned list (the full report); a non-negative value keeps only that
+// network's allocations (the single-network view) and skips the unassigned list,
+// while still scanning all networks so the longest-prefix winner is unchanged.
+func attribute(networks []Network, hosts []Host, onlyIdx int) (map[int][]Allocation, []Allocation) {
 	type parsedNet struct {
 		idx  int
 		ipn  *net.IPNet
@@ -92,7 +105,6 @@ func attribute(networks []Network, hosts []Host) (map[int][]Allocation, []Alloca
 			if ip == nil {
 				continue
 			}
-			alloc := Allocation{IP: ip.String(), HostID: h.ID, HostName: h.Name}
 			best, bestOnes := -1, -1
 			for _, p := range parsed {
 				if p.ipn.Contains(ip) && p.ones > bestOnes {
@@ -100,10 +112,14 @@ func attribute(networks []Network, hosts []Host) (map[int][]Allocation, []Alloca
 				}
 			}
 			if best < 0 {
-				unassigned = append(unassigned, alloc)
+				if onlyIdx < 0 {
+					unassigned = append(unassigned, Allocation{IP: ip.String(), HostID: h.ID, HostName: h.Name})
+				}
 				continue
 			}
-			used[best] = append(used[best], alloc)
+			if onlyIdx < 0 || best == onlyIdx {
+				used[best] = append(used[best], Allocation{IP: ip.String(), HostID: h.ID, HostName: h.Name})
+			}
 		}
 	}
 	return used, unassigned
@@ -161,7 +177,10 @@ func buildUsage(n Network, used []Allocation) NetworkUsage {
 }
 
 // nextFree returns the lowest usable address in ipn not present in taken, or ""
-// if the subnet is full or larger than 2^maxEnumerableHostBits addresses.
+// if the subnet is full or larger than 2^maxEnumerableHostBits addresses. It
+// walks addresses in place rather than materializing the whole range, so a large
+// (but enumerable) subnet does not allocate one net.IP per address just to find
+// the first hole.
 func nextFree(ipn *net.IPNet, taken map[string]bool) string {
 	ones, bits := ipn.Mask.Size()
 	if bits-ones > maxEnumerableHostBits {
@@ -171,20 +190,26 @@ func nextFree(ipn *net.IPNet, taken map[string]bool) string {
 	cur := make(net.IP, len(base))
 	copy(cur, base)
 
-	var addrs []net.IP
-	for ipn.Contains(cur) {
-		a := make(net.IP, len(cur))
-		copy(a, cur)
-		addrs = append(addrs, a)
-		incIP(cur)
-	}
-	if bits == 32 && bits-ones >= 2 && len(addrs) >= 2 {
-		addrs = addrs[1 : len(addrs)-1] // drop network + broadcast
-	}
-	for _, a := range addrs {
-		if !taken[a.String()] {
-			return a.String()
+	// IPv4 subnets larger than a point-to-point link reserve the network and
+	// broadcast addresses; /31, /32 and IPv6 subnets use every address.
+	excludeEnds := bits == 32 && bits-ones >= 2
+	var broadcast net.IP
+	if excludeEnds {
+		broadcast = make(net.IP, len(base))
+		for i := range base {
+			broadcast[i] = base[i] | ^ipn.Mask[i]
 		}
+		incIP(cur) // skip the network address
+	}
+
+	for ipn.Contains(cur) {
+		if excludeEnds && cur.Equal(broadcast) {
+			break // reached the reserved broadcast address
+		}
+		if !taken[cur.String()] {
+			return cur.String()
+		}
+		incIP(cur)
 	}
 	return ""
 }
