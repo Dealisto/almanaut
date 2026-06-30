@@ -50,3 +50,30 @@ func TestMigrateCreatesSchemaAndIsIdempotent(t *testing.T) {
 		t.Fatalf("migration count after re-run = %d, want 1", count)
 	}
 }
+
+func TestMigrateCreatesIndexes(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	if err := Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	for _, idx := range []string{
+		"idx_relationships_from",
+		"idx_relationships_to",
+		"idx_tags_entity",
+	} {
+		var name string
+		err := db.QueryRow(
+			`SELECT name FROM sqlite_master WHERE type='index' AND name=?`, idx,
+		).Scan(&name)
+		if err != nil {
+			t.Errorf("index %q not found: %v", idx, err)
+		}
+	}
+}
