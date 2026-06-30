@@ -68,14 +68,14 @@ func (r *HardwareRepo) List() ([]domain.Hardware, error) {
 
 // Update overwrites the hardware with h.ID with the values in h.
 func (r *HardwareRepo) Update(h domain.Hardware) error {
-	_, err := r.db.Exec(
+	res, err := r.db.Exec(
 		`UPDATE hardware SET name=?, kind=?, manufacturer=?, model=?, serial=?, location=?, purchase_date=?, warranty_end=?, status=?, notes=? WHERE id=?`,
 		h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.PurchaseDate, h.WarrantyEnd, h.Status, h.Notes, h.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update hardware: %w", err)
 	}
-	return nil
+	return rowsAffectedOrNotFound(res)
 }
 
 // Delete removes the hardware with the given id.
@@ -89,7 +89,7 @@ func (r *HardwareRepo) Delete(id int64) error {
 func scanHardware(s scanner) (domain.Hardware, error) {
 	var h domain.Hardware
 	if err := s.Scan(&h.ID, &h.Name, &h.Kind, &h.Manufacturer, &h.Model, &h.Serial, &h.Location, &h.PurchaseDate, &h.WarrantyEnd, &h.Status, &h.Notes); err != nil {
-		return domain.Hardware{}, fmt.Errorf("scan hardware: %w", err)
+		return domain.Hardware{}, notFound(fmt.Errorf("scan hardware: %w", err))
 	}
 	return h, nil
 }
