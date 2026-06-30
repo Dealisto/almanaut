@@ -51,17 +51,25 @@ func (linkSanitizer) Transform(node *ast.Document, reader text.Reader, _ parser.
 		if !entering {
 			return ast.WalkContinue, nil
 		}
+		// safeLinkScheme is fed util.URLEscape(dest, ...) — the exact bytes the
+		// goldmark HTML renderer emits into the href/src — rather than the raw
+		// destination. The renderer decodes HTML entities and numeric references
+		// (UnescapePunctuations/ResolveNumericReferences/ResolveEntityNames) before
+		// writing the attribute, so checking the raw bytes would miss obfuscations
+		// like data&#58;image/svg+xml where the colon is entity-encoded. Inline
+		// links/images decode references (resolveReference=true); autolinks do not
+		// (false), matching renderLink/renderImage vs renderAutoLink.
 		switch t := n.(type) {
 		case *ast.Link:
-			if !safeLinkScheme(t.Destination) {
+			if !safeLinkScheme(util.URLEscape(t.Destination, true)) {
 				t.Destination = []byte("#")
 			}
 		case *ast.Image:
-			if !safeLinkScheme(t.Destination) {
+			if !safeLinkScheme(util.URLEscape(t.Destination, true)) {
 				t.Destination = []byte("")
 			}
 		case *ast.AutoLink:
-			if t.AutoLinkType == ast.AutoLinkURL && !safeLinkScheme(t.URL(source)) {
+			if t.AutoLinkType == ast.AutoLinkURL && !safeLinkScheme(util.URLEscape(t.URL(source), false)) {
 				unsafeAutoLinks = append(unsafeAutoLinks, t)
 			}
 		}
@@ -92,9 +100,11 @@ func safeLinkScheme(dest []byte) bool {
 	return true // no ':' at all → relative
 }
 
-// allowedScheme compares a URL scheme against the allow-list with ASCII
-// whitespace and control characters removed, because browsers ignore those when
-// resolving a scheme (e.g. "java\tscript:" still executes as javascript:).
+// allowedScheme compares a URL scheme against the allow-list. ASCII whitespace
+// and control characters are stripped first as defense in depth: callers pass
+// the URL-escaped destination (where such bytes are already percent-encoded),
+// but stripping them keeps the check correct for any direct caller and matches
+// how browsers ignore them when resolving a scheme (e.g. "java\tscript:").
 func allowedScheme(scheme string) bool {
 	var b strings.Builder
 	for i := 0; i < len(scheme); i++ {

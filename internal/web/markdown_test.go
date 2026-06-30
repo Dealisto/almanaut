@@ -42,6 +42,26 @@ func TestRenderMarkdownStripsDangerousLinkSchemes(t *testing.T) {
 	}
 }
 
+// TestRenderMarkdownStripsEntityEncodedSchemes guards the bypass where the
+// dangerous scheme is hidden behind HTML entities or numeric references in the
+// source: goldmark decodes those before emitting the href, so the scheme check
+// must run on the decoded destination, not the raw bytes.
+func TestRenderMarkdownStripsEntityEncodedSchemes(t *testing.T) {
+	dangerous := []string{
+		"[x](javascript&#58;alert1)",                  // entity-encoded colon
+		"[x](&#106;avascript:alert1)",                 // entity-encoded scheme letter
+		"[x](javascript&colon;alert1)",                // named entity colon
+		"[x](data&#58;image/svg+xml;base64,PHN2Zz4=)", // data: hidden from the raw scan
+		"[x][ref]\n\n[ref]: javascript&#58;alert1",    // reference-style link
+	}
+	for _, src := range dangerous {
+		out := strings.ToLower(string(renderMarkdown(src)))
+		if strings.Contains(out, "javascript:") || strings.Contains(out, "data:") {
+			t.Errorf("entity-encoded dangerous scheme survived for %q: %q", src, out)
+		}
+	}
+}
+
 func TestRenderMarkdownKeepsSafeLinks(t *testing.T) {
 	cases := map[string]string{
 		"[x](https://example.com)": `href="https://example.com"`,
