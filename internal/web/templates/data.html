@@ -10,6 +10,7 @@
 <h2>Import</h2>
 <p class="muted">Replace <strong>all</strong> current data with the contents of a YAML export.</p>
 <form class="stack" method="post" action="/import" enctype="multipart/form-data">
+{{ csrfField }}
   <label>YAML file<input type="file" name="file" accept=".yaml,.yml" required></label>
   <label><input type="checkbox" name="confirm" required> This permanently replaces all current data.</label>
   <div class="actions"><button class="btn btn-danger" type="submit">Import &amp; replace</button></div>

@@ -17,6 +17,7 @@
         <a class="btn" href="/hosts/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/hosts/{{.ID}}/delete"
               onsubmit="return confirm('Delete this host?');">
+          {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
       </td>

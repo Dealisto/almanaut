@@ -3,6 +3,7 @@
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 {{if .Proposals}}
 <form method="post" action="/discovery/docker/import">
+{{ csrfField }}
   <label>Host these containers run on
     <select name="host">
       <option value="">— none —</option>

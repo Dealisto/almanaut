@@ -2,6 +2,7 @@
 <h1>{{.Heading}}</h1>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
+{{ csrfField }}
   <label>Name<input name="name" value="{{.Item.Name}}" required></label>
   <label>CIDR<input name="cidr" value="{{.Item.CIDR}}" placeholder="10.0.0.0/24" required></label>
   <label>VLAN<input name="vlan" value="{{.Item.VLAN}}"></label>

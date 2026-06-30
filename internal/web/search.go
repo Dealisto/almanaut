@@ -53,7 +53,7 @@ func searchEntities(
 		q := strings.TrimSpace(req.URL.Query().Get("q"))
 		data := searchPageData{Title: "Search", Query: q}
 		if q == "" {
-			render(w, "search.html", data)
+			render(w, req, "search.html", data)
 			return
 		}
 
@@ -218,6 +218,6 @@ func searchEntities(
 			data.Groups = append(data.Groups, searchGroup{Heading: b.heading, Hits: b.hits})
 			data.Total += len(b.hits)
 		}
-		render(w, "search.html", data)
+		render(w, req, "search.html", data)
 	}
 }

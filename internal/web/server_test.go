@@ -124,9 +124,7 @@ func TestProxmoxDisabledIs404(t *testing.T) {
 
 func TestProxmoxImportDisabledIs404(t *testing.T) {
 	srv := newTestServerProxmox(t, fakeProxmoxScanner{}, ProxmoxOptions{})
-	req := httptest.NewRequest(http.MethodPost, "/discovery/proxmox/import", nil)
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/discovery/proxmox/import", nil)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("disabled POST /discovery/proxmox/import = %d, want 404", rec.Code)
 	}
@@ -164,10 +162,7 @@ func TestProxmoxImportCreatesHostsAndLinks(t *testing.T) {
 	form.Add("id", "node/pve")
 	form.Add("id", "qemu/100")
 	form.Set("link", "on")
-	req := httptest.NewRequest(http.MethodPost, "/discovery/proxmox/import", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/discovery/proxmox/import", form)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("import = %d, want 303", rec.Code)
 	}
@@ -203,10 +198,7 @@ func TestProxmoxImportLinksDuplicateGuestNames(t *testing.T) {
 	form.Add("id", "qemu/100")
 	form.Add("id", "qemu/101")
 	form.Set("link", "on")
-	req := httptest.NewRequest(http.MethodPost, "/discovery/proxmox/import", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/discovery/proxmox/import", form)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("import = %d, want 303", rec.Code)
 	}
@@ -397,16 +389,13 @@ func TestCreateAndListHost(t *testing.T) {
 
 	// Create via form POST
 	form := url.Values{"name": {"web01"}, "type": {"vm"}, "os": {"Debian 12"}, "ips": {"10.0.0.5"}}
-	req := httptest.NewRequest(http.MethodPost, "/hosts", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/hosts", form)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST /hosts status = %d, want 303", rec.Code)
 	}
 
 	// List shows the new host
-	req = httptest.NewRequest(http.MethodGet, "/hosts", nil)
+	req := httptest.NewRequest(http.MethodGet, "/hosts", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -419,11 +408,7 @@ func TestCreateAndListHost(t *testing.T) {
 
 func TestCreateHostInvalidShowsError(t *testing.T) {
 	srv := newTestServer(t)
-	form := url.Values{"name": {""}, "type": {"vm"}}
-	req := httptest.NewRequest(http.MethodPost, "/hosts", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/hosts", url.Values{"name": {""}, "type": {"vm"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("invalid POST status = %d, want 200 (re-render with error)", rec.Code)
 	}
@@ -440,12 +425,10 @@ func TestEditAndUpdateHost(t *testing.T) {
 		"name": {"web01"}, "type": {"vm"}, "ips": {"10.0.0.5"},
 		"cpu": {"4 cores"}, "ram": {"16GB"}, "disk": {"500GB"},
 	}
-	req := httptest.NewRequest(http.MethodPost, "/hosts", strings.NewReader(create.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	srv.ServeHTTP(httptest.NewRecorder(), req)
+	postForm(t, srv, "/hosts", create)
 
 	// Edit form is prefilled with the existing values, including the spec fields.
-	req = httptest.NewRequest(http.MethodGet, "/hosts/1/edit", nil)
+	req := httptest.NewRequest(http.MethodGet, "/hosts/1/edit", nil)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -464,10 +447,7 @@ func TestEditAndUpdateHost(t *testing.T) {
 		"name": {"web99"}, "type": {"lxc"}, "ips": {"10.0.0.6"},
 		"cpu": {"8 cores"}, "ram": {"32GB"}, "disk": {"1TB"},
 	}
-	req = httptest.NewRequest(http.MethodPost, "/hosts/1", strings.NewReader(upd.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec = httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec = postForm(t, srv, "/hosts/1", upd)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST /hosts/1 = %d, want 303", rec.Code)
 	}
@@ -517,15 +497,12 @@ func TestCreateAndListService(t *testing.T) {
 	srv := newTestServer(t)
 
 	form := url.Values{"name": {"jellyfin"}, "kind": {"container"}, "url": {"http://10.0.0.20:8096"}, "ports": {"8096"}}
-	req := httptest.NewRequest(http.MethodPost, "/services", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/services", form)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST /services = %d, want 303", rec.Code)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/services", nil)
+	req := httptest.NewRequest(http.MethodGet, "/services", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -539,11 +516,7 @@ func TestCreateAndListService(t *testing.T) {
 
 func TestCreateServiceInvalidShowsError(t *testing.T) {
 	srv := newTestServer(t)
-	form := url.Values{"name": {""}, "kind": {"container"}}
-	req := httptest.NewRequest(http.MethodPost, "/services", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/services", url.Values{"name": {""}, "kind": {"container"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("invalid POST /services = %d, want 200", rec.Code)
 	}
@@ -556,15 +529,12 @@ func TestCreateAndListNetwork(t *testing.T) {
 	srv := newTestServer(t)
 
 	form := url.Values{"name": {"lan"}, "cidr": {"10.0.0.0/24"}, "gateway": {"10.0.0.1"}}
-	req := httptest.NewRequest(http.MethodPost, "/networks", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/networks", form)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST /networks = %d, want 303", rec.Code)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/networks", nil)
+	req := httptest.NewRequest(http.MethodGet, "/networks", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if !strings.Contains(rec.Body.String(), "10.0.0.0/24") {
@@ -574,11 +544,7 @@ func TestCreateAndListNetwork(t *testing.T) {
 
 func TestCreateNetworkInvalidShowsError(t *testing.T) {
 	srv := newTestServer(t)
-	form := url.Values{"name": {"lan"}, "cidr": {"not-a-cidr"}}
-	req := httptest.NewRequest(http.MethodPost, "/networks", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/networks", url.Values{"name": {"lan"}, "cidr": {"not-a-cidr"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("invalid POST /networks = %d, want 200", rec.Code)
 	}
@@ -591,15 +557,12 @@ func TestCreateAndListDomain(t *testing.T) {
 	srv := newTestServer(t)
 
 	form := url.Values{"fqdn": {"jellyfin.example.com"}, "provider": {"Cloudflare"}}
-	req := httptest.NewRequest(http.MethodPost, "/domains", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/domains", form)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST /domains = %d, want 303", rec.Code)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/domains", nil)
+	req := httptest.NewRequest(http.MethodGet, "/domains", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "jellyfin.example.com") {
@@ -609,11 +572,7 @@ func TestCreateAndListDomain(t *testing.T) {
 
 func TestCreateDomainInvalidShowsError(t *testing.T) {
 	srv := newTestServer(t)
-	form := url.Values{"fqdn": {"localhost"}}
-	req := httptest.NewRequest(http.MethodPost, "/domains", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/domains", url.Values{"fqdn": {"localhost"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("invalid POST /domains = %d, want 200", rec.Code)
 	}
@@ -651,15 +610,12 @@ func TestCreateAndListCertificate(t *testing.T) {
 	srv := newTestServer(t)
 
 	form := url.Values{"subject": {"*.example.com"}, "issuer": {"Let's Encrypt"}, "expires_on": {"2027-01-15"}, "auto_renew": {"on"}}
-	req := httptest.NewRequest(http.MethodPost, "/certificates", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/certificates", form)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST /certificates = %d, want 303", rec.Code)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/certificates", nil)
+	req := httptest.NewRequest(http.MethodGet, "/certificates", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	body := rec.Body.String()
@@ -670,11 +626,7 @@ func TestCreateAndListCertificate(t *testing.T) {
 
 func TestCreateCertificateInvalidShowsError(t *testing.T) {
 	srv := newTestServer(t)
-	form := url.Values{"subject": {"x"}, "expires_on": {"nope"}}
-	req := httptest.NewRequest(http.MethodPost, "/certificates", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/certificates", url.Values{"subject": {"x"}, "expires_on": {"nope"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("invalid POST /certificates = %d, want 200", rec.Code)
 	}
@@ -716,15 +668,12 @@ func TestCreateAndListBackup(t *testing.T) {
 	srv := newTestServer(t)
 
 	form := url.Values{"source": {"nextcloud-data"}, "destination": {"Backblaze B2"}, "frequency": {"daily"}, "last_run": {"2026-06-20"}}
-	req := httptest.NewRequest(http.MethodPost, "/backups", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/backups", form)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST /backups = %d, want 303", rec.Code)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/backups", nil)
+	req := httptest.NewRequest(http.MethodGet, "/backups", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if !strings.Contains(rec.Body.String(), "nextcloud-data") {
@@ -734,11 +683,7 @@ func TestCreateAndListBackup(t *testing.T) {
 
 func TestCreateBackupInvalidShowsError(t *testing.T) {
 	srv := newTestServer(t)
-	form := url.Values{"source": {"x"}, "last_run": {"nope"}}
-	req := httptest.NewRequest(http.MethodPost, "/backups", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/backups", url.Values{"source": {"x"}, "last_run": {"nope"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("invalid POST /backups = %d, want 200", rec.Code)
 	}
@@ -819,10 +764,20 @@ func TestTagsOverview(t *testing.T) {
 	}
 }
 
+// csrfTestToken is any fixed value; double-submit only checks cookie == field.
+const csrfTestToken = "test-csrf-token"
+
+// postForm issues a POST with a matching CSRF cookie and form field so the
+// csrfProtect middleware admits it. form may be nil.
 func postForm(t *testing.T, srv http.Handler, path string, form url.Values) *httptest.ResponseRecorder {
 	t.Helper()
+	if form == nil {
+		form = url.Values{}
+	}
+	form.Set(csrfFieldName, csrfTestToken)
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: csrfTestToken})
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	return rec
@@ -1107,9 +1062,13 @@ func uploadImport(t *testing.T, srv http.Handler, yamlDoc string, confirm bool) 
 			t.Fatal(err)
 		}
 	}
+	if err := mw.WriteField(csrfFieldName, csrfTestToken); err != nil {
+		t.Fatal(err)
+	}
 	mw.Close()
 	req := httptest.NewRequest(http.MethodPost, "/import", &buf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: csrfTestToken})
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	return rec
@@ -1449,16 +1408,13 @@ func TestCreateAndListHardware(t *testing.T) {
 
 	// Create via form POST
 	form := url.Values{"name": {"APC UPS"}, "kind": {"ups"}, "manufacturer": {"APC"}, "status": {"active"}}
-	req := httptest.NewRequest(http.MethodPost, "/hardware", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/hardware", form)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST /hardware status = %d, want 303", rec.Code)
 	}
 
 	// List shows the new hardware
-	req = httptest.NewRequest(http.MethodGet, "/hardware", nil)
+	req := httptest.NewRequest(http.MethodGet, "/hardware", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -1483,11 +1439,7 @@ func TestCreateAndListHardware(t *testing.T) {
 
 func TestCreateHardwareInvalidShowsError(t *testing.T) {
 	srv := newTestServer(t)
-	form := url.Values{"name": {""}, "kind": {"ups"}}
-	req := httptest.NewRequest(http.MethodPost, "/hardware", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/hardware", url.Values{"name": {""}, "kind": {"ups"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("invalid POST /hardware status = %d, want 200 (re-render with error)", rec.Code)
 	}
@@ -1500,15 +1452,12 @@ func TestCreateAndListSubscription(t *testing.T) {
 	srv := newTestServer(t)
 
 	form := url.Values{"name": {"Hetzner VPS"}, "kind": {"vps"}, "amount": {"12.99"}, "currency": {"EUR"}, "billing_cycle": {"monthly"}, "auto_renew": {"on"}}
-	req := httptest.NewRequest(http.MethodPost, "/subscriptions", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/subscriptions", form)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST /subscriptions status = %d, want 303", rec.Code)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/subscriptions", nil)
+	req := httptest.NewRequest(http.MethodGet, "/subscriptions", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -1521,11 +1470,7 @@ func TestCreateAndListSubscription(t *testing.T) {
 
 func TestCreateSubscriptionInvalidShowsError(t *testing.T) {
 	srv := newTestServer(t)
-	form := url.Values{"name": {""}, "amount": {"-5"}}
-	req := httptest.NewRequest(http.MethodPost, "/subscriptions", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/subscriptions", url.Values{"name": {""}, "amount": {"-5"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("invalid POST status = %d, want 200 (re-render with error)", rec.Code)
 	}
@@ -1545,15 +1490,12 @@ func TestCreateAndListAccount(t *testing.T) {
 		"secret_ref":       {"Homelab > Proxmox"},
 		"status":           {"active"},
 	}
-	req := httptest.NewRequest(http.MethodPost, "/accounts", strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	rec := postForm(t, srv, "/accounts", form)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST /accounts status = %d, want 303", rec.Code)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/accounts", nil)
+	req := httptest.NewRequest(http.MethodGet, "/accounts", nil)
 	rec = httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

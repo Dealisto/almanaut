@@ -2,6 +2,7 @@
 <h1>{{.Heading}}</h1>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
+{{ csrfField }}
   <label>Source (what is backed up)<input name="source" value="{{.Item.Source}}" required></label>
   <label>Destination<input name="destination" value="{{.Item.Destination}}" placeholder="Backblaze B2"></label>
   <label>Frequency<input name="frequency" value="{{.Item.Frequency}}" placeholder="daily"></label>
