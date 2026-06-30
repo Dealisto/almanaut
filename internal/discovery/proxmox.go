@@ -42,9 +42,13 @@ func NewProxmoxClient(baseURL, token string, insecure bool) *ProxmoxClient {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	return &ProxmoxClient{
-		httpClient: &http.Client{Timeout: 15 * time.Second, Transport: transport},
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		token:      token,
+		httpClient: &http.Client{
+			Timeout:       15 * time.Second,
+			Transport:     transport,
+			CheckRedirect: noRedirect,
+		},
+		baseURL: strings.TrimRight(baseURL, "/"),
+		token:   token,
 	}
 }
 
@@ -74,7 +78,7 @@ func (c *ProxmoxClient) Resources(ctx context.Context) ([]ProxmoxResource, error
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("proxmox API status %d", resp.StatusCode)
+		return nil, statusError("proxmox", resp)
 	}
 	var body struct {
 		Data []apiResource `json:"data"`
@@ -95,4 +99,24 @@ func (c *ProxmoxClient) Resources(ctx context.Context) ([]ProxmoxResource, error
 		out = append(out, ProxmoxResource(r))
 	}
 	return out, nil
+}
+
+// noRedirect tells an http.Client not to follow redirects. The discovery REST
+// endpoints (Proxmox, Docker) have no legitimate reason to redirect, so a 30x
+// is more likely a misconfiguration or a hostile endpoint trying to bounce the
+// request at an internal address; surface the redirect response as-is instead.
+func noRedirect(*http.Request, []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
+// statusError builds an error for a non-OK API response, including a bounded
+// excerpt of the body so the server's own explanation (e.g. an invalid-token
+// message on a 401/403) reaches the operator instead of a bare status code.
+func statusError(source string, resp *http.Response) error {
+	const maxExcerpt = 512
+	excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, maxExcerpt))
+	if msg := strings.TrimSpace(string(excerpt)); msg != "" {
+		return fmt.Errorf("%s API status %d: %s", source, resp.StatusCode, msg)
+	}
+	return fmt.Errorf("%s API status %d", source, resp.StatusCode)
 }
