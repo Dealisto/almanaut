@@ -250,6 +250,7 @@ type mountable interface {
 	mount(r chi.Router, d handlerDeps)
 	options() ([]entityOption, error)
 	singular() string
+	basePath() string
 }
 
 func parseHost(r *http.Request, id int64) domain.Host {

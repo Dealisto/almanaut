@@ -59,6 +59,19 @@ func (c entityCatalog) options() ([]entityOption, error) {
 	return opts, nil
 }
 
+// path resolves an entity reference to its canonical detail URL (e.g. "/hosts/1").
+// It looks the singular type up in the catalog and uses that resource's route
+// base rather than pluralizing the type, so an irregular base resolves correctly
+// — "hardware" lives at /hardware, not the "/hardwares" that "type+s" produces.
+func (c entityCatalog) path(typ string, id int64) string {
+	for _, rs := range c.resources {
+		if rs.singular() == typ {
+			return fmt.Sprintf("%s/%d", rs.basePath(), id)
+		}
+	}
+	return fmt.Sprintf("/%ss/%d", typ, id)
+}
+
 // labelMap builds a lookup from each option's "type:id" value to its label,
 // used to resolve relationship endpoints and tagged entities to human names.
 func labelMap(opts []entityOption) map[string]string {

@@ -3,7 +3,6 @@ package web
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -282,8 +281,8 @@ func New(cfg Config) http.Handler {
 		for _, rs := range resources {
 			rs.mount(r, deps)
 		}
-		r.Post("/tags", addTag(tags))
-		r.Post("/tags/delete", removeTag(tags))
+		r.Post("/tags", addTag(tags, cat))
+		r.Post("/tags/delete", removeTag(tags, cat))
 		r.Get("/tags", tagsOverview(tags, cat))
 
 		r.Get("/relationships", listRelationships(relationships, cat))
@@ -532,7 +531,7 @@ func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 		for _, tg := range tagged {
 			entities = append(entities, tagEntity{
 				Label: labelOrFallback(labels, tg.EntityType, tg.EntityID),
-				URL:   fmt.Sprintf("/%ss/%d", tg.EntityType, tg.EntityID),
+				URL:   cat.path(tg.EntityType, tg.EntityID),
 			})
 		}
 		// Keep the view in drilldown mode (Selected non-empty) even when the
@@ -547,7 +546,7 @@ func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 	}
 }
 
-func addTag(tags *store.TagRepo) http.HandlerFunc {
+func addTag(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		entityType := req.FormValue("entity_type")
 		entityID, err := strconv.ParseInt(req.FormValue("entity_id"), 10, 64)
@@ -564,11 +563,11 @@ func addTag(tags *store.TagRepo) http.HandlerFunc {
 			serverError(w, req, err)
 			return
 		}
-		http.Redirect(w, req, fmt.Sprintf("/%ss/%d", entityType, entityID), http.StatusSeeOther)
+		http.Redirect(w, req, cat.path(entityType, entityID), http.StatusSeeOther)
 	}
 }
 
-func removeTag(tags *store.TagRepo) http.HandlerFunc {
+func removeTag(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		id, err := strconv.ParseInt(req.FormValue("id"), 10, 64)
 		if err != nil {
@@ -580,8 +579,14 @@ func removeTag(tags *store.TagRepo) http.HandlerFunc {
 			return
 		}
 		entityType := req.FormValue("entity_type")
-		entityID, _ := strconv.ParseInt(req.FormValue("entity_id"), 10, 64)
-		http.Redirect(w, req, fmt.Sprintf("/%ss/%d", entityType, entityID), http.StatusSeeOther)
+		entityID, err := strconv.ParseInt(req.FormValue("entity_id"), 10, 64)
+		if err != nil {
+			// The tag is gone; with no valid entity to return to, fall back to the
+			// tag overview rather than redirecting to a bogus "/type/0".
+			http.Redirect(w, req, "/tags", http.StatusSeeOther)
+			return
+		}
+		http.Redirect(w, req, cat.path(entityType, entityID), http.StatusSeeOther)
 	}
 }
 
