@@ -1490,6 +1490,28 @@ func TestCreateAndListHardware(t *testing.T) {
 	}
 }
 
+// TestTagRedirectUsesResourcePath guards against pluralizing the entity type to
+// build its URL: "hardware" lives at /hardware, so a naive "type+s" would send
+// the post-tag redirect to the non-existent /hardwares/1. Add and remove must
+// both land on the real detail page resolved through the catalog.
+func TestTagRedirectUsesResourcePath(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/hardware", url.Values{"name": {"APC UPS"}, "kind": {"ups"}, "status": {"active"}})
+
+	rec := postForm(t, srv, "/tags", url.Values{"entity_type": {"hardware"}, "entity_id": {"1"}, "tag": {"critical"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /tags = %d, want 303", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/hardware/1" {
+		t.Errorf("add-tag redirect = %q, want /hardware/1", loc)
+	}
+
+	rec = postForm(t, srv, "/tags/delete", url.Values{"id": {"1"}, "entity_type": {"hardware"}, "entity_id": {"1"}})
+	if loc := rec.Header().Get("Location"); loc != "/hardware/1" {
+		t.Errorf("remove-tag redirect = %q, want /hardware/1", loc)
+	}
+}
+
 func TestCreateHardwareInvalidShowsError(t *testing.T) {
 	srv := newTestServer(t)
 	rec := postForm(t, srv, "/hardware", url.Values{"name": {""}, "kind": {"ups"}})
