@@ -21,3 +21,6 @@
 
 # Local agent scratch (progress ledger, task briefs/reports)
 .superpowers/
+
+# Internal specs/plans (kept local, not published)
+/docs/superpowers/
