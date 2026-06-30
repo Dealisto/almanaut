@@ -23,6 +23,11 @@ func (r *HostRepo) WithTx(tx *sql.Tx) *HostRepo {
 	return &HostRepo{db: tx}
 }
 
+// DeleteTx removes the host with the given id within tx.
+func (r *HostRepo) DeleteTx(tx *sql.Tx, id int64) error {
+	return r.WithTx(tx).Delete(id)
+}
+
 // Create inserts h and returns its new ID.
 func (r *HostRepo) Create(h domain.Host) (int64, error) {
 	if h.IPs == nil {

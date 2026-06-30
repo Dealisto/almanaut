@@ -22,6 +22,11 @@ func (r *CertificateRepo) WithTx(tx *sql.Tx) *CertificateRepo {
 	return &CertificateRepo{db: tx}
 }
 
+// DeleteTx removes the certificate with the given id within tx.
+func (r *CertificateRepo) DeleteTx(tx *sql.Tx, id int64) error {
+	return r.WithTx(tx).Delete(id)
+}
+
 func boolToInt(b bool) int {
 	if b {
 		return 1

@@ -22,6 +22,11 @@ func (r *SubscriptionRepo) WithTx(tx *sql.Tx) *SubscriptionRepo {
 	return &SubscriptionRepo{db: tx}
 }
 
+// DeleteTx removes the subscription with the given id within tx.
+func (r *SubscriptionRepo) DeleteTx(tx *sql.Tx, id int64) error {
+	return r.WithTx(tx).Delete(id)
+}
+
 const subscriptionColumns = `id, name, kind, provider, amount, currency, billing_cycle, renewal_date, auto_renew, status, notes`
 
 // Create inserts s and returns its new ID.

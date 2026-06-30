@@ -22,6 +22,11 @@ func (r *HardwareRepo) WithTx(tx *sql.Tx) *HardwareRepo {
 	return &HardwareRepo{db: tx}
 }
 
+// DeleteTx removes the hardware with the given id within tx.
+func (r *HardwareRepo) DeleteTx(tx *sql.Tx, id int64) error {
+	return r.WithTx(tx).Delete(id)
+}
+
 const hardwareColumns = `id, name, kind, manufacturer, model, serial, location, purchase_date, warranty_end, status, notes`
 
 // Create inserts h and returns its new ID.
