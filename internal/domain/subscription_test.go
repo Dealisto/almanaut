@@ -15,6 +15,10 @@ func TestSubscriptionValidate(t *testing.T) {
 		{"blank name", Subscription{Name: "   "}, true},
 		{"negative amount", Subscription{Name: "x", Amount: "-1"}, true},
 		{"non-numeric amount", Subscription{Name: "x", Amount: "abc"}, true},
+		{"scientific notation amount", Subscription{Name: "x", Amount: "1e3"}, true},
+		{"infinity amount", Subscription{Name: "x", Amount: "Inf"}, true},
+		{"nan amount", Subscription{Name: "x", Amount: "NaN"}, true},
+		{"trailing dot amount", Subscription{Name: "x", Amount: "5."}, true},
 		{"bad renewal date", Subscription{Name: "x", RenewalDate: "01-02-2027"}, true},
 	}
 	for _, tt := range tests {

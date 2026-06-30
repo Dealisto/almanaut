@@ -2,10 +2,16 @@ package domain
 
 import (
 	"fmt"
-	"strconv"
+	"regexp"
 	"strings"
 	"time"
 )
+
+// decimalAmount matches a non-negative decimal money string ("0", "12", "12.99").
+// Using a regexp rather than strconv.ParseFloat deliberately rejects what the
+// "decimal string, not a float" contract forbids: scientific notation ("1e3"),
+// the float specials "Inf"/"NaN" (which slip past a v<0 check), and signs.
+var decimalAmount = regexp.MustCompile(`^\d+(\.\d+)?$`)
 
 // Subscription is a recurring cost or license: VPS, domain registration,
 // software license, support contract. A perpetual license is a Subscription
@@ -32,12 +38,8 @@ func (s Subscription) Validate() error {
 		return fmt.Errorf("name is required")
 	}
 	if amt := strings.TrimSpace(s.Amount); amt != "" {
-		v, err := strconv.ParseFloat(amt, 64)
-		if err != nil {
-			return fmt.Errorf("amount must be a number, got %q", s.Amount)
-		}
-		if v < 0 {
-			return fmt.Errorf("amount must not be negative, got %q", s.Amount)
+		if !decimalAmount.MatchString(amt) {
+			return fmt.Errorf("amount must be a non-negative decimal, got %q", s.Amount)
 		}
 	}
 	if rd := strings.TrimSpace(s.RenewalDate); rd != "" {
