@@ -63,6 +63,9 @@ func TestBasicAuthWrongCredentialsReturn401(t *testing.T) {
 			if rec.Code != http.StatusUnauthorized {
 				t.Fatalf("code = %d, want 401", rec.Code)
 			}
+			if got := rec.Header().Get("WWW-Authenticate"); got != `Basic realm="Almanaut"` {
+				t.Fatalf("WWW-Authenticate = %q, want Basic realm=\"Almanaut\"", got)
+			}
 		})
 	}
 }

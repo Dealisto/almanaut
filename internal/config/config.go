@@ -16,6 +16,8 @@ type Config struct {
 	ProxmoxURL         string // Proxmox VE API base URL, e.g. https://pve.lan:8006
 	ProxmoxToken       string // Proxmox API token "user@realm!tokenid=secret"
 	ProxmoxInsecure    bool   // skip TLS verification (self-signed Proxmox cert)
+	AuthUser           string // ALMANAUT_AUTH_USER — enables HTTP basic auth when set with AuthPass
+	AuthPass           string // ALMANAUT_AUTH_PASS
 }
 
 // Load reads configuration from the environment, falling back to defaults.
@@ -29,6 +31,8 @@ func Load() Config {
 		ProxmoxURL:         getenv("ALMANAUT_PROXMOX_URL", ""),
 		ProxmoxToken:       getenv("ALMANAUT_PROXMOX_TOKEN", ""),
 		ProxmoxInsecure:    getenvBool("ALMANAUT_PROXMOX_INSECURE", false),
+		AuthUser:           getenv("ALMANAUT_AUTH_USER", ""),
+		AuthPass:           getenv("ALMANAUT_AUTH_PASS", ""),
 	}
 }
 
