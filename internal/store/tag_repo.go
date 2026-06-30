@@ -59,29 +59,22 @@ func (r *TagRepo) DeleteByEntity(entityType string, id int64) error {
 
 // ListForEntity returns the tags attached to (entityType, entityID), ordered by name.
 func (r *TagRepo) ListForEntity(entityType string, entityID int64) ([]domain.Tag, error) {
-	rows, err := r.db.Query(
+	return r.query(
 		`SELECT id, entity_type, entity_id, name FROM tags
 		 WHERE entity_type = ? AND entity_id = ? ORDER BY name`,
 		entityType, entityID,
 	)
-	if err != nil {
-		return nil, fmt.Errorf("query tags: %w", err)
-	}
-	defer rows.Close()
-	tags := []domain.Tag{}
-	for rows.Next() {
-		var t domain.Tag
-		if err := rows.Scan(&t.ID, &t.EntityType, &t.EntityID, &t.Name); err != nil {
-			return nil, fmt.Errorf("scan tag: %w", err)
-		}
-		tags = append(tags, t)
-	}
-	return tags, rows.Err()
 }
 
 // List returns every tag, ordered by id.
 func (r *TagRepo) List() ([]domain.Tag, error) {
-	rows, err := r.db.Query(`SELECT id, entity_type, entity_id, name FROM tags ORDER BY id`)
+	return r.query(`SELECT id, entity_type, entity_id, name FROM tags ORDER BY id`)
+}
+
+// query runs sqlStr and scans the rows into tags. All tag list queries share
+// the same columns, so they funnel through here (mirrors RelationshipRepo.query).
+func (r *TagRepo) query(sqlStr string, args ...any) ([]domain.Tag, error) {
+	rows, err := r.db.Query(sqlStr, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query tags: %w", err)
 	}
@@ -127,46 +120,20 @@ func (r *TagRepo) Counts() ([]TagCount, error) {
 // ListByName returns every tag row whose (normalized) name matches, ordered by
 // entity_type then entity_id.
 func (r *TagRepo) ListByName(name string) ([]domain.Tag, error) {
-	rows, err := r.db.Query(
+	return r.query(
 		`SELECT id, entity_type, entity_id, name FROM tags
 		 WHERE name = ? ORDER BY entity_type, entity_id`,
 		domain.NormalizeTag(name),
 	)
-	if err != nil {
-		return nil, fmt.Errorf("query tags by name: %w", err)
-	}
-	defer rows.Close()
-	tags := []domain.Tag{}
-	for rows.Next() {
-		var t domain.Tag
-		if err := rows.Scan(&t.ID, &t.EntityType, &t.EntityID, &t.Name); err != nil {
-			return nil, fmt.Errorf("scan tag: %w", err)
-		}
-		tags = append(tags, t)
-	}
-	return tags, rows.Err()
 }
 
 // Search returns tag rows whose name contains q (case-insensitive substring),
 // ordered by entity_type then entity_id. Tag names are stored lowercase, so the
 // query is lowercased and matched with instr (no LIKE wildcards to escape).
 func (r *TagRepo) Search(q string) ([]domain.Tag, error) {
-	rows, err := r.db.Query(
+	return r.query(
 		`SELECT id, entity_type, entity_id, name FROM tags
 		 WHERE instr(name, ?) > 0 ORDER BY entity_type, entity_id`,
 		strings.ToLower(strings.TrimSpace(q)),
 	)
-	if err != nil {
-		return nil, fmt.Errorf("search tags: %w", err)
-	}
-	defer rows.Close()
-	tags := []domain.Tag{}
-	for rows.Next() {
-		var t domain.Tag
-		if err := rows.Scan(&t.ID, &t.EntityType, &t.EntityID, &t.Name); err != nil {
-			return nil, fmt.Errorf("scan tag: %w", err)
-		}
-		tags = append(tags, t)
-	}
-	return tags, rows.Err()
 }
