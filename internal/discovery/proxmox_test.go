@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -43,13 +44,36 @@ func TestResourcesParsesAndFilters(t *testing.T) {
 	}
 }
 
-func TestResourcesNon200IsError(t *testing.T) {
+func TestResourcesNon200IncludesBodyExcerpt(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("authentication failure - invalid token value"))
 	}))
 	defer ts.Close()
 	c := NewProxmoxClient(ts.URL, "bad", false)
-	if _, err := c.Resources(context.Background()); err == nil {
+	_, err := c.Resources(context.Background())
+	if err == nil {
 		t.Fatal("expected error on 401, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid token value") {
+		t.Errorf("error should include the response body excerpt, got: %v", err)
+	}
+}
+
+func TestResourcesDoesNotFollowRedirect(t *testing.T) {
+	var hits int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		// A hostile/misconfigured endpoint trying to bounce the request
+		// elsewhere; the client must not follow it.
+		http.Redirect(w, r, "http://169.254.169.254/latest/meta-data/", http.StatusFound)
+	}))
+	defer ts.Close()
+	c := NewProxmoxClient(ts.URL, "tok", false)
+	if _, err := c.Resources(context.Background()); err == nil {
+		t.Fatal("expected error when endpoint redirects, got nil")
+	}
+	if hits != 1 {
+		t.Errorf("client made %d requests, want 1 (redirect must not be followed)", hits)
 	}
 }

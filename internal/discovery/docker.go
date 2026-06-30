@@ -45,7 +45,8 @@ func NewSocketClient(path string) *DockerClient {
 		httpClient: &http.Client{
 			// Bound the whole request like the Proxmox client: a daemon that
 			// accepts the connection then stalls must not hold the goroutine open.
-			Timeout: 15 * time.Second,
+			Timeout:       15 * time.Second,
+			CheckRedirect: noRedirect,
 			Transport: &http.Transport{
 				DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 					var d net.Dialer
@@ -84,7 +85,7 @@ func (c *DockerClient) Containers(ctx context.Context) ([]Container, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("docker API status %d", resp.StatusCode)
+		return nil, statusError("docker", resp)
 	}
 	var raw []apiContainer
 	// Cap the response so a hostile or malfunctioning endpoint cannot exhaust
