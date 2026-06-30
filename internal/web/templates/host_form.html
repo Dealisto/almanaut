@@ -2,19 +2,19 @@
 <h1>{{.Heading}}</h1>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
-  <label>Name<input name="name" value="{{.Host.Name}}" required></label>
+  <label>Name<input name="name" value="{{.Item.Name}}" required></label>
   <label>Type
     <select name="type">
-      {{range .Types}}<option value="{{.}}" {{if eq . $.Host.Type}}selected{{end}}>{{.}}</option>{{end}}
+      {{range .Extras.Types}}<option value="{{.}}" {{if eq . $.Item.Type}}selected{{end}}>{{.}}</option>{{end}}
     </select>
   </label>
-  <label>OS<input name="os" value="{{.Host.OS}}"></label>
-  <label>CPU<input name="cpu" value="{{.Host.CPU}}"></label>
-  <label>RAM<input name="ram" value="{{.Host.RAM}}"></label>
-  <label>Disk<input name="disk" value="{{.Host.Disk}}"></label>
-  <label>IPs (comma-separated)<input name="ips" value="{{range $i, $ip := .Host.IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}"></label>
-  <label>Status<input name="status" value="{{.Host.Status}}"></label>
-  <label>Notes<textarea name="notes">{{.Host.Notes}}</textarea></label>
+  <label>OS<input name="os" value="{{.Item.OS}}"></label>
+  <label>CPU<input name="cpu" value="{{.Item.CPU}}"></label>
+  <label>RAM<input name="ram" value="{{.Item.RAM}}"></label>
+  <label>Disk<input name="disk" value="{{.Item.Disk}}"></label>
+  <label>IPs (comma-separated)<input name="ips" value="{{range $i, $ip := .Item.IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}"></label>
+  <label>Status<input name="status" value="{{.Item.Status}}"></label>
+  <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
     <a class="btn" href="/hosts">Cancel</a>

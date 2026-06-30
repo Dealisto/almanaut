@@ -2,16 +2,16 @@
 <h1>{{.Heading}}</h1>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
-  <label>Name<input name="name" value="{{.Service.Name}}" required></label>
+  <label>Name<input name="name" value="{{.Item.Name}}" required></label>
   <label>Kind
     <select name="kind">
-      {{range .Kinds}}<option value="{{.}}" {{if eq . $.Service.Kind}}selected{{end}}>{{.}}</option>{{end}}
+      {{range .Extras.Kinds}}<option value="{{.}}" {{if eq . $.Item.Kind}}selected{{end}}>{{.}}</option>{{end}}
     </select>
   </label>
-  <label>Access URL<input name="url" value="{{.Service.URL}}"></label>
-  <label>Ports<input name="ports" value="{{.Service.Ports}}"></label>
-  <label>Category<input name="category" value="{{.Service.Category}}"></label>
-  <label>Notes<textarea name="notes">{{.Service.Notes}}</textarea></label>
+  <label>Access URL<input name="url" value="{{.Item.URL}}"></label>
+  <label>Ports<input name="ports" value="{{.Item.Ports}}"></label>
+  <label>Category<input name="category" value="{{.Item.Category}}"></label>
+  <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
     <a class="btn" href="/services">Cancel</a>

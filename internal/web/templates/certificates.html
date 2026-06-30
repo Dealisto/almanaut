@@ -1,12 +1,12 @@
 {{define "content"}}
 <h1>Certificates</h1>
 <div class="toolbar"><a class="btn btn-primary" href="/certificates/new">+ New certificate</a></div>
-{{if .Certificates}}
+{{if .Items}}
 <div class="table-wrap">
 <table>
   <thead><tr><th>Subject</th><th>Issuer</th><th>Expires</th><th>Auto-renew</th><th></th></tr></thead>
   <tbody>
-  {{range .Certificates}}
+  {{range .Items}}
     <tr>
       <td><a href="/certificates/{{.ID}}">{{.Subject}}</a></td>
       <td>{{.Issuer}}</td>

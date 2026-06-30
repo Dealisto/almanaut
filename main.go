@@ -37,25 +37,25 @@ func main() {
 		log.Fatalf("migrate database: %v", err)
 	}
 
-	handler := web.New(
-		store.NewHostRepo(db),
-		store.NewServiceRepo(db),
-		store.NewNetworkRepo(db),
-		store.NewDomainRepo(db),
-		store.NewCertificateRepo(db),
-		store.NewBackupRepo(db),
-		store.NewHardwareRepo(db),
-		store.NewSubscriptionRepo(db),
-		store.NewAccountRepo(db),
-		store.NewRelationshipRepo(db),
-		store.NewTagRepo(db),
-		db,
-		discovery.NewSocketClient(cfg.DockerSocket),
-		discovery.NewNetworkScanner(),
-		web.NetDiscoveryOptions{Enabled: cfg.NetworkScanEnabled, DefaultSubnet: cfg.ScanSubnet},
-		discovery.NewProxmoxClient(cfg.ProxmoxURL, cfg.ProxmoxToken, cfg.ProxmoxInsecure),
-		web.ProxmoxOptions{Enabled: cfg.ProxmoxURL != "" && cfg.ProxmoxToken != ""},
-	)
+	handler := web.New(web.Config{
+		Hosts:         store.NewHostRepo(db),
+		Services:      store.NewServiceRepo(db),
+		Networks:      store.NewNetworkRepo(db),
+		Domains:       store.NewDomainRepo(db),
+		Certificates:  store.NewCertificateRepo(db),
+		Backups:       store.NewBackupRepo(db),
+		Hardware:      store.NewHardwareRepo(db),
+		Subscriptions: store.NewSubscriptionRepo(db),
+		Accounts:      store.NewAccountRepo(db),
+		Relationships: store.NewRelationshipRepo(db),
+		Tags:          store.NewTagRepo(db),
+		DB:            db,
+		Docker:        discovery.NewSocketClient(cfg.DockerSocket),
+		NetScan:       discovery.NewNetworkScanner(),
+		NetOpts:       web.NetDiscoveryOptions{Enabled: cfg.NetworkScanEnabled, DefaultSubnet: cfg.ScanSubnet},
+		Proxmox:       discovery.NewProxmoxClient(cfg.ProxmoxURL, cfg.ProxmoxToken, cfg.ProxmoxInsecure),
+		PVEOpts:       web.ProxmoxOptions{Enabled: cfg.ProxmoxURL != "" && cfg.ProxmoxToken != ""},
+	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           handler,

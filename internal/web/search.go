@@ -43,7 +43,12 @@ func matchesQuery(fields []string, q string) bool {
 // searchEntities renders the global search results for ?q=…: every entity
 // whose searchable fields contain the query, plus entities carrying a matching
 // tag, grouped by type and linked to their detail pages.
-func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
+func searchEntities(
+	hostRepo *store.HostRepo, serviceRepo *store.ServiceRepo, networkRepo *store.NetworkRepo,
+	domainRepo *store.DomainRepo, certRepo *store.CertificateRepo, backupRepo *store.BackupRepo,
+	hardwareRepo *store.HardwareRepo, subscriptionRepo *store.SubscriptionRepo, accountRepo *store.AccountRepo,
+	tags *store.TagRepo,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		q := strings.TrimSpace(req.URL.Query().Get("q"))
 		data := searchPageData{Title: "Search", Query: q}
@@ -85,7 +90,7 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
-		hostList, err := cat.hosts.List()
+		hostList, err := hostRepo.List()
 		if err != nil {
 			fail(err)
 			return
@@ -96,7 +101,7 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 				add(hosts, h.ID, h.Name)
 			}
 		}
-		serviceList, err := cat.services.List()
+		serviceList, err := serviceRepo.List()
 		if err != nil {
 			fail(err)
 			return
@@ -107,7 +112,7 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 				add(services, s.ID, s.Name)
 			}
 		}
-		networkList, err := cat.networks.List()
+		networkList, err := networkRepo.List()
 		if err != nil {
 			fail(err)
 			return
@@ -118,7 +123,7 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 				add(networks, n.ID, n.Name)
 			}
 		}
-		domainList, err := cat.domains.List()
+		domainList, err := domainRepo.List()
 		if err != nil {
 			fail(err)
 			return
@@ -129,7 +134,7 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 				add(domains, d.ID, d.FQDN)
 			}
 		}
-		certList, err := cat.certificates.List()
+		certList, err := certRepo.List()
 		if err != nil {
 			fail(err)
 			return
@@ -140,7 +145,7 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 				add(certificates, c.ID, c.Subject)
 			}
 		}
-		backupList, err := cat.backups.List()
+		backupList, err := backupRepo.List()
 		if err != nil {
 			fail(err)
 			return
@@ -151,7 +156,7 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 				add(backups, b.ID, b.Source)
 			}
 		}
-		hardwareList, err := cat.hardware.List()
+		hardwareList, err := hardwareRepo.List()
 		if err != nil {
 			fail(err)
 			return
@@ -163,7 +168,7 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 			}
 		}
 
-		subscriptionList, err := cat.subscriptions.List()
+		subscriptionList, err := subscriptionRepo.List()
 		if err != nil {
 			fail(err)
 			return
@@ -175,7 +180,7 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 			}
 		}
 
-		accountList, err := cat.accounts.List()
+		accountList, err := accountRepo.List()
 		if err != nil {
 			fail(err)
 			return

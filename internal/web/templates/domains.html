@@ -1,12 +1,12 @@
 {{define "content"}}
 <h1>Domains</h1>
 <div class="toolbar"><a class="btn btn-primary" href="/domains/new">+ New domain</a></div>
-{{if .Domains}}
+{{if .Items}}
 <div class="table-wrap">
 <table>
   <thead><tr><th>FQDN</th><th>Provider</th><th></th></tr></thead>
   <tbody>
-  {{range .Domains}}
+  {{range .Items}}
     <tr>
       <td><a href="/domains/{{.ID}}">{{.FQDN}}</a></td>
       <td>{{.Provider}}</td>

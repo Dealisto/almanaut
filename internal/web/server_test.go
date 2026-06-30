@@ -59,11 +59,13 @@ func newTestServerFull(t *testing.T, docker dockerScanner, netscan networkScanne
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	return New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db),
-		store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db),
-		store.NewHardwareRepo(db), store.NewSubscriptionRepo(db), store.NewAccountRepo(db),
-		store.NewRelationshipRepo(db), store.NewTagRepo(db), db,
-		docker, netscan, opts, fakeProxmoxScanner{}, ProxmoxOptions{})
+	return New(Config{
+		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
+		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
+		Hardware: store.NewHardwareRepo(db), Subscriptions: store.NewSubscriptionRepo(db), Accounts: store.NewAccountRepo(db),
+		Relationships: store.NewRelationshipRepo(db), Tags: store.NewTagRepo(db), DB: db,
+		Docker: docker, NetScan: netscan, NetOpts: opts, Proxmox: fakeProxmoxScanner{}, PVEOpts: ProxmoxOptions{},
+	})
 }
 
 type fakeProxmoxScanner struct {
@@ -96,11 +98,13 @@ func newTestServerProxmoxRepos(t *testing.T, pve proxmoxScanner, opts ProxmoxOpt
 	}
 	hosts := store.NewHostRepo(db)
 	rels := store.NewRelationshipRepo(db)
-	srv := New(hosts, store.NewServiceRepo(db), store.NewNetworkRepo(db),
-		store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db),
-		store.NewHardwareRepo(db), store.NewSubscriptionRepo(db), store.NewAccountRepo(db),
-		rels, store.NewTagRepo(db), db,
-		fakeScanner{}, fakeNetworkScanner{}, NetDiscoveryOptions{}, pve, opts)
+	srv := New(Config{
+		Hosts: hosts, Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
+		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
+		Hardware: store.NewHardwareRepo(db), Subscriptions: store.NewSubscriptionRepo(db), Accounts: store.NewAccountRepo(db),
+		Relationships: rels, Tags: store.NewTagRepo(db), DB: db,
+		Docker: fakeScanner{}, NetScan: fakeNetworkScanner{}, NetOpts: NetDiscoveryOptions{}, Proxmox: pve, PVEOpts: opts,
+	})
 	return srv, hosts, rels
 }
 
@@ -1326,11 +1330,13 @@ func newTestServerDockerDB(t *testing.T, scanner dockerScanner) (http.Handler, *
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	srv := New(store.NewHostRepo(db), store.NewServiceRepo(db), store.NewNetworkRepo(db),
-		store.NewDomainRepo(db), store.NewCertificateRepo(db), store.NewBackupRepo(db),
-		store.NewHardwareRepo(db), store.NewSubscriptionRepo(db), store.NewAccountRepo(db),
-		store.NewRelationshipRepo(db), store.NewTagRepo(db), db,
-		scanner, fakeNetworkScanner{}, NetDiscoveryOptions{}, fakeProxmoxScanner{}, ProxmoxOptions{})
+	srv := New(Config{
+		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
+		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
+		Hardware: store.NewHardwareRepo(db), Subscriptions: store.NewSubscriptionRepo(db), Accounts: store.NewAccountRepo(db),
+		Relationships: store.NewRelationshipRepo(db), Tags: store.NewTagRepo(db), DB: db,
+		Docker: scanner, NetScan: fakeNetworkScanner{}, NetOpts: NetDiscoveryOptions{}, Proxmox: fakeProxmoxScanner{}, PVEOpts: ProxmoxOptions{},
+	})
 	return srv, db
 }
 
