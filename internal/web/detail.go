@@ -97,12 +97,12 @@ func renderDetailExtra(
 ) {
 	tagList, err := tags.ListForEntity(entityType, entityID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, r, err)
 		return
 	}
 	edges, err := rels.ListForEntity(entityType, entityID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, r, err)
 		return
 	}
 	// Resolving relationship endpoints to labels requires loading the whole
@@ -111,7 +111,7 @@ func renderDetailExtra(
 	if len(edges) > 0 {
 		opts, err := cat.options()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, r, err)
 			return
 		}
 		labels = labelMap(opts)

@@ -77,7 +77,7 @@ func scanDocker(scanner dockerScanner, services *store.ServiceRepo, hosts *store
 		data := dockerReviewData{Title: "Docker discovery"}
 		hostList, err := hosts.List()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		data.Hosts = hostList
@@ -90,7 +90,7 @@ func scanDocker(scanner dockerScanner, services *store.ServiceRepo, hosts *store
 		}
 		existing, err := services.List()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		for _, p := range discovery.ProposeServices(containers, existing) {
@@ -178,7 +178,7 @@ func scanNetwork(netscan networkScanner, hosts *store.HostRepo, opts NetDiscover
 		}
 		existing, err := hosts.List()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		data.Scanned = true
@@ -207,7 +207,7 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) 
 		hostType := req.FormValue("type")
 		existing, err := hosts.List()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		// Re-check tracked IPs against live data; guards double-submit and
@@ -248,7 +248,7 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) 
 			return nil
 		})
 		if txErr != nil {
-			http.Error(w, txErr.Error(), http.StatusInternalServerError)
+			serverError(w, req, txErr)
 			return
 		}
 		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
@@ -282,7 +282,7 @@ func scanProxmox(scanner proxmoxScanner, hosts *store.HostRepo, opts ProxmoxOpti
 		}
 		existing, err := hosts.List()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		for _, p := range discovery.ProposeProxmoxHosts(res, existing) {
@@ -323,7 +323,7 @@ func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.Re
 		}
 		existing, err := hosts.List()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		// resource id -> node name, to resolve a guest's node after import.
@@ -400,7 +400,7 @@ func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.Re
 			return nil
 		})
 		if txErr != nil {
-			http.Error(w, txErr.Error(), http.StatusInternalServerError)
+			serverError(w, req, txErr)
 			return
 		}
 		http.Redirect(w, req, "/hosts", http.StatusSeeOther)
@@ -445,7 +445,7 @@ func importDocker(scanner dockerScanner, services *store.ServiceRepo, rels *stor
 		}
 		existing, err := services.List()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		proposals := discovery.ProposeServices(containers, existing)
@@ -490,7 +490,7 @@ func importDocker(scanner dockerScanner, services *store.ServiceRepo, rels *stor
 			if errors.Is(txErr, errInvalidRel) {
 				http.Error(w, txErr.Error(), http.StatusBadRequest)
 			} else {
-				http.Error(w, txErr.Error(), http.StatusInternalServerError)
+				serverError(w, req, txErr)
 			}
 			return
 		}

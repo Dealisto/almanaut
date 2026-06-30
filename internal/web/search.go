@@ -82,7 +82,7 @@ func searchEntities(repos entityRepos, tags *store.TagRepo) http.HandlerFunc {
 			b.hits = append(b.hits, searchHit{Label: label, URL: fmt.Sprintf("%s/%d", b.path, id)})
 		}
 		fail := func(err error) {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 		}
 
 		hostList, err := repos.hosts.List()

@@ -36,7 +36,7 @@ type dashboardData struct {
 // (expiring certs, services without backup, hosts down).
 func dashboard(repos entityRepos, rels *store.RelationshipRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		fail := func(err error) { http.Error(w, err.Error(), http.StatusInternalServerError) }
+		fail := func(err error) { serverError(w, req, err) }
 
 		hosts, err := repos.hosts.List()
 		if err != nil {

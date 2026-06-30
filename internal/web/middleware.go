@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"runtime/debug"
@@ -117,4 +118,37 @@ func recoverer(logger *log.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// loggerCtxKey keys the per-request logger stored by injectLogger.
+type loggerCtxKey struct{}
+
+// injectLogger stores logger in each request's context so handlers can report
+// internal errors through serverError without threading a logger parameter
+// through every handler signature. Register it after middleware.RequestID.
+func injectLogger(logger *log.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), loggerCtxKey{}, logger)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// loggerFrom returns the logger injected by injectLogger, or log.Default() if
+// none is present (e.g. a handler exercised without the middleware stack).
+func loggerFrom(ctx context.Context) *log.Logger {
+	if l, ok := ctx.Value(loggerCtxKey{}).(*log.Logger); ok && l != nil {
+		return l
+	}
+	return log.Default()
+}
+
+// serverError logs an internal error with the request id, method, and path,
+// then sends a generic 500 to the client. Use it for unexpected failures
+// (e.g. database errors) so internal detail is never written to the response.
+func serverError(w http.ResponseWriter, r *http.Request, err error) {
+	id := middleware.GetReqID(r.Context())
+	loggerFrom(r.Context()).Printf("server error: %s %s reqid=%q: %v", r.Method, r.URL.Path, id, err)
+	http.Error(w, "internal server error", http.StatusInternalServerError)
 }

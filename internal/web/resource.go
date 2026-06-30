@@ -104,7 +104,7 @@ func (rs resource[T]) idParam(w http.ResponseWriter, req *http.Request) (int64, 
 func (rs resource[T]) list(w http.ResponseWriter, req *http.Request) {
 	items, err := rs.repo.List()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, req, err)
 		return
 	}
 	render(w, req, rs.listTmpl, listData[T]{Title: rs.title, Items: items})
@@ -132,7 +132,7 @@ func (rs resource[T]) create(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if _, err := rs.repo.Create(item); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, req, err)
 		return
 	}
 	http.Redirect(w, req, rs.basePath(), http.StatusSeeOther)
@@ -170,7 +170,7 @@ func (rs resource[T]) update(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if err := rs.repo.Update(item); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, req, err)
 		return
 	}
 	http.Redirect(w, req, rs.basePath(), http.StatusSeeOther)
@@ -215,7 +215,7 @@ func (rs resource[T]) del(d handlerDeps) http.HandlerFunc {
 			return d.tags.WithTx(tx).DeleteByEntity(rs.sing, id)
 		})
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		http.Redirect(w, req, rs.basePath(), http.StatusSeeOther)

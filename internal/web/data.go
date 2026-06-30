@@ -28,12 +28,12 @@ func exportData(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		snap, err := store.Export(db)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		out, err := yaml.Marshal(snap)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/x-yaml; charset=utf-8")
@@ -65,7 +65,7 @@ func importData(db *sql.DB) http.HandlerFunc {
 		defer file.Close()
 		raw, err := io.ReadAll(file)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		var snap store.Snapshot
