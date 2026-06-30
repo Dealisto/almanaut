@@ -39,6 +39,7 @@ type Config struct {
 	PVEOpts       ProxmoxOptions
 	AuthUser      string // when set with AuthPass, enables HTTP basic auth
 	AuthPass      string
+	Version       string // build version, surfaced at /version (defaults to "dev")
 }
 
 // New builds the HTTP handler with all routes wired to the given repos.
@@ -255,40 +256,51 @@ func New(cfg Config) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(requestLogger(logger))
 	r.Use(recoverer(logger))
-	if cfg.AuthUser != "" && cfg.AuthPass != "" {
-		r.Use(basicAuth(cfg.AuthUser, cfg.AuthPass))
-	}
-	r.Use(csrfProtect)
+
+	// Unauthenticated operational endpoints, registered before the auth/CSRF
+	// group so a container HEALTHCHECK or probe can reach them without creds.
+	r.Get("/healthz", healthz(db))
+	r.Get("/version", versionInfo(cfg.Version))
+
 	repos := entityRepos{
 		hosts: hosts, services: services, networks: networks,
 		domains: domains, certificates: certificates, backups: backups,
 		hardware: hardware, subscriptions: subscriptions, accounts: accounts,
 	}
-	r.Get("/", dashboard(repos, relationships))
-	for _, rs := range resources {
-		rs.mount(r, deps)
-	}
-	r.Post("/tags", addTag(tags))
-	r.Post("/tags/delete", removeTag(tags))
-	r.Get("/tags", tagsOverview(tags, cat))
+	// Everything else is the application UI: optionally behind basic auth and
+	// always behind CSRF. Grouping scopes those middlewares to these routes
+	// while inheriting the request-id/logging/recovery stack above.
+	r.Group(func(r chi.Router) {
+		if cfg.AuthUser != "" && cfg.AuthPass != "" {
+			r.Use(basicAuth(cfg.AuthUser, cfg.AuthPass))
+		}
+		r.Use(csrfProtect)
+		r.Get("/", dashboard(repos, relationships))
+		for _, rs := range resources {
+			rs.mount(r, deps)
+		}
+		r.Post("/tags", addTag(tags))
+		r.Post("/tags/delete", removeTag(tags))
+		r.Get("/tags", tagsOverview(tags, cat))
 
-	r.Get("/relationships", listRelationships(relationships, cat))
-	r.Post("/relationships", createRelationship(relationships, cat))
-	r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
-	r.Get("/impact", impactView(relationships, cat))
-	r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
-	r.Get("/search", searchEntities(repos, tags))
-	r.Get("/data", showData())
-	r.Get("/export", exportData(db))
-	r.Post("/import", importData(db))
-	r.Get("/discovery", discoveryLanding(netOpts, pveOpts))
-	r.Get("/discovery/docker", scanDocker(docker, services, hosts))
-	r.Post("/discovery/docker/import", importDocker(docker, services, relationships, db))
-	r.Get("/discovery/network", networkForm(netOpts))
-	r.Post("/discovery/network/scan", scanNetwork(netscan, hosts, netOpts))
-	r.Post("/discovery/network/import", importNetwork(hosts, netOpts, db))
-	r.Get("/discovery/proxmox", scanProxmox(proxmox, hosts, pveOpts))
-	r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts, db))
+		r.Get("/relationships", listRelationships(relationships, cat))
+		r.Post("/relationships", createRelationship(relationships, cat))
+		r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
+		r.Get("/impact", impactView(relationships, cat))
+		r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
+		r.Get("/search", searchEntities(repos, tags))
+		r.Get("/data", showData())
+		r.Get("/export", exportData(db))
+		r.Post("/import", importData(db))
+		r.Get("/discovery", discoveryLanding(netOpts, pveOpts))
+		r.Get("/discovery/docker", scanDocker(docker, services, hosts))
+		r.Post("/discovery/docker/import", importDocker(docker, services, relationships, db))
+		r.Get("/discovery/network", networkForm(netOpts))
+		r.Post("/discovery/network/scan", scanNetwork(netscan, hosts, netOpts))
+		r.Post("/discovery/network/import", importNetwork(hosts, netOpts, db))
+		r.Get("/discovery/proxmox", scanProxmox(proxmox, hosts, pveOpts))
+		r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts, db))
+	})
 	return r
 }
 

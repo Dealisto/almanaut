@@ -41,6 +41,30 @@ unauthenticated and intended for a trusted LAN or an authenticated reverse proxy
 Basic auth transmits credentials base64-encoded (not encrypted), so terminate TLS
 in front of Almanaut when exposing it beyond localhost.
 
+## Health & version
+
+Two unauthenticated endpoints are always available (they bypass basic auth so
+probes can reach them):
+
+| Endpoint    | Response                                                        |
+|-------------|-----------------------------------------------------------------|
+| `/healthz`  | `200 ok` when the database is reachable, `503` otherwise         |
+| `/version`  | `{"version":"..."}` — the build version (`dev` for local builds) |
+
+The Docker image ships a `HEALTHCHECK` that runs `almanaut healthcheck`, a
+built-in subcommand that probes the local `/healthz` and exits non-zero when
+unhealthy (the distroless image has no shell, so the binary is its own probe).
+
+To stamp a version into a build, pass it at build time:
+
+```bash
+# from source
+go build -ldflags "-X main.version=v0.2.0" -o almanaut .
+
+# Docker
+docker build --build-arg VERSION=v0.2.0 -t almanaut .
+```
+
 ## Auto-discovery
 
 To enable Docker container discovery, mount the Docker socket read-only into the container:

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,8 +20,19 @@ import (
 	"github.com/Dealisto/almanaut/internal/web"
 )
 
+// version is the build version, overridden at link time with
+// -ldflags "-X main.version=...". It is surfaced at /version.
+var version = "dev"
+
 func main() {
 	cfg := config.Load()
+
+	// "almanaut healthcheck" probes the local /healthz endpoint and exits 0/1.
+	// It backs the container HEALTHCHECK, which cannot use a shell on the
+	// distroless image, so the binary doubles as its own probe client.
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(runHealthcheck(cfg.Addr))
+	}
 
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		log.Fatalf("create data dir: %v", err)
@@ -57,6 +69,7 @@ func main() {
 		PVEOpts:       web.ProxmoxOptions{Enabled: cfg.ProxmoxURL != "" && cfg.ProxmoxToken != ""},
 		AuthUser:      cfg.AuthUser,
 		AuthPass:      cfg.AuthPass,
+		Version:       version,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
@@ -93,4 +106,29 @@ func main() {
 		}
 		cancel()
 	}
+}
+
+// runHealthcheck issues a GET to the local /healthz endpoint and returns a
+// process exit code: 0 when it answers 200, 1 otherwise. addr is the server's
+// listen address (e.g. ":8080" or "0.0.0.0:8080"); the probe always targets
+// loopback regardless of the bind host.
+func runHealthcheck(addr string) int {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		log.Printf("healthcheck: invalid address %q: %v", addr, err)
+		return 1
+	}
+	url := "http://" + net.JoinHostPort("127.0.0.1", port) + "/healthz"
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		log.Printf("healthcheck: %v", err)
+		return 1
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("healthcheck: status %d", resp.StatusCode)
+		return 1
+	}
+	return 0
 }
