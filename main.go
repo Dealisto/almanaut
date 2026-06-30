@@ -55,6 +55,8 @@ func main() {
 		NetOpts:       web.NetDiscoveryOptions{Enabled: cfg.NetworkScanEnabled, DefaultSubnet: cfg.ScanSubnet},
 		Proxmox:       discovery.NewProxmoxClient(cfg.ProxmoxURL, cfg.ProxmoxToken, cfg.ProxmoxInsecure),
 		PVEOpts:       web.ProxmoxOptions{Enabled: cfg.ProxmoxURL != "" && cfg.ProxmoxToken != ""},
+		AuthUser:      cfg.AuthUser,
+		AuthPass:      cfg.AuthPass,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,

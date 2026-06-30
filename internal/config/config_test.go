@@ -83,3 +83,12 @@ func TestLoadProxmox(t *testing.T) {
 		t.Error("ProxmoxInsecure = false, want true")
 	}
 }
+
+func TestLoadReadsAuthCredentials(t *testing.T) {
+	t.Setenv("ALMANAUT_AUTH_USER", "admin")
+	t.Setenv("ALMANAUT_AUTH_PASS", "secret")
+	cfg := Load()
+	if cfg.AuthUser != "admin" || cfg.AuthPass != "secret" {
+		t.Fatalf("AuthUser=%q AuthPass=%q, want admin/secret", cfg.AuthUser, cfg.AuthPass)
+	}
+}

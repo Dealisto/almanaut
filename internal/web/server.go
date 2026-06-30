@@ -37,6 +37,8 @@ type Config struct {
 	NetOpts       NetDiscoveryOptions
 	Proxmox       proxmoxScanner
 	PVEOpts       ProxmoxOptions
+	AuthUser      string // when set with AuthPass, enables HTTP basic auth
+	AuthPass      string
 }
 
 // New builds the HTTP handler with all routes wired to the given repos.
@@ -253,6 +255,9 @@ func New(cfg Config) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(requestLogger(logger))
 	r.Use(recoverer(logger))
+	if cfg.AuthUser != "" && cfg.AuthPass != "" {
+		r.Use(basicAuth(cfg.AuthUser, cfg.AuthPass))
+	}
 	r.Use(csrfProtect)
 	r.Get("/", dashboard(hosts, services, networks, domains, certificates, backups, hardware, subscriptions, accounts, relationships))
 	for _, rs := range resources {

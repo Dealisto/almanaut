@@ -32,6 +32,14 @@ ALMANAUT_DATA_DIR=./data ./almanaut
 | `ALMANAUT_PROXMOX_URL`        | (empty)              | Proxmox VE API base URL (e.g. `https://pve.lan:8006`); enables Proxmox discovery when set with a token |
 | `ALMANAUT_PROXMOX_TOKEN`      | (empty)              | Proxmox API token (`user@realm!tokenid=secret`) |
 | `ALMANAUT_PROXMOX_INSECURE`   | `false`              | Skip TLS verification for a self-signed Proxmox certificate |
+| `ALMANAUT_AUTH_USER`          | (empty)              | Username for optional HTTP Basic auth; enables auth when set together with `ALMANAUT_AUTH_PASS` |
+| `ALMANAUT_AUTH_PASS`          | (empty)              | Password for optional HTTP Basic auth |
+
+When `ALMANAUT_AUTH_USER` and `ALMANAUT_AUTH_PASS` are both set, every page
+requires those credentials via HTTP Basic auth. When either is unset, Almanaut is
+unauthenticated and intended for a trusted LAN or an authenticated reverse proxy.
+Basic auth transmits credentials base64-encoded (not encrypted), so terminate TLS
+in front of Almanaut when exposing it beyond localhost.
 
 ## Auto-discovery
 
