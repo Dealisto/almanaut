@@ -4,6 +4,7 @@ package web
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ type Config struct {
 	Relationships *store.RelationshipRepo
 	Tags          *store.TagRepo
 	DB            *sql.DB
+	Logger        *log.Logger // nil → log.Default()
 	Docker        dockerScanner
 	NetScan       networkScanner
 	NetOpts       NetDiscoveryOptions
@@ -243,6 +245,11 @@ func New(cfg Config) http.Handler {
 	cat := entityCatalog{resources: resources}
 	deps := handlerDeps{cat: cat, tags: tags, rels: relationships}
 	r := chi.NewRouter()
+	logger := cfg.Logger
+	if logger == nil {
+		logger = log.Default()
+	}
+	r.Use(recoverer(logger))
 	r.Get("/", dashboard(hosts, services, networks, domains, certificates, backups, hardware, subscriptions, accounts, relationships))
 	for _, rs := range resources {
 		rs.mount(r, deps)
