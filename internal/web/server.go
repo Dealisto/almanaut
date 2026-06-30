@@ -259,7 +259,12 @@ func New(cfg Config) http.Handler {
 		r.Use(basicAuth(cfg.AuthUser, cfg.AuthPass))
 	}
 	r.Use(csrfProtect)
-	r.Get("/", dashboard(hosts, services, networks, domains, certificates, backups, hardware, subscriptions, accounts, relationships))
+	repos := entityRepos{
+		hosts: hosts, services: services, networks: networks,
+		domains: domains, certificates: certificates, backups: backups,
+		hardware: hardware, subscriptions: subscriptions, accounts: accounts,
+	}
+	r.Get("/", dashboard(repos, relationships))
 	for _, rs := range resources {
 		rs.mount(r, deps)
 	}
@@ -272,7 +277,7 @@ func New(cfg Config) http.Handler {
 	r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
 	r.Get("/impact", impactView(relationships, cat))
 	r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
-	r.Get("/search", searchEntities(hosts, services, networks, domains, certificates, backups, hardware, subscriptions, accounts, tags))
+	r.Get("/search", searchEntities(repos, tags))
 	r.Get("/data", showData())
 	r.Get("/export", exportData(db))
 	r.Post("/import", importData(db))

@@ -4,7 +4,24 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/Dealisto/almanaut/internal/store"
 )
+
+// entityRepos bundles the nine entity repositories that the dashboard and
+// search handlers read directly — they need entity-specific fields the
+// relationship-option list does not expose.
+type entityRepos struct {
+	hosts         *store.HostRepo
+	services      *store.ServiceRepo
+	networks      *store.NetworkRepo
+	domains       *store.DomainRepo
+	certificates  *store.CertificateRepo
+	backups       *store.BackupRepo
+	hardware      *store.HardwareRepo
+	subscriptions *store.SubscriptionRepo
+	accounts      *store.AccountRepo
+}
 
 // entityOption is one selectable entity in a relationship dropdown.
 type entityOption struct {

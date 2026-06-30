@@ -43,12 +43,7 @@ func matchesQuery(fields []string, q string) bool {
 // searchEntities renders the global search results for ?q=…: every entity
 // whose searchable fields contain the query, plus entities carrying a matching
 // tag, grouped by type and linked to their detail pages.
-func searchEntities(
-	hostRepo *store.HostRepo, serviceRepo *store.ServiceRepo, networkRepo *store.NetworkRepo,
-	domainRepo *store.DomainRepo, certRepo *store.CertificateRepo, backupRepo *store.BackupRepo,
-	hardwareRepo *store.HardwareRepo, subscriptionRepo *store.SubscriptionRepo, accountRepo *store.AccountRepo,
-	tags *store.TagRepo,
-) http.HandlerFunc {
+func searchEntities(repos entityRepos, tags *store.TagRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		q := strings.TrimSpace(req.URL.Query().Get("q"))
 		data := searchPageData{Title: "Search", Query: q}
@@ -90,7 +85,7 @@ func searchEntities(
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
-		hostList, err := hostRepo.List()
+		hostList, err := repos.hosts.List()
 		if err != nil {
 			fail(err)
 			return
@@ -101,7 +96,7 @@ func searchEntities(
 				add(hosts, h.ID, h.Name)
 			}
 		}
-		serviceList, err := serviceRepo.List()
+		serviceList, err := repos.services.List()
 		if err != nil {
 			fail(err)
 			return
@@ -112,7 +107,7 @@ func searchEntities(
 				add(services, s.ID, s.Name)
 			}
 		}
-		networkList, err := networkRepo.List()
+		networkList, err := repos.networks.List()
 		if err != nil {
 			fail(err)
 			return
@@ -123,7 +118,7 @@ func searchEntities(
 				add(networks, n.ID, n.Name)
 			}
 		}
-		domainList, err := domainRepo.List()
+		domainList, err := repos.domains.List()
 		if err != nil {
 			fail(err)
 			return
@@ -134,7 +129,7 @@ func searchEntities(
 				add(domains, d.ID, d.FQDN)
 			}
 		}
-		certList, err := certRepo.List()
+		certList, err := repos.certificates.List()
 		if err != nil {
 			fail(err)
 			return
@@ -145,7 +140,7 @@ func searchEntities(
 				add(certificates, c.ID, c.Subject)
 			}
 		}
-		backupList, err := backupRepo.List()
+		backupList, err := repos.backups.List()
 		if err != nil {
 			fail(err)
 			return
@@ -156,7 +151,7 @@ func searchEntities(
 				add(backups, b.ID, b.Source)
 			}
 		}
-		hardwareList, err := hardwareRepo.List()
+		hardwareList, err := repos.hardware.List()
 		if err != nil {
 			fail(err)
 			return
@@ -168,7 +163,7 @@ func searchEntities(
 			}
 		}
 
-		subscriptionList, err := subscriptionRepo.List()
+		subscriptionList, err := repos.subscriptions.List()
 		if err != nil {
 			fail(err)
 			return
@@ -180,7 +175,7 @@ func searchEntities(
 			}
 		}
 
-		accountList, err := accountRepo.List()
+		accountList, err := repos.accounts.List()
 		if err != nil {
 			fail(err)
 			return

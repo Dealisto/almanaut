@@ -34,56 +34,51 @@ type dashboardData struct {
 
 // dashboard renders the landing page: per-entity counts and attention groups
 // (expiring certs, services without backup, hosts down).
-func dashboard(
-	hostRepo *store.HostRepo, serviceRepo *store.ServiceRepo, networkRepo *store.NetworkRepo,
-	domainRepo *store.DomainRepo, certRepo *store.CertificateRepo, backupRepo *store.BackupRepo,
-	hardwareRepo *store.HardwareRepo, subscriptionRepo *store.SubscriptionRepo, accountRepo *store.AccountRepo,
-	rels *store.RelationshipRepo,
-) http.HandlerFunc {
+func dashboard(repos entityRepos, rels *store.RelationshipRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		fail := func(err error) { http.Error(w, err.Error(), http.StatusInternalServerError) }
 
-		hosts, err := hostRepo.List()
+		hosts, err := repos.hosts.List()
 		if err != nil {
 			fail(err)
 			return
 		}
-		services, err := serviceRepo.List()
+		services, err := repos.services.List()
 		if err != nil {
 			fail(err)
 			return
 		}
-		networks, err := networkRepo.List()
+		networks, err := repos.networks.List()
 		if err != nil {
 			fail(err)
 			return
 		}
-		domains, err := domainRepo.List()
+		domains, err := repos.domains.List()
 		if err != nil {
 			fail(err)
 			return
 		}
-		certs, err := certRepo.List()
+		certs, err := repos.certificates.List()
 		if err != nil {
 			fail(err)
 			return
 		}
-		backups, err := backupRepo.List()
+		backups, err := repos.backups.List()
 		if err != nil {
 			fail(err)
 			return
 		}
-		hardware, err := hardwareRepo.List()
+		hardware, err := repos.hardware.List()
 		if err != nil {
 			fail(err)
 			return
 		}
-		subscriptions, err := subscriptionRepo.List()
+		subscriptions, err := repos.subscriptions.List()
 		if err != nil {
 			fail(err)
 			return
 		}
-		accounts, err := accountRepo.List()
+		accounts, err := repos.accounts.List()
 		if err != nil {
 			fail(err)
 			return
