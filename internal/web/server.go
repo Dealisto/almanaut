@@ -255,6 +255,7 @@ func New(cfg Config) http.Handler {
 	}
 	r.Use(middleware.RequestID)
 	r.Use(requestLogger(logger))
+	r.Use(injectLogger(logger))
 	r.Use(recoverer(logger))
 	r.Use(securityHeaders)
 
@@ -322,7 +323,7 @@ func impactView(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFun
 	return func(w http.ResponseWriter, req *http.Request) {
 		opts, err := cat.options()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		data := impactPageData{Title: "Impact", Options: opts}
@@ -340,7 +341,7 @@ func impactView(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFun
 			data.SelectedLabel = labelOrFallback(labels, typ, id)
 			refs, err := store.Impact(rels, typ, id)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				serverError(w, req, err)
 				return
 			}
 			data.Computed = true
@@ -366,27 +367,27 @@ func healthChecks(services *store.ServiceRepo, certs *store.CertificateRepo, har
 	return func(w http.ResponseWriter, req *http.Request) {
 		svcList, err := services.List()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		certList, err := certs.List()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		hwList, err := hardware.List()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		subList, err := subscriptions.List()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		relList, err := rels.List()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		render(w, req, "checks.html", checksPageData{
@@ -416,13 +417,13 @@ type relationshipsPageData struct {
 func renderRelationships(w http.ResponseWriter, r *http.Request, rels *store.RelationshipRepo, cat entityCatalog, errMsg string) {
 	opts, err := cat.options()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, r, err)
 		return
 	}
 	labels := labelMap(opts)
 	all, err := rels.List()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, r, err)
 		return
 	}
 	views := make([]relationshipView, 0, len(all))
@@ -467,7 +468,7 @@ func createRelationship(rels *store.RelationshipRepo, cat entityCatalog) http.Ha
 			return
 		}
 		if _, err := rels.Create(rel); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		http.Redirect(w, req, "/relationships", http.StatusSeeOther)
@@ -482,7 +483,7 @@ func deleteRelationship(rels *store.RelationshipRepo) http.HandlerFunc {
 			return
 		}
 		if err := rels.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		http.Redirect(w, req, "/relationships", http.StatusSeeOther)
@@ -510,7 +511,7 @@ func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 		if raw == "" {
 			counts, err := tags.Counts()
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				serverError(w, req, err)
 				return
 			}
 			render(w, req, "tags_overview.html", tagsOverviewData{Title: "Tags", Counts: counts})
@@ -520,12 +521,12 @@ func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 		name := domain.NormalizeTag(raw)
 		tagged, err := tags.ListByName(name)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		opts, err := cat.options()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		labels := labelMap(opts)
@@ -562,7 +563,7 @@ func addTag(tags *store.TagRepo) http.HandlerFunc {
 			return
 		}
 		if err := tags.Add(tag); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		http.Redirect(w, req, fmt.Sprintf("/%ss/%d", entityType, entityID), http.StatusSeeOther)
@@ -577,7 +578,7 @@ func removeTag(tags *store.TagRepo) http.HandlerFunc {
 			return
 		}
 		if err := tags.Delete(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			serverError(w, req, err)
 			return
 		}
 		entityType := req.FormValue("entity_type")

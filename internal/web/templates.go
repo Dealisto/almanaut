@@ -37,7 +37,7 @@ func render(w http.ResponseWriter, r *http.Request, page string, data any) {
 	}
 	clone, err := t.Clone()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, r, err)
 		return
 	}
 	token := csrfTokenFrom(r.Context())
@@ -49,7 +49,7 @@ func render(w http.ResponseWriter, r *http.Request, page string, data any) {
 	})
 	var buf bytes.Buffer
 	if err := clone.ExecuteTemplate(&buf, "layout", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		serverError(w, r, err)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
