@@ -57,7 +57,7 @@ func (r *HostRepo) Update(h domain.Host) error {
 	if err != nil {
 		return fmt.Errorf("marshal ips: %w", err)
 	}
-	_, err = r.db.Exec(
+	res, err := r.db.Exec(
 		`UPDATE hosts SET name=?, type=?, os=?, cpu=?, ram=?, disk=?, status=?, ips=?, notes=?
 		 WHERE id=?`,
 		h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(ips), h.Notes, h.ID,
@@ -65,7 +65,7 @@ func (r *HostRepo) Update(h domain.Host) error {
 	if err != nil {
 		return fmt.Errorf("update host: %w", err)
 	}
-	return nil
+	return rowsAffectedOrNotFound(res)
 }
 
 // Get returns the host with the given id.
@@ -113,7 +113,7 @@ func scanHost(s scanner) (domain.Host, error) {
 	if err := s.Scan(
 		&h.ID, &h.Name, &h.Type, &h.OS, &h.CPU, &h.RAM, &h.Disk, &h.Status, &ipsJSON, &h.Notes,
 	); err != nil {
-		return domain.Host{}, fmt.Errorf("scan host: %w", err)
+		return domain.Host{}, notFound(fmt.Errorf("scan host: %w", err))
 	}
 	if err := json.Unmarshal([]byte(ipsJSON), &h.IPs); err != nil {
 		return domain.Host{}, fmt.Errorf("unmarshal ips: %w", err)

@@ -70,14 +70,14 @@ func (r *ServiceRepo) List() ([]domain.Service, error) {
 
 // Update overwrites the service with s.ID with the values in s.
 func (r *ServiceRepo) Update(s domain.Service) error {
-	_, err := r.db.Exec(
+	res, err := r.db.Exec(
 		`UPDATE services SET name=?, kind=?, url=?, ports=?, category=?, notes=? WHERE id=?`,
 		s.Name, s.Kind, s.URL, s.Ports, s.Category, s.Notes, s.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update service: %w", err)
 	}
-	return nil
+	return rowsAffectedOrNotFound(res)
 }
 
 // Delete removes the service with the given id.
@@ -91,7 +91,7 @@ func (r *ServiceRepo) Delete(id int64) error {
 func scanService(s scanner) (domain.Service, error) {
 	var svc domain.Service
 	if err := s.Scan(&svc.ID, &svc.Name, &svc.Kind, &svc.URL, &svc.Ports, &svc.Category, &svc.Notes); err != nil {
-		return domain.Service{}, fmt.Errorf("scan service: %w", err)
+		return domain.Service{}, notFound(fmt.Errorf("scan service: %w", err))
 	}
 	return svc, nil
 }

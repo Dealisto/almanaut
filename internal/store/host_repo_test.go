@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -83,5 +84,30 @@ func TestHostRepoUpdate(t *testing.T) {
 	}
 	if len(got.IPs) != 1 || got.IPs[0] != "10.0.0.2" {
 		t.Errorf("IPs = %v, want [10.0.0.2]", got.IPs)
+	}
+}
+
+// TestHostRepoNotFound guards the not-found contract shared by every repo: a
+// read for a missing id returns ErrNotFound (so handlers answer 404 instead of
+// masking a real failure), and an Update that matches no row reports ErrNotFound
+// rather than a false success.
+func TestHostRepoNotFound(t *testing.T) {
+	repo := newTestRepo(t)
+
+	if _, err := repo.Get(404); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Get(missing) error = %v, want ErrNotFound", err)
+	}
+	if err := repo.Update(domain.Host{ID: 404, Name: "ghost"}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Update(missing) error = %v, want ErrNotFound", err)
+	}
+
+	// A no-op update of an existing row must still succeed: SQLite counts matched
+	// rows, so re-writing identical values reports one row affected, not zero.
+	id, err := repo.Create(domain.Host{Name: "keep", Type: "vm", IPs: []string{"10.0.0.9"}})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := repo.Update(domain.Host{ID: id, Name: "keep", Type: "vm", IPs: []string{"10.0.0.9"}}); err != nil {
+		t.Errorf("Update(no-op) error = %v, want nil", err)
 	}
 }

@@ -2,6 +2,7 @@ package web
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -101,6 +102,17 @@ func (rs resource[T]) idParam(w http.ResponseWriter, req *http.Request) (int64, 
 	return id, true
 }
 
+// notFoundOrServerError writes a 404 for a missing entity (store.ErrNotFound)
+// and otherwise a logged 500, so a real database failure is never masked as
+// "not found".
+func notFoundOrServerError(w http.ResponseWriter, req *http.Request, sing string, err error) {
+	if errors.Is(err, store.ErrNotFound) {
+		http.Error(w, sing+" not found", http.StatusNotFound)
+		return
+	}
+	serverError(w, req, err)
+}
+
 func (rs resource[T]) list(w http.ResponseWriter, req *http.Request) {
 	items, err := rs.repo.List()
 	if err != nil {
@@ -145,7 +157,7 @@ func (rs resource[T]) editForm(w http.ResponseWriter, req *http.Request) {
 	}
 	item, err := rs.repo.Get(id)
 	if err != nil {
-		http.Error(w, rs.sing+" not found", http.StatusNotFound)
+		notFoundOrServerError(w, req, rs.sing, err)
 		return
 	}
 	render(w, req, rs.formTmpl, formData[T]{
@@ -170,7 +182,7 @@ func (rs resource[T]) update(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if err := rs.repo.Update(item); err != nil {
-		serverError(w, req, err)
+		notFoundOrServerError(w, req, rs.sing, err)
 		return
 	}
 	http.Redirect(w, req, rs.basePath(), http.StatusSeeOther)
@@ -184,7 +196,7 @@ func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
 		}
 		item, err := rs.repo.Get(id)
 		if err != nil {
-			http.Error(w, rs.sing+" not found", http.StatusNotFound)
+			notFoundOrServerError(w, req, rs.sing, err)
 			return
 		}
 		var ipam *ipamSection

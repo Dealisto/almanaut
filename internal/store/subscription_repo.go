@@ -68,14 +68,14 @@ func (r *SubscriptionRepo) List() ([]domain.Subscription, error) {
 
 // Update overwrites the subscription with s.ID with the values in s.
 func (r *SubscriptionRepo) Update(s domain.Subscription) error {
-	_, err := r.db.Exec(
+	res, err := r.db.Exec(
 		`UPDATE subscriptions SET name=?, kind=?, provider=?, amount=?, currency=?, billing_cycle=?, renewal_date=?, auto_renew=?, status=?, notes=? WHERE id=?`,
 		s.Name, s.Kind, s.Provider, s.Amount, s.Currency, s.BillingCycle, s.RenewalDate, boolToInt(s.AutoRenew), s.Status, s.Notes, s.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update subscription: %w", err)
 	}
-	return nil
+	return rowsAffectedOrNotFound(res)
 }
 
 // Delete removes the subscription with the given id.
@@ -90,7 +90,7 @@ func scanSubscription(s scanner) (domain.Subscription, error) {
 	var sub domain.Subscription
 	var autoRenew int64
 	if err := s.Scan(&sub.ID, &sub.Name, &sub.Kind, &sub.Provider, &sub.Amount, &sub.Currency, &sub.BillingCycle, &sub.RenewalDate, &autoRenew, &sub.Status, &sub.Notes); err != nil {
-		return domain.Subscription{}, fmt.Errorf("scan subscription: %w", err)
+		return domain.Subscription{}, notFound(fmt.Errorf("scan subscription: %w", err))
 	}
 	sub.AutoRenew = autoRenew != 0
 	return sub, nil
