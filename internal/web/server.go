@@ -256,6 +256,7 @@ func New(cfg Config) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(requestLogger(logger))
 	r.Use(recoverer(logger))
+	r.Use(securityHeaders)
 
 	// Unauthenticated operational endpoints, registered before the auth/CSRF
 	// group so a container HEALTHCHECK or probe can reach them without creds.
