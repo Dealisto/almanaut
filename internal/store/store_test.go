@@ -5,7 +5,10 @@ import (
 	"testing"
 )
 
-func TestOpenLimitsToSingleConnection(t *testing.T) {
+func TestOpenDoesNotCapConnectionPool(t *testing.T) {
+	// The pool must stay at its default (0 = unlimited). Capping it at one
+	// connection deadlocks reads issued while a transaction is open on the same
+	// DB (see TestWithTxBoundRepoIsolatedUntilCommit), which the code relies on.
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := Open(dbPath)
 	if err != nil {
@@ -13,8 +16,8 @@ func TestOpenLimitsToSingleConnection(t *testing.T) {
 	}
 	defer db.Close()
 
-	if got := db.Stats().MaxOpenConnections; got != 1 {
-		t.Fatalf("MaxOpenConnections = %d, want 1", got)
+	if got := db.Stats().MaxOpenConnections; got != 0 {
+		t.Fatalf("MaxOpenConnections = %d, want 0 (uncapped); a one-connection pool deadlocks read-during-transaction", got)
 	}
 }
 
