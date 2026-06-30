@@ -92,10 +92,7 @@ func (c *ProxmoxClient) Resources(ctx context.Context) ([]ProxmoxResource, error
 		default:
 			continue
 		}
-		out = append(out, ProxmoxResource{
-			Type: r.Type, Node: r.Node, Name: r.Name, Status: r.Status,
-			ID: r.ID, VMID: r.VMID, MaxCPU: r.MaxCPU, MaxMem: r.MaxMem, MaxDisk: r.MaxDisk,
-		})
+		out = append(out, ProxmoxResource(r))
 	}
 	return out, nil
 }
