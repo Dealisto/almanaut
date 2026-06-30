@@ -275,6 +275,9 @@ func New(cfg Config) http.Handler {
 		if cfg.AuthUser != "" && cfg.AuthPass != "" {
 			r.Use(basicAuth(cfg.AuthUser, cfg.AuthPass))
 		}
+		// Bound the request body before csrfProtect reads the form of every
+		// unsafe request, so an oversize upload is rejected up front.
+		r.Use(limitBody)
 		r.Use(csrfProtect)
 		r.Get("/", dashboard(repos, relationships))
 		for _, rs := range resources {

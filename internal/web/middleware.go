@@ -56,6 +56,29 @@ const contentSecurityPolicy = "default-src 'self'; " +
 	"frame-ancestors 'none'; " +
 	"form-action 'self'"
 
+// maxRequestBytes caps the size of any request body. The only large upload is
+// the data import (an import replaces all data, so a real export is far below
+// this); every other route takes small forms. The cap must be applied before
+// csrfProtect, which reads the form body of every unsafe request to check the
+// token — without it, an authenticated client could exhaust memory with a huge
+// upload (or a small file that decodes into enormous in-memory structures)
+// before any handler runs.
+const maxRequestBytes = 32 << 20 // 32 MiB
+
+// limitBody rejects requests whose declared length exceeds maxRequestBytes with
+// 413, and caps the readable body at that size for clients that lie about (or
+// omit) Content-Length, so a chunked upload still cannot read past the ceiling.
+func limitBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ContentLength > maxRequestBytes {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
+		next.ServeHTTP(w, r)
+	})
+}
+
 // securityHeaders sets conservative response headers on every request: block
 // MIME sniffing, deny framing (clickjacking), suppress the Referer header, and
 // apply the same-origin Content-Security-Policy above.
