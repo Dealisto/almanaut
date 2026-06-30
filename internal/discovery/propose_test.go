@@ -169,3 +169,25 @@ func TestProposeProxmoxHosts(t *testing.T) {
 		}
 	}
 }
+
+func TestProposeProxmoxHostsDeterministicForDuplicateNames(t *testing.T) {
+	// Two guests with the same name and type must order by ID, not by the
+	// (arbitrary) order the API returned them, so the listing is stable.
+	res := []ProxmoxResource{
+		{Type: "qemu", Node: "pve", Name: "web", ID: "qemu/200"},
+		{Type: "qemu", Node: "pve", Name: "web", ID: "qemu/100"},
+	}
+	got := ProposeProxmoxHosts(res, nil)
+	if len(got) != 2 || got[0].ID != "qemu/100" || got[1].ID != "qemu/200" {
+		t.Fatalf("duplicate-name proposals not ordered by ID: %q, %q", got[0].ID, got[1].ID)
+	}
+}
+
+func TestProposeServicesDeterministicForDuplicateNames(t *testing.T) {
+	got := ProposeServices([]Container{
+		{ID: "z", Name: "app"}, {ID: "a", Name: "app"},
+	}, nil)
+	if got[0].ContainerID != "a" || got[1].ContainerID != "z" {
+		t.Fatalf("duplicate-name proposals not ordered by ID: %q, %q", got[0].ContainerID, got[1].ContainerID)
+	}
+}

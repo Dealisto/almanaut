@@ -41,7 +41,12 @@ func csrfProtect(next http.Handler) http.Handler {
 		if c, err := r.Cookie(csrfCookieName); err == nil {
 			token = c.Value
 		}
-		if token == "" {
+		// Mint and set the cookie only on safe methods. An unsafe request with no
+		// cookie cannot carry a matching token, so it is rejected below regardless
+		// — issuing it a fresh cookie there would be a pointless side effect (and
+		// would never help, since the submitted field can't match a token the
+		// client never had).
+		if token == "" && csrfSafeMethod(r.Method) {
 			var err error
 			token, err = generateCSRFToken()
 			if err != nil {

@@ -3,7 +3,7 @@ package web
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"encoding/json"
 	"io"
 	"net/http"
 	"time"
@@ -31,9 +31,14 @@ func versionInfo(version string) http.HandlerFunc {
 	if version == "" {
 		version = "dev"
 	}
-	body := fmt.Sprintf("{\"version\":%q}\n", version)
+	// Marshal once at construction so the version is JSON-encoded properly
+	// rather than assembled by hand.
+	body, _ := json.Marshal(struct {
+		Version string `json:"version"`
+	}{version})
+	body = append(body, '\n')
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_, _ = io.WriteString(w, body)
+		_, _ = w.Write(body)
 	}
 }

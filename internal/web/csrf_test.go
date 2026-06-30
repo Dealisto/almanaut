@@ -87,6 +87,27 @@ func TestCSRFPostMismatchOrMissingRejected(t *testing.T) {
 	}
 }
 
+func TestCSRFUnsafeMethodDoesNotSetCookie(t *testing.T) {
+	// A POST with no cookie is rejected; it must not mint a fresh token cookie,
+	// since the request can never carry a matching token anyway.
+	var reached bool
+	h := csrfProtect(passThrough(&reached))
+	req := httptest.NewRequest(http.MethodPost, "/hosts",
+		strings.NewReader(csrfFieldName+"=a"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("code = %d, want 403", rec.Code)
+	}
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == csrfCookieName {
+			t.Errorf("rejected POST must not Set-Cookie %s, got %q", csrfCookieName, c.Value)
+		}
+	}
+}
+
 func TestCSRFTokenFromContextIsSet(t *testing.T) {
 	var seen string
 	h := csrfProtect(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
