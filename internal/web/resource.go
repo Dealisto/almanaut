@@ -62,6 +62,7 @@ type resource[T validatable] struct {
 	id       func(T) int64
 	notes    func(T) string
 	fields   func(T) []fieldRow    // detail-page rows
+	search   func(T) []string      // free-text fields matched by global search
 	ipam     func(T) *ipamSection  // optional; nil for all but network
 	newItem  T                     // zero value with form defaults
 	listTmpl string                // "hosts.html"
@@ -92,6 +93,35 @@ func (rs resource[T]) extraData() map[string]any {
 }
 
 func (rs resource[T]) basePath() string { return "/" + rs.name }
+
+// searchHeading is the group title this resource's hits appear under on the
+// search results page.
+func (rs resource[T]) searchHeading() string { return rs.title }
+
+// searchEntries projects every entity into the form the global search handler
+// needs: its label, detail-page path, and the free-text fields to match against.
+func (rs resource[T]) searchEntries() ([]searchEntry, error) {
+	items, err := rs.repo.List()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]searchEntry, 0, len(items))
+	for _, it := range items {
+		id := rs.id(it)
+		var fields []string
+		if rs.search != nil {
+			fields = rs.search(it)
+		}
+		out = append(out, searchEntry{
+			Type:   rs.sing,
+			ID:     id,
+			Label:  rs.label(it),
+			Path:   fmt.Sprintf("%s/%d", rs.basePath(), id),
+			Fields: fields,
+		})
+	}
+	return out, nil
+}
 
 func (rs resource[T]) idParam(w http.ResponseWriter, req *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
@@ -251,6 +281,8 @@ type mountable interface {
 	options() ([]entityOption, error)
 	singular() string
 	basePath() string
+	searchHeading() string
+	searchEntries() ([]searchEntry, error)
 }
 
 func parseHost(r *http.Request, id int64) domain.Host {

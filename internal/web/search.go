@@ -29,6 +29,16 @@ type searchPageData struct {
 	Total  int
 }
 
+// searchEntry is one entity projected into the fields the search handler needs,
+// produced uniformly by every resource so the handler carries no per-type code.
+type searchEntry struct {
+	Type   string
+	ID     int64
+	Label  string
+	Path   string
+	Fields []string
+}
+
 // matchesQuery reports whether any field contains q, case-insensitively.
 func matchesQuery(fields []string, q string) bool {
 	lq := strings.ToLower(q)
@@ -42,8 +52,11 @@ func matchesQuery(fields []string, q string) bool {
 
 // searchEntities renders the global search results for ?q=…: every entity
 // whose searchable fields contain the query, plus entities carrying a matching
-// tag, grouped by type and linked to their detail pages.
-func searchEntities(repos entityRepos, tags *store.TagRepo) http.HandlerFunc {
+// tag, grouped by type and linked to their detail pages. It drives every type
+// off the resource catalog, so adding an entity needs no change here — only a
+// search field list on its resource definition.
+func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
+	key := func(typ string, id int64) string { return fmt.Sprintf("%s:%d", typ, id) }
 	return func(w http.ResponseWriter, req *http.Request) {
 		q := strings.TrimSpace(req.URL.Query().Get("q"))
 		data := searchPageData{Title: "Search", Query: q}
@@ -53,144 +66,43 @@ func searchEntities(repos entityRepos, tags *store.TagRepo) http.HandlerFunc {
 		}
 
 		type bucket struct {
-			typ, path, heading string
-			hits               []searchHit
+			heading string
+			hits    []searchHit
 		}
-		hosts := &bucket{typ: "host", path: "/hosts", heading: "Hosts"}
-		services := &bucket{typ: "service", path: "/services", heading: "Services"}
-		networks := &bucket{typ: "network", path: "/networks", heading: "Networks"}
-		domains := &bucket{typ: "domain", path: "/domains", heading: "Domains"}
-		certificates := &bucket{typ: "certificate", path: "/certificates", heading: "Certificates"}
-		backups := &bucket{typ: "backup", path: "/backups", heading: "Backups"}
-		hardware := &bucket{typ: "hardware", path: "/hardware", heading: "Hardware"}
-		subscriptions := &bucket{typ: "subscription", path: "/subscriptions", heading: "Subscriptions"}
-		accounts := &bucket{typ: "account", path: "/accounts", heading: "Accounts"}
-		buckets := map[string]*bucket{
-			"host": hosts, "service": services, "network": networks,
-			"domain": domains, "certificate": certificates, "backup": backups,
-			"hardware": hardware, "subscription": subscriptions, "account": accounts,
-		}
-
 		seen := map[string]bool{}      // dedupe by "type:id"
-		labelOf := map[string]string{} // "type:id" -> primary label (for tag hits)
-		add := func(b *bucket, id int64, label string) {
-			key := fmt.Sprintf("%s:%d", b.typ, id)
-			if seen[key] {
+		labelOf := map[string]string{} // "type:id" -> label, to resolve tag hits
+		buckets := map[string]*bucket{}
+		order := make([]*bucket, 0, len(cat.resources)) // groups in catalog order
+		add := func(b *bucket, typ string, id int64, label, path string) {
+			k := key(typ, id)
+			if seen[k] {
 				return
 			}
-			seen[key] = true
-			b.hits = append(b.hits, searchHit{Label: label, URL: fmt.Sprintf("%s/%d", b.path, id)})
-		}
-		fail := func(err error) {
-			serverError(w, req, err)
+			seen[k] = true
+			b.hits = append(b.hits, searchHit{Label: label, URL: path})
 		}
 
-		hostList, err := repos.hosts.List()
-		if err != nil {
-			fail(err)
-			return
-		}
-		for _, h := range hostList {
-			labelOf[fmt.Sprintf("host:%d", h.ID)] = h.Name
-			if matchesQuery([]string{h.Name, h.OS, h.CPU, h.RAM, h.Disk, h.Status, h.Notes, strings.Join(h.IPs, " ")}, q) {
-				add(hosts, h.ID, h.Name)
+		for _, rs := range cat.resources {
+			entries, err := rs.searchEntries()
+			if err != nil {
+				serverError(w, req, err)
+				return
 			}
-		}
-		serviceList, err := repos.services.List()
-		if err != nil {
-			fail(err)
-			return
-		}
-		for _, s := range serviceList {
-			labelOf[fmt.Sprintf("service:%d", s.ID)] = s.Name
-			if matchesQuery([]string{s.Name, s.Kind, s.URL, s.Ports, s.Category, s.Notes}, q) {
-				add(services, s.ID, s.Name)
-			}
-		}
-		networkList, err := repos.networks.List()
-		if err != nil {
-			fail(err)
-			return
-		}
-		for _, n := range networkList {
-			labelOf[fmt.Sprintf("network:%d", n.ID)] = n.Name
-			if matchesQuery([]string{n.Name, n.CIDR, n.VLAN, n.Gateway, n.Notes}, q) {
-				add(networks, n.ID, n.Name)
-			}
-		}
-		domainList, err := repos.domains.List()
-		if err != nil {
-			fail(err)
-			return
-		}
-		for _, d := range domainList {
-			labelOf[fmt.Sprintf("domain:%d", d.ID)] = d.FQDN
-			if matchesQuery([]string{d.FQDN, d.Provider, d.Notes}, q) {
-				add(domains, d.ID, d.FQDN)
-			}
-		}
-		certList, err := repos.certificates.List()
-		if err != nil {
-			fail(err)
-			return
-		}
-		for _, c := range certList {
-			labelOf[fmt.Sprintf("certificate:%d", c.ID)] = c.Subject
-			if matchesQuery([]string{c.Subject, c.Issuer, c.Notes}, q) {
-				add(certificates, c.ID, c.Subject)
-			}
-		}
-		backupList, err := repos.backups.List()
-		if err != nil {
-			fail(err)
-			return
-		}
-		for _, b := range backupList {
-			labelOf[fmt.Sprintf("backup:%d", b.ID)] = b.Source
-			if matchesQuery([]string{b.Source, b.Destination, b.Frequency, b.LastRun, b.Notes}, q) {
-				add(backups, b.ID, b.Source)
-			}
-		}
-		hardwareList, err := repos.hardware.List()
-		if err != nil {
-			fail(err)
-			return
-		}
-		for _, h := range hardwareList {
-			labelOf[fmt.Sprintf("hardware:%d", h.ID)] = h.Name
-			if matchesQuery([]string{h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.Status, h.Notes}, q) {
-				add(hardware, h.ID, h.Name)
-			}
-		}
-
-		subscriptionList, err := repos.subscriptions.List()
-		if err != nil {
-			fail(err)
-			return
-		}
-		for _, s := range subscriptionList {
-			labelOf[fmt.Sprintf("subscription:%d", s.ID)] = s.Name
-			if matchesQuery([]string{s.Name, s.Kind, s.Provider, s.Currency, s.BillingCycle, s.Status, s.Notes}, q) {
-				add(subscriptions, s.ID, s.Name)
-			}
-		}
-
-		accountList, err := repos.accounts.List()
-		if err != nil {
-			fail(err)
-			return
-		}
-		for _, a := range accountList {
-			labelOf[fmt.Sprintf("account:%d", a.ID)] = a.Name
-			if matchesQuery([]string{a.Name, a.Kind, a.Username, a.PasswordManager, a.SecretRef, a.URL, a.Status, a.Notes}, q) {
-				add(accounts, a.ID, a.Name)
+			b := &bucket{heading: rs.searchHeading()}
+			buckets[rs.singular()] = b
+			order = append(order, b)
+			for _, e := range entries {
+				labelOf[key(e.Type, e.ID)] = e.Label
+				if matchesQuery(e.Fields, q) {
+					add(b, e.Type, e.ID, e.Label, e.Path)
+				}
 			}
 		}
 
 		// Fold in tag matches: a matching tag pulls its entity into that group.
 		tagged, err := tags.Search(q)
 		if err != nil {
-			fail(err)
+			serverError(w, req, err)
 			return
 		}
 		for _, tg := range tagged {
@@ -198,14 +110,14 @@ func searchEntities(repos entityRepos, tags *store.TagRepo) http.HandlerFunc {
 			if !ok {
 				continue
 			}
-			label, ok := labelOf[fmt.Sprintf("%s:%d", tg.EntityType, tg.EntityID)]
+			label, ok := labelOf[key(tg.EntityType, tg.EntityID)]
 			if !ok {
 				continue // orphan tag (entity deleted) — out of scope, see #28
 			}
-			add(b, tg.EntityID, label)
+			add(b, tg.EntityType, tg.EntityID, label, cat.path(tg.EntityType, tg.EntityID))
 		}
 
-		for _, b := range []*bucket{hosts, services, networks, domains, certificates, backups, hardware, subscriptions, accounts} {
+		for _, b := range order {
 			if len(b.hits) == 0 {
 				continue
 			}
