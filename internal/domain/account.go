@@ -10,15 +10,15 @@ import (
 // secret: SecretRef points to where the credential lives (a password
 // manager entry), not the credential itself.
 type Account struct {
-	ID              int64  `yaml:"id"`
-	Name            string `yaml:"name"`
-	Kind            string `yaml:"kind"`
-	Username        string `yaml:"username"`
-	PasswordManager string `yaml:"password_manager"`
-	SecretRef       string `yaml:"secret_ref"`
-	URL             string `yaml:"url"`
-	Status          string `yaml:"status"`
-	Notes           string `yaml:"notes"`
+	ID              int64  `yaml:"id" json:"id"`
+	Name            string `yaml:"name" json:"name"`
+	Kind            string `yaml:"kind" json:"kind"`
+	Username        string `yaml:"username" json:"username"`
+	PasswordManager string `yaml:"password_manager" json:"password_manager"`
+	SecretRef       string `yaml:"secret_ref" json:"secret_ref"`
+	URL             string `yaml:"url" json:"url"`
+	Status          string `yaml:"status" json:"status"`
+	Notes           string `yaml:"notes" json:"notes"`
 }
 
 // Validate checks that the name is present. All other fields are optional

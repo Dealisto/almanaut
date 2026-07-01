@@ -17,17 +17,17 @@ var decimalAmount = regexp.MustCompile(`^\d+(\.\d+)?$`)
 // with BillingCycle "one-time". Amount is a validated decimal string, not a
 // float, to avoid money rounding and match the all-text column convention.
 type Subscription struct {
-	ID           int64  `yaml:"id"`
-	Name         string `yaml:"name"`
-	Kind         string `yaml:"kind"`          // free text: vps, domain, software license, ssl…
-	Provider     string `yaml:"provider"`      // free text: Hetzner, Namecheap…
-	Amount       string `yaml:"amount"`        // optional decimal string, e.g. "12.99"
-	Currency     string `yaml:"currency"`      // free text short code: CAD, USD…
-	BillingCycle string `yaml:"billing_cycle"` // free text: monthly, yearly, one-time
-	RenewalDate  string `yaml:"renewal_date"`  // optional YYYY-MM-DD
-	AutoRenew    bool   `yaml:"auto_renew"`
-	Status       string `yaml:"status"` // free text: active, cancelled…
-	Notes        string `yaml:"notes"`
+	ID           int64  `yaml:"id" json:"id"`
+	Name         string `yaml:"name" json:"name"`
+	Kind         string `yaml:"kind" json:"kind"`                   // free text: vps, domain, software license, ssl…
+	Provider     string `yaml:"provider" json:"provider"`           // free text: Hetzner, Namecheap…
+	Amount       string `yaml:"amount" json:"amount"`               // optional decimal string, e.g. "12.99"
+	Currency     string `yaml:"currency" json:"currency"`           // free text short code: CAD, USD…
+	BillingCycle string `yaml:"billing_cycle" json:"billing_cycle"` // free text: monthly, yearly, one-time
+	RenewalDate  string `yaml:"renewal_date" json:"renewal_date"`   // optional YYYY-MM-DD
+	AutoRenew    bool   `yaml:"auto_renew" json:"auto_renew"`
+	Status       string `yaml:"status" json:"status"` // free text: active, cancelled…
+	Notes        string `yaml:"notes" json:"notes"`
 }
 
 // Validate checks the name, the amount (a non-negative decimal if present),
