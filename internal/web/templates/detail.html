@@ -64,6 +64,7 @@
 
 <h2>Relationships</h2>
 {{if .Related}}
+{{with .GraphSVG}}<div class="depgraph-wrap">{{.}}</div>{{end}}
 <ul class="related">{{range .Related}}<li>{{.Text}}</li>{{end}}</ul>
 {{else}}<p><em>No relationships.</em></p>{{end}}
 {{end}}

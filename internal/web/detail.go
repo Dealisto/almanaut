@@ -28,6 +28,7 @@ type detailData struct {
 	NotesHTML  template.HTML
 	Tags       []domain.Tag
 	Related    []relatedItem
+	GraphSVG   template.HTML
 	IPAM       *ipamSection
 }
 
@@ -118,14 +119,17 @@ func renderDetailExtra(
 	}
 
 	related := make([]relatedItem, 0, len(edges))
+	neighbors := make([]graphNeighbor, 0, len(edges))
 	for _, e := range edges {
-		var text string
 		if e.FromType == entityType && e.FromID == entityID {
-			text = fmt.Sprintf("%s → %s", e.Kind, labelOrFallback(labels, e.ToType, e.ToID))
+			other := labelOrFallback(labels, e.ToType, e.ToID)
+			related = append(related, relatedItem{Text: fmt.Sprintf("%s → %s", e.Kind, other)})
+			neighbors = append(neighbors, graphNeighbor{Label: other, Kind: e.Kind, Outgoing: true})
 		} else {
-			text = fmt.Sprintf("%s → %s", labelOrFallback(labels, e.FromType, e.FromID), e.Kind)
+			other := labelOrFallback(labels, e.FromType, e.FromID)
+			related = append(related, relatedItem{Text: fmt.Sprintf("%s → %s", other, e.Kind)})
+			neighbors = append(neighbors, graphNeighbor{Label: other, Kind: e.Kind, Outgoing: false})
 		}
-		related = append(related, relatedItem{Text: text})
 	}
 
 	render(w, r, "detail.html", detailData{
@@ -138,6 +142,7 @@ func renderDetailExtra(
 		NotesHTML:  renderMarkdown(notes),
 		Tags:       tagList,
 		Related:    related,
+		GraphSVG:   buildNeighborhoodSVG(heading, neighbors),
 		IPAM:       ipam,
 	})
 }
