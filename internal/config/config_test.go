@@ -1,11 +1,26 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+// mustLoad calls Load and fails the test if it errors. Most tests exercise
+// non-secret config where Load never errors.
+func mustLoad(t *testing.T) Config {
+	t.Helper()
+	c, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	return c
+}
 
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("ALMANAUT_ADDR", "")
 	t.Setenv("ALMANAUT_DATA_DIR", "")
-	c := Load()
+	c := mustLoad(t)
 	if c.Addr != ":8080" {
 		t.Errorf("Addr = %q, want \":8080\"", c.Addr)
 	}
@@ -13,7 +28,7 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("DataDir = %q, want \"./data\"", c.DataDir)
 	}
 	t.Setenv("ALMANAUT_DOCKER_SOCKET", "")
-	if c := Load(); c.DockerSocket != "/var/run/docker.sock" {
+	if c := mustLoad(t); c.DockerSocket != "/var/run/docker.sock" {
 		t.Errorf("DockerSocket = %q, want \"/var/run/docker.sock\"", c.DockerSocket)
 	}
 }
@@ -21,7 +36,7 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("ALMANAUT_ADDR", ":9000")
 	t.Setenv("ALMANAUT_DATA_DIR", "/var/almanaut")
-	c := Load()
+	c := mustLoad(t)
 	if c.Addr != ":9000" {
 		t.Errorf("Addr = %q, want \":9000\"", c.Addr)
 	}
@@ -29,7 +44,7 @@ func TestLoadFromEnv(t *testing.T) {
 		t.Errorf("DataDir = %q, want \"/var/almanaut\"", c.DataDir)
 	}
 	t.Setenv("ALMANAUT_DOCKER_SOCKET", "/tmp/docker.sock")
-	if c := Load(); c.DockerSocket != "/tmp/docker.sock" {
+	if c := mustLoad(t); c.DockerSocket != "/tmp/docker.sock" {
 		t.Errorf("DockerSocket = %q, want \"/tmp/docker.sock\"", c.DockerSocket)
 	}
 }
@@ -37,7 +52,7 @@ func TestLoadFromEnv(t *testing.T) {
 func TestLoadNetworkScanDefaults(t *testing.T) {
 	t.Setenv("ALMANAUT_ENABLE_NETWORK_SCAN", "")
 	t.Setenv("ALMANAUT_SCAN_SUBNET", "")
-	c := Load()
+	c := mustLoad(t)
 	if c.NetworkScanEnabled {
 		t.Error("NetworkScanEnabled should default to false")
 	}
@@ -49,7 +64,7 @@ func TestLoadNetworkScanDefaults(t *testing.T) {
 func TestLoadNetworkScanFromEnv(t *testing.T) {
 	t.Setenv("ALMANAUT_ENABLE_NETWORK_SCAN", "true")
 	t.Setenv("ALMANAUT_SCAN_SUBNET", "10.0.0.0/24")
-	c := Load()
+	c := mustLoad(t)
 	if !c.NetworkScanEnabled {
 		t.Error("NetworkScanEnabled should be true for \"true\"")
 	}
@@ -62,7 +77,7 @@ func TestGetenvBoolVariants(t *testing.T) {
 	cases := map[string]bool{"1": true, "true": true, "YES": true, "0": false, "false": false, "nope": false}
 	for v, want := range cases {
 		t.Setenv("ALMANAUT_ENABLE_NETWORK_SCAN", v)
-		if got := Load().NetworkScanEnabled; got != want {
+		if got := mustLoad(t).NetworkScanEnabled; got != want {
 			t.Errorf("value %q -> %v, want %v", v, got, want)
 		}
 	}
@@ -72,7 +87,7 @@ func TestLoadProxmox(t *testing.T) {
 	t.Setenv("ALMANAUT_PROXMOX_URL", "https://pve.lan:8006")
 	t.Setenv("ALMANAUT_PROXMOX_TOKEN", "root@pam!tok=secret")
 	t.Setenv("ALMANAUT_PROXMOX_INSECURE", "true")
-	cfg := Load()
+	cfg := mustLoad(t)
 	if cfg.ProxmoxURL != "https://pve.lan:8006" {
 		t.Errorf("ProxmoxURL = %q", cfg.ProxmoxURL)
 	}
@@ -86,11 +101,11 @@ func TestLoadProxmox(t *testing.T) {
 
 func TestLoadSecureCookies(t *testing.T) {
 	t.Setenv("ALMANAUT_SECURE_COOKIES", "")
-	if Load().SecureCookies {
+	if mustLoad(t).SecureCookies {
 		t.Error("SecureCookies should default to false")
 	}
 	t.Setenv("ALMANAUT_SECURE_COOKIES", "true")
-	if !Load().SecureCookies {
+	if !mustLoad(t).SecureCookies {
 		t.Error("SecureCookies should be true for \"true\"")
 	}
 }
@@ -98,8 +113,42 @@ func TestLoadSecureCookies(t *testing.T) {
 func TestLoadReadsAuthCredentials(t *testing.T) {
 	t.Setenv("ALMANAUT_AUTH_USER", "admin")
 	t.Setenv("ALMANAUT_AUTH_PASS", "secret")
-	cfg := Load()
+	cfg := mustLoad(t)
 	if cfg.AuthUser != "admin" || cfg.AuthPass != "secret" {
 		t.Fatalf("AuthUser=%q AuthPass=%q, want admin/secret", cfg.AuthUser, cfg.AuthPass)
+	}
+}
+
+func TestSecretFromFileTrimsTrailingNewline(t *testing.T) {
+	// A file written with `echo secret > file` carries a trailing newline that
+	// must not become part of the credential.
+	path := filepath.Join(t.TempDir(), "pass")
+	if err := os.WriteFile(path, []byte("s3cr3t\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ALMANAUT_AUTH_PASS_FILE", path)
+	if got := mustLoad(t).AuthPass; got != "s3cr3t" {
+		t.Errorf("AuthPass = %q, want %q", got, "s3cr3t")
+	}
+}
+
+func TestSecretFileTakesPrecedenceOverEnv(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(path, []byte("from-file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ALMANAUT_PROXMOX_TOKEN", "from-env")
+	t.Setenv("ALMANAUT_PROXMOX_TOKEN_FILE", path)
+	if got := mustLoad(t).ProxmoxToken; got != "from-file" {
+		t.Errorf("ProxmoxToken = %q, want %q (file must win)", got, "from-file")
+	}
+}
+
+func TestSecretFileUnreadableIsFatal(t *testing.T) {
+	// A *_FILE that names a missing file is a misconfiguration; Load must error
+	// rather than silently return an empty secret.
+	t.Setenv("ALMANAUT_AUTH_PASS_FILE", filepath.Join(t.TempDir(), "does-not-exist"))
+	if _, err := Load(); err == nil {
+		t.Fatal("Load must error when *_FILE points to an unreadable file")
 	}
 }

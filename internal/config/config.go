@@ -2,6 +2,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 )
@@ -21,8 +22,18 @@ type Config struct {
 	SecureCookies      bool   // force the Secure flag on cookies (set behind a TLS-terminating proxy)
 }
 
-// Load reads configuration from the environment, falling back to defaults.
-func Load() Config {
+// Load reads configuration from the environment, falling back to defaults. It
+// returns an error only when a secret's *_FILE variant names a file that cannot
+// be read — a misconfiguration that must not degrade to a silently empty secret.
+func Load() (Config, error) {
+	proxmoxToken, err := secretFromEnv("ALMANAUT_PROXMOX_TOKEN")
+	if err != nil {
+		return Config{}, err
+	}
+	authPass, err := secretFromEnv("ALMANAUT_AUTH_PASS")
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
 		Addr:               getenv("ALMANAUT_ADDR", ":8080"),
 		DataDir:            getenv("ALMANAUT_DATA_DIR", "./data"),
@@ -30,12 +41,12 @@ func Load() Config {
 		NetworkScanEnabled: getenvBool("ALMANAUT_ENABLE_NETWORK_SCAN", false),
 		ScanSubnet:         getenv("ALMANAUT_SCAN_SUBNET", ""),
 		ProxmoxURL:         getenv("ALMANAUT_PROXMOX_URL", ""),
-		ProxmoxToken:       getenv("ALMANAUT_PROXMOX_TOKEN", ""),
+		ProxmoxToken:       proxmoxToken,
 		ProxmoxInsecure:    getenvBool("ALMANAUT_PROXMOX_INSECURE", false),
 		AuthUser:           getenv("ALMANAUT_AUTH_USER", ""),
-		AuthPass:           getenv("ALMANAUT_AUTH_PASS", ""),
+		AuthPass:           authPass,
 		SecureCookies:      getenvBool("ALMANAUT_SECURE_COOKIES", false),
-	}
+	}, nil
 }
 
 func getenv(key, def string) string {
@@ -43,6 +54,23 @@ func getenv(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// secretFromEnv resolves a secret from KEY, or from the file named by KEY_FILE
+// when that is set (the "_FILE" convention used by Docker/Kubernetes secrets).
+// Reading from a file keeps the secret out of the process environment, so it
+// does not leak via `docker inspect`, /proc, or inherited child processes.
+// KEY_FILE takes precedence over KEY. A single trailing newline (as left by
+// `echo secret > file`) is stripped.
+func secretFromEnv(key string) (string, error) {
+	if path := os.Getenv(key + "_FILE"); path != "" {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("read %s_FILE: %w", key, err)
+		}
+		return strings.TrimRight(string(b), "\r\n"), nil
+	}
+	return os.Getenv(key), nil
 }
 
 // getenvBool reads a boolean env var. "1", "true", "yes" (any case) are true;

@@ -25,7 +25,10 @@ import (
 var version = "dev"
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
 
 	// "almanaut healthcheck" probes the local /healthz endpoint and exits 0/1.
 	// It backs the container HEALTHCHECK, which cannot use a shell on the
