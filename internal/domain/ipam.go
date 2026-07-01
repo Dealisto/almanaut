@@ -154,7 +154,7 @@ func buildUsage(n Network, used []Allocation) NetworkUsage {
 	switch {
 	case hostBits >= 31:
 		u.Unbounded = true
-	case bits == 32 && hostBits >= 2:
+	case reservesEnds(ones, bits):
 		u.TotalUsable = (1 << hostBits) - 2 // exclude network + broadcast
 	default:
 		u.TotalUsable = 1 << hostBits // /31, /32, and small IPv6 subnets
@@ -176,6 +176,15 @@ func buildUsage(n Network, used []Allocation) NetworkUsage {
 	return u
 }
 
+// reservesEnds reports whether a subnet reserves its network and broadcast
+// addresses, so they count as neither usable capacity nor a next-free
+// suggestion. Only IPv4 subnets larger than a /31 point-to-point link do; /31,
+// /32 and IPv6 subnets use every address. This is the single source of that rule
+// for both the capacity count (buildUsage) and the enumeration (nextFree).
+func reservesEnds(ones, bits int) bool {
+	return bits == 32 && bits-ones >= 2
+}
+
 // nextFree returns the lowest usable address in ipn not present in taken, or ""
 // if the subnet is full or larger than 2^maxEnumerableHostBits addresses. It
 // walks addresses in place rather than materializing the whole range, so a large
@@ -190,9 +199,7 @@ func nextFree(ipn *net.IPNet, taken map[string]bool) string {
 	cur := make(net.IP, len(base))
 	copy(cur, base)
 
-	// IPv4 subnets larger than a point-to-point link reserve the network and
-	// broadcast addresses; /31, /32 and IPv6 subnets use every address.
-	excludeEnds := bits == 32 && bits-ones >= 2
+	excludeEnds := reservesEnds(ones, bits)
 	var broadcast net.IP
 	if excludeEnds {
 		broadcast = make(net.IP, len(base))
