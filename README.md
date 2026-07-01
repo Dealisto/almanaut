@@ -102,6 +102,26 @@ Field names match the YAML export (snake_case). Responses are
 curl -s http://localhost:8080/api/certificates | jq '.[] | {subject, expires_on}'
 ```
 
+## Metrics
+
+`GET /metrics` exposes aggregate inventory gauges in the Prometheus text format,
+behind the same optional Basic auth as the rest of the app (configure
+`basic_auth` in your Prometheus scrape job if auth is enabled).
+
+| Metric | Meaning |
+|---|---|
+| `almanaut_entities_total{type="…"}` | Count of each entity type |
+| `almanaut_relationships_total` | Number of relationships |
+| `almanaut_certificates_expiring_total` | Certificates expiring within 30 days |
+| `almanaut_hardware_warranty_expiring_total` | Warranties expiring within 30 days |
+| `almanaut_subscriptions_renewal_due_total` | Renewals due within 30 days |
+| `almanaut_hosts_down_total` | Hosts marked down/offline/stopped |
+| `almanaut_services_without_backup_total` | Services with no backup relationship |
+
+```bash
+curl -s http://localhost:8080/metrics
+```
+
 ## Health & version
 
 Two unauthenticated endpoints are always available (they bypass basic auth so
