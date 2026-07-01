@@ -1,4 +1,39 @@
+# Keep the build context small and free of local-only / non-source files.
+# The build only needs the Go sources (incl. embedded internal/**/*.sql and
+# internal/web/templates/*.html), go.mod and go.sum.
+
+# VCS
+.git/
+.gitignore
+.gitattributes
+
+# Compiled binaries and test/coverage artifacts
+almanaut
+almanaut.exe
+*.exe
+*.test
+*.out
+/dist/
+
+# Local data / SQLite
 data/
 *.db
 *.db-*
-.git/
+
+# CI / container / docs (not needed to compile)
+.github/
+.dockerignore
+Dockerfile
+*.md
+LICENSE
+
+# Claude Code config and local agent scratch (some kept local-only)
+.claude/
+.superpowers/
+docs/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*~
