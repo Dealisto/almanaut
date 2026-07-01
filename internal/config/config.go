@@ -18,6 +18,7 @@ type Config struct {
 	ProxmoxInsecure    bool   // skip TLS verification (self-signed Proxmox cert)
 	AuthUser           string // ALMANAUT_AUTH_USER — enables HTTP basic auth when set with AuthPass
 	AuthPass           string // ALMANAUT_AUTH_PASS
+	SecureCookies      bool   // force the Secure flag on cookies (set behind a TLS-terminating proxy)
 }
 
 // Load reads configuration from the environment, falling back to defaults.
@@ -33,6 +34,7 @@ func Load() Config {
 		ProxmoxInsecure:    getenvBool("ALMANAUT_PROXMOX_INSECURE", false),
 		AuthUser:           getenv("ALMANAUT_AUTH_USER", ""),
 		AuthPass:           getenv("ALMANAUT_AUTH_PASS", ""),
+		SecureCookies:      getenvBool("ALMANAUT_SECURE_COOKIES", false),
 	}
 }
 

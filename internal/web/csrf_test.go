@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,7 +21,7 @@ func passThrough(reached *bool) http.Handler {
 
 func TestCSRFGetSetsCookieAndAllows(t *testing.T) {
 	var reached bool
-	h := csrfProtect(passThrough(&reached))
+	h := csrfProtect(false)(passThrough(&reached))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/hosts", nil))
 
@@ -40,7 +41,7 @@ func TestCSRFGetSetsCookieAndAllows(t *testing.T) {
 
 func TestCSRFPostMatchingTokenAllows(t *testing.T) {
 	var reached bool
-	h := csrfProtect(passThrough(&reached))
+	h := csrfProtect(false)(passThrough(&reached))
 
 	form := strings.NewReader(csrfFieldName + "=tok123")
 	req := httptest.NewRequest(http.MethodPost, "/hosts", form)
@@ -68,7 +69,7 @@ func TestCSRFPostMismatchOrMissingRejected(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			var reached bool
-			h := csrfProtect(passThrough(&reached))
+			h := csrfProtect(false)(passThrough(&reached))
 			req := httptest.NewRequest(http.MethodPost, "/hosts",
 				strings.NewReader(csrfFieldName+"="+c.field))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -91,7 +92,7 @@ func TestCSRFUnsafeMethodDoesNotSetCookie(t *testing.T) {
 	// A POST with no cookie is rejected; it must not mint a fresh token cookie,
 	// since the request can never carry a matching token anyway.
 	var reached bool
-	h := csrfProtect(passThrough(&reached))
+	h := csrfProtect(false)(passThrough(&reached))
 	req := httptest.NewRequest(http.MethodPost, "/hosts",
 		strings.NewReader(csrfFieldName+"=a"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -108,9 +109,46 @@ func TestCSRFUnsafeMethodDoesNotSetCookie(t *testing.T) {
 	}
 }
 
+func TestCSRFCookieSecureFlag(t *testing.T) {
+	cases := []struct {
+		name        string
+		forceSecure bool
+		tls         bool
+		wantSecure  bool
+	}{
+		{"plain http, no force", false, false, false},
+		{"plain http, forced (proxy)", true, false, true},
+		{"direct tls auto-detected", false, true, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h := csrfProtect(c.forceSecure)(passThrough(new(bool)))
+			req := httptest.NewRequest(http.MethodGet, "/hosts", nil)
+			if c.tls {
+				req.TLS = &tls.ConnectionState{}
+			}
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			var cookie *http.Cookie
+			for _, ck := range rec.Result().Cookies() {
+				if ck.Name == csrfCookieName {
+					cookie = ck
+				}
+			}
+			if cookie == nil {
+				t.Fatal("GET must Set-Cookie csrf_token")
+			}
+			if cookie.Secure != c.wantSecure {
+				t.Errorf("Secure = %v, want %v", cookie.Secure, c.wantSecure)
+			}
+		})
+	}
+}
+
 func TestCSRFTokenFromContextIsSet(t *testing.T) {
 	var seen string
-	h := csrfProtect(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := csrfProtect(false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = csrfTokenFrom(r.Context())
 	}))
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
@@ -126,7 +164,7 @@ func TestCSRFRoundTripGeneratedToken(t *testing.T) {
 		t.Fatalf("generateCSRFToken: %v", err)
 	}
 	var reached bool
-	h := csrfProtect(passThrough(&reached))
+	h := csrfProtect(false)(passThrough(&reached))
 
 	body := strings.NewReader(csrfFieldName + "=" + tok)
 	req := httptest.NewRequest(http.MethodPost, "/hosts", body)

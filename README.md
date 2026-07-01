@@ -34,6 +34,7 @@ ALMANAUT_DATA_DIR=./data ./almanaut
 | `ALMANAUT_PROXMOX_INSECURE`   | `false`              | Skip TLS verification for a self-signed Proxmox certificate |
 | `ALMANAUT_AUTH_USER`          | (empty)              | Username for optional HTTP Basic auth; enables auth when set together with `ALMANAUT_AUTH_PASS` |
 | `ALMANAUT_AUTH_PASS`          | (empty)              | Password for optional HTTP Basic auth |
+| `ALMANAUT_SECURE_COOKIES`     | `false`              | Force the `Secure` flag on cookies; set to `true` when serving HTTPS through a TLS-terminating reverse proxy |
 
 When `ALMANAUT_AUTH_USER` and `ALMANAUT_AUTH_PASS` are both set, every page
 requires those credentials via HTTP Basic auth. When either is unset, Almanaut is

@@ -69,6 +69,7 @@ func main() {
 		PVEOpts:       web.ProxmoxOptions{Enabled: cfg.ProxmoxURL != "" && cfg.ProxmoxToken != ""},
 		AuthUser:      cfg.AuthUser,
 		AuthPass:      cfg.AuthPass,
+		SecureCookies: cfg.SecureCookies,
 		Version:       version,
 	})
 	srv := &http.Server{

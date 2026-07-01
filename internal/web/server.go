@@ -38,6 +38,7 @@ type Config struct {
 	PVEOpts       ProxmoxOptions
 	AuthUser      string // when set with AuthPass, enables HTTP basic auth
 	AuthPass      string
+	SecureCookies bool   // force the Secure flag on cookies (TLS-terminating proxy)
 	Version       string // build version, surfaced at /version (defaults to "dev")
 }
 
@@ -303,7 +304,7 @@ func New(cfg Config) http.Handler {
 		// Bound the request body before csrfProtect reads the form of every
 		// unsafe request, so an oversize upload is rejected up front.
 		r.Use(limitBody)
-		r.Use(csrfProtect)
+		r.Use(csrfProtect(cfg.SecureCookies))
 		r.Get("/", dashboard(repos, relationships))
 		for _, rs := range resources {
 			rs.mount(r, deps)
