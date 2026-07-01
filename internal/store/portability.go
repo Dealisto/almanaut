@@ -98,12 +98,15 @@ func Import(db *sql.DB, snap Snapshot) error {
 		}
 	}
 
-	tx, err := db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin: %w", err)
-	}
-	defer tx.Rollback() // no-op once committed
+	return WithTx(db, func(tx *sql.Tx) error {
+		return replaceInventory(tx, snap)
+	})
+}
 
+// replaceInventory clears every table and re-inserts snap within tx. It must run
+// inside WithTx, which owns begin/commit/rollback and is panic-safe, so any
+// failure rolls the whole replacement back.
+func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "relationships", "tags"} {
 		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 			return fmt.Errorf("clear %s: %w", table, err)
@@ -213,9 +216,6 @@ func Import(db *sql.DB, snap Snapshot) error {
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit: %w", err)
-	}
 	return nil
 }
 
