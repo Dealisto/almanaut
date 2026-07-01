@@ -41,6 +41,17 @@ ALMANAUT_DATA_DIR=./data ./almanaut
 | `ALMANAUT_AUTH_PASS`          | (empty)              | Password for optional HTTP Basic auth |
 | `ALMANAUT_SECURE_COOKIES`     | `false`              | Force the `Secure` flag on cookies; set to `true` when serving HTTPS through a TLS-terminating reverse proxy |
 
+### Secrets from files
+
+The two sensitive values — `ALMANAUT_AUTH_PASS` and `ALMANAUT_PROXMOX_TOKEN` —
+can instead be read from a file by appending `_FILE` to the variable name and
+pointing it at the file (`ALMANAUT_AUTH_PASS_FILE=/run/secrets/auth_pass`). This
+keeps the secret out of the process environment, where it would otherwise be
+visible via `docker inspect`, `/proc`, or inherited by child processes. It pairs
+directly with [Docker secrets](https://docs.docker.com/engine/swarm/secrets/) and
+Kubernetes secrets, which are mounted as files. The `_FILE` variant takes
+precedence over the plain variable, and a single trailing newline is stripped.
+
 When `ALMANAUT_AUTH_USER` and `ALMANAUT_AUTH_PASS` are both set, every page
 requires those credentials via HTTP Basic auth. When either is unset, Almanaut is
 unauthenticated and intended for a trusted LAN or an authenticated reverse proxy.
