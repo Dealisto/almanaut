@@ -13,6 +13,11 @@ docker run --rm -p 8080:8080 -v almanaut-data:/data ghcr.io/almanaut/almanaut:de
 
 Then open http://localhost:8080.
 
+The container runs as a non-root user (uid `65532`). A fresh named volume (as
+above) inherits the right ownership automatically. If you instead bind-mount a
+host directory (`-v /host/path:/data`), make it writable by that uid first —
+`sudo chown 65532:65532 /host/path` — otherwise the database cannot be created.
+
 ## Run from source
 
 ```bash

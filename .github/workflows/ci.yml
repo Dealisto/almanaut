@@ -58,3 +58,35 @@ jobs:
         with:
           go-version-file: go.mod
       - run: CGO_ENABLED=0 go build -trimpath ./...
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t almanaut:ci .
+      - name: Image runs as nonroot
+        run: |
+          user="$(docker inspect --format '{{.Config.User}}' almanaut:ci)"
+          if [ "$user" != "65532:65532" ]; then
+            echo "image USER = '$user', want '65532:65532'"
+            exit 1
+          fi
+      - name: Smoke test (boots and serves /healthz as nonroot)
+        run: |
+          # A 200 from /healthz proves the server booted, which means it opened
+          # and migrated the SQLite DB under /data — i.e. /data is writable by
+          # the nonroot user.
+          docker run -d --name almanaut-ci -p 8080:8080 almanaut:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; then
+              echo "healthy after ${i}s"
+              docker rm -f almanaut-ci >/dev/null
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "container did not become healthy; logs:"
+          docker logs almanaut-ci
+          docker rm -f almanaut-ci >/dev/null
+          exit 1
