@@ -16,6 +16,7 @@ import (
 
 	"github.com/Dealisto/almanaut/internal/config"
 	"github.com/Dealisto/almanaut/internal/discovery"
+	"github.com/Dealisto/almanaut/internal/notify"
 	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/Dealisto/almanaut/internal/web"
 )
@@ -96,6 +97,19 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// Expiry notifications are opt-in: only run when a topic URL is configured.
+	if cfg.NtfyURL != "" {
+		notifier := notify.New(
+			store.NewCertificateRepo(db),
+			store.NewHardwareRepo(db),
+			store.NewSubscriptionRepo(db),
+			store.NewNotificationRepo(db),
+			notify.NewNtfyClient(cfg.NtfyURL, cfg.NtfyToken),
+			cfg.NotifyWithinDays,
+		)
+		go runNotifier(ctx, notifier, cfg.NotifyInterval)
+	}
+
 	select {
 	case err := <-serverErr:
 		log.Fatalf("server: %v", err)
@@ -135,4 +149,28 @@ func runHealthcheck(addr string) int {
 		return 1
 	}
 	return 0
+}
+
+// runNotifier runs one notification pass at startup, then every interval, until
+// ctx is cancelled. Each pass is bounded by its own timeout so a hung ntfy
+// endpoint cannot wedge the loop.
+func runNotifier(ctx context.Context, n *notify.Notifier, interval time.Duration) {
+	pass := func() {
+		runCtx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		if err := n.Run(runCtx, time.Now()); err != nil {
+			log.Printf("notify: run: %v", err)
+		}
+	}
+	pass()
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			pass()
+		}
+	}
 }
