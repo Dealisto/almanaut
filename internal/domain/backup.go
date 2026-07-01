@@ -3,7 +3,6 @@ package domain
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
 // Backup describes how something in the homelab is backed up.
@@ -21,10 +20,5 @@ func (b Backup) Validate() error {
 	if strings.TrimSpace(b.Source) == "" {
 		return fmt.Errorf("source is required")
 	}
-	if lr := strings.TrimSpace(b.LastRun); lr != "" {
-		if _, err := time.Parse(DateLayout, lr); err != nil {
-			return fmt.Errorf("last run must be YYYY-MM-DD, got %q", b.LastRun)
-		}
-	}
-	return nil
+	return validateOptionalDate("last run", b.LastRun)
 }
