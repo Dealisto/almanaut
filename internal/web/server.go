@@ -63,6 +63,9 @@ func New(cfg Config) http.Handler {
 					{"Disk", h.Disk}, {"Status", h.Status}, {"IPs", strings.Join(h.IPs, ", ")},
 				}
 			},
+			search: func(h domain.Host) []string {
+				return []string{h.Name, h.OS, h.CPU, h.RAM, h.Disk, h.Status, h.Notes, strings.Join(h.IPs, " ")}
+			},
 			newItem:  domain.Host{Type: "physical"},
 			listTmpl: "hosts.html", formTmpl: "host_form.html",
 			extras: func() map[string]any { return map[string]any{"Types": domain.HostTypes} },
@@ -82,6 +85,9 @@ func New(cfg Config) http.Handler {
 					{"Category", s.Category},
 				}
 			},
+			search: func(s domain.Service) []string {
+				return []string{s.Name, s.Kind, s.URL, s.Ports, s.Category, s.Notes}
+			},
 			newItem:  domain.Service{Kind: "container"},
 			listTmpl: "services.html", formTmpl: "service_form.html",
 			extras: func() map[string]any { return map[string]any{"Kinds": domain.ServiceKinds} },
@@ -99,6 +105,9 @@ func New(cfg Config) http.Handler {
 					{"VLAN", n.VLAN},
 					{"Gateway", n.Gateway},
 				}
+			},
+			search: func(n domain.Network) []string {
+				return []string{n.Name, n.CIDR, n.VLAN, n.Gateway, n.Notes}
 			},
 			newItem:  domain.Network{},
 			listTmpl: "networks.html", formTmpl: "network_form.html",
@@ -130,6 +139,9 @@ func New(cfg Config) http.Handler {
 					{"Provider", d.Provider},
 				}
 			},
+			search: func(d domain.Domain) []string {
+				return []string{d.FQDN, d.Provider, d.Notes}
+			},
 			newItem:  domain.Domain{},
 			listTmpl: "domains.html", formTmpl: "domain_form.html",
 		},
@@ -151,6 +163,9 @@ func New(cfg Config) http.Handler {
 					{"Auto-renew", autoRenew},
 				}
 			},
+			search: func(c domain.Certificate) []string {
+				return []string{c.Subject, c.Issuer, c.Notes}
+			},
 			newItem:  domain.Certificate{},
 			listTmpl: "certificates.html", formTmpl: "certificate_form.html",
 		},
@@ -167,6 +182,9 @@ func New(cfg Config) http.Handler {
 					{"Frequency", b.Frequency},
 					{"Last run", b.LastRun},
 				}
+			},
+			search: func(b domain.Backup) []string {
+				return []string{b.Source, b.Destination, b.Frequency, b.LastRun, b.Notes}
 			},
 			newItem:  domain.Backup{},
 			listTmpl: "backups.html", formTmpl: "backup_form.html",
@@ -189,6 +207,9 @@ func New(cfg Config) http.Handler {
 					{"Warranty end", h.WarrantyEnd},
 					{"Status", h.Status},
 				}
+			},
+			search: func(h domain.Hardware) []string {
+				return []string{h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.Status, h.Notes}
 			},
 			newItem:  domain.Hardware{},
 			listTmpl: "hardware.html", formTmpl: "hardware_form.html",
@@ -219,6 +240,9 @@ func New(cfg Config) http.Handler {
 					{"Status", s.Status},
 				}
 			},
+			search: func(s domain.Subscription) []string {
+				return []string{s.Name, s.Kind, s.Provider, s.Currency, s.BillingCycle, s.Status, s.Notes}
+			},
 			newItem:  domain.Subscription{},
 			listTmpl: "subscriptions.html", formTmpl: "subscription_form.html",
 		},
@@ -238,6 +262,9 @@ func New(cfg Config) http.Handler {
 					{"URL", a.URL},
 					{"Status", a.Status},
 				}
+			},
+			search: func(a domain.Account) []string {
+				return []string{a.Name, a.Kind, a.Username, a.PasswordManager, a.SecretRef, a.URL, a.Status, a.Notes}
 			},
 			newItem:  domain.Account{},
 			listTmpl: "accounts.html", formTmpl: "account_form.html",
@@ -290,7 +317,7 @@ func New(cfg Config) http.Handler {
 		r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
 		r.Get("/impact", impactView(relationships, cat))
 		r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
-		r.Get("/search", searchEntities(repos, tags))
+		r.Get("/search", searchEntities(cat, tags))
 		r.Get("/data", showData())
 		r.Get("/export", exportData(db))
 		r.Post("/import", importData(db))
