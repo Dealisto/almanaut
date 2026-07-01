@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 )
 
 // decimalAmount matches a non-negative decimal money string ("0", "12", "12.99").
@@ -42,10 +41,5 @@ func (s Subscription) Validate() error {
 			return fmt.Errorf("amount must be a non-negative decimal, got %q", s.Amount)
 		}
 	}
-	if rd := strings.TrimSpace(s.RenewalDate); rd != "" {
-		if _, err := time.Parse(DateLayout, rd); err != nil {
-			return fmt.Errorf("renewal date must be YYYY-MM-DD, got %q", s.RenewalDate)
-		}
-	}
-	return nil
+	return validateOptionalDate("renewal date", s.RenewalDate)
 }
