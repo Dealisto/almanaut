@@ -275,9 +275,45 @@ func (rs resource[T]) mount(r chi.Router, d handlerDeps) {
 	r.Post(rs.basePath()+"/{id}/delete", rs.del(d))
 }
 
+// listJSON writes all entities of this type as a JSON array.
+func (rs resource[T]) listJSON(w http.ResponseWriter, req *http.Request) {
+	items, err := rs.repo.List()
+	if err != nil {
+		apiServerError(w, req, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+// getJSON writes one entity as JSON, 404 if absent, 400 on a malformed id.
+func (rs resource[T]) getJSON(w http.ResponseWriter, req *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	item, err := rs.repo.Get(id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
+			return
+		}
+		apiServerError(w, req, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+// mountAPI registers this resource's read-only JSON routes.
+func (rs resource[T]) mountAPI(r chi.Router) {
+	r.Get("/api"+rs.basePath(), rs.listJSON)
+	r.Get("/api"+rs.basePath()+"/{id}", rs.getJSON)
+}
+
 // mountable lets New store heterogeneous resource[T] values in one slice.
 type mountable interface {
 	mount(r chi.Router, d handlerDeps)
+	mountAPI(r chi.Router)
 	options() ([]entityOption, error)
 	singular() string
 	basePath() string

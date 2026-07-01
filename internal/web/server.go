@@ -308,6 +308,7 @@ func New(cfg Config) http.Handler {
 		r.Get("/", dashboard(repos, relationships))
 		for _, rs := range resources {
 			rs.mount(r, deps)
+			rs.mountAPI(r)
 		}
 		r.Post("/tags", addTag(tags, cat))
 		r.Post("/tags/delete", removeTag(tags, cat))
