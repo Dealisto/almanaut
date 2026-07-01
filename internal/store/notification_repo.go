@@ -17,6 +17,11 @@ func NewNotificationRepo(db *sql.DB) *NotificationRepo {
 }
 
 // SentKey identifies one already-notified entity.
+//
+// State is keyed on (kind, entity_id): if an entity is deleted while marked
+// and a new one reuses its rowid before the next pass, the first notification
+// could be suppressed — the clear-on-absence design in Run self-heals this on
+// a later pass, once the old key is no longer in the expiring set.
 type SentKey struct {
 	Kind string
 	ID   int64

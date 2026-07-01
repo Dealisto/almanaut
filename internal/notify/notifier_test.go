@@ -92,6 +92,75 @@ func TestNotifierRunNotifiesOnceThenReArms(t *testing.T) {
 	}
 }
 
+func TestNotifierRunGathersHardwareAndSubscriptions(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+	if err := store.Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	certs := store.NewCertificateRepo(db)
+	hw := store.NewHardwareRepo(db)
+	subs := store.NewSubscriptionRepo(db)
+	state := store.NewNotificationRepo(db)
+
+	now := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name      string
+		setup     func() error
+		wantTitle string
+	}{
+		{
+			name: "hardware warranty expiring",
+			setup: func() error {
+				_, err := hw.Create(domain.Hardware{Name: "nas-1", WarrantyEnd: "2026-07-10"})
+				return err
+			},
+			wantTitle: "Warranty expiring",
+		},
+		{
+			name: "subscription renewal due",
+			setup: func() error {
+				_, err := subs.Create(domain.Subscription{Name: "vps-1", RenewalDate: "2026-07-15"})
+				return err
+			},
+			wantTitle: "Subscription renewal due",
+		},
+	}
+
+	for _, tt := range tests {
+		if err := tt.setup(); err != nil {
+			t.Fatalf("%s: setup: %v", tt.name, err)
+		}
+	}
+
+	sender := &fakeSender{}
+	n := New(certs, hw, subs, state, sender, 30)
+	if err := n.Run(context.Background(), now); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			found := false
+			for _, s := range sender.sent {
+				if s.Title == tt.wantTitle {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("want a notification titled %q, got %v", tt.wantTitle, sender.sent)
+			}
+		})
+	}
+}
+
 func TestNotifierRunSendFailureDoesNotMarkState(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := store.Open(dbPath)

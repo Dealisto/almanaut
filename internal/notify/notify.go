@@ -109,6 +109,9 @@ func (n *Notifier) gather(now time.Time) ([]Item, error) {
 // Run performs one full pass: notify newly-expiring items, clear items that are
 // no longer expiring. A single failed send is logged and skipped (its state is
 // left unmarked so it retries next pass); it does not abort the pass.
+//
+// Deliberately not transactional: Run is the sole writer of notification_state
+// and runs single-threaded, so a tx would just hold a DB tx open across Send.
 func (n *Notifier) Run(ctx context.Context, now time.Time) error {
 	expiring, err := n.gather(now)
 	if err != nil {
