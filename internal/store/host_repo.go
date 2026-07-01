@@ -87,7 +87,7 @@ func (r *HostRepo) List() ([]domain.Host, error) {
 		return nil, fmt.Errorf("query hosts: %w", err)
 	}
 	defer rows.Close()
-	var hosts []domain.Host
+	hosts := []domain.Host{}
 	for rows.Next() {
 		h, err := scanHost(rows)
 		if err != nil {

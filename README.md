@@ -83,6 +83,25 @@ notifies **once**; renewing it (pushing the date beyond the window) re-arms it
 for next time. The check runs at startup and every `ALMANAUT_NOTIFY_INTERVAL`.
 Leave `ALMANAUT_NTFY_URL` unset to disable notifications entirely.
 
+## JSON API
+
+A read-only JSON API mirrors the inventory for scripts and dashboards. It sits
+behind the same optional Basic auth as the UI (open when auth is unset).
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/{type}` | All entities of a type (e.g. `/api/hosts`, `/api/hardware`, `/api/certificates`) |
+| `GET /api/{type}/{id}` | One entity, or `404 {"error":"…"}` if absent |
+| `GET /api/search?q=<term>` | Flat array of matches: `[{"type","id","label","path"}]` |
+| `GET /api/relationships` | All relationships |
+
+Field names match the YAML export (snake_case). Responses are
+`application/json`. The API is read-only (GET); use the web UI to make changes.
+
+```bash
+curl -s http://localhost:8080/api/certificates | jq '.[] | {subject, expires_on}'
+```
+
 ## Health & version
 
 Two unauthenticated endpoints are always available (they bypass basic auth so

@@ -7,12 +7,12 @@ import (
 
 // Backup describes how something in the homelab is backed up.
 type Backup struct {
-	ID          int64  `yaml:"id"`
-	Source      string `yaml:"source"` // what is backed up
-	Destination string `yaml:"destination"`
-	Frequency   string `yaml:"frequency"`
-	LastRun     string `yaml:"last_run"` // optional YYYY-MM-DD
-	Notes       string `yaml:"notes"`
+	ID          int64  `yaml:"id" json:"id"`
+	Source      string `yaml:"source" json:"source"` // what is backed up
+	Destination string `yaml:"destination" json:"destination"`
+	Frequency   string `yaml:"frequency" json:"frequency"`
+	LastRun     string `yaml:"last_run" json:"last_run"` // optional YYYY-MM-DD
+	Notes       string `yaml:"notes" json:"notes"`
 }
 
 // Validate checks the source and (if present) the last-run date.

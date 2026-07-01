@@ -308,6 +308,7 @@ func New(cfg Config) http.Handler {
 		r.Get("/", dashboard(repos, relationships))
 		for _, rs := range resources {
 			rs.mount(r, deps)
+			rs.mountAPI(r)
 		}
 		r.Post("/tags", addTag(tags, cat))
 		r.Post("/tags/delete", removeTag(tags, cat))
@@ -319,6 +320,8 @@ func New(cfg Config) http.Handler {
 		r.Get("/impact", impactView(relationships, cat))
 		r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
 		r.Get("/search", searchEntities(cat, tags))
+		r.Get("/api/search", apiSearch(cat))
+		r.Get("/api/relationships", apiRelationships(relationships))
 		r.Get("/data", showData())
 		r.Get("/export", exportData(db))
 		r.Post("/import", importData(db))

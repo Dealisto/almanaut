@@ -8,17 +8,17 @@ import (
 // Hardware is a piece of physical equipment in the homelab: UPS, switch, disk,
 // NAS, server, etc. Warranty/purchase dates are optional YYYY-MM-DD strings.
 type Hardware struct {
-	ID           int64  `yaml:"id"`
-	Name         string `yaml:"name"`
-	Kind         string `yaml:"kind"` // free text: ups, switch, disk, nas…
-	Manufacturer string `yaml:"manufacturer"`
-	Model        string `yaml:"model"`
-	Serial       string `yaml:"serial"`
-	Location     string `yaml:"location"`
-	PurchaseDate string `yaml:"purchase_date"` // optional YYYY-MM-DD
-	WarrantyEnd  string `yaml:"warranty_end"`  // optional YYYY-MM-DD
-	Status       string `yaml:"status"`        // free text: active/spare/retired
-	Notes        string `yaml:"notes"`
+	ID           int64  `yaml:"id" json:"id"`
+	Name         string `yaml:"name" json:"name"`
+	Kind         string `yaml:"kind" json:"kind"` // free text: ups, switch, disk, nas…
+	Manufacturer string `yaml:"manufacturer" json:"manufacturer"`
+	Model        string `yaml:"model" json:"model"`
+	Serial       string `yaml:"serial" json:"serial"`
+	Location     string `yaml:"location" json:"location"`
+	PurchaseDate string `yaml:"purchase_date" json:"purchase_date"` // optional YYYY-MM-DD
+	WarrantyEnd  string `yaml:"warranty_end" json:"warranty_end"`   // optional YYYY-MM-DD
+	Status       string `yaml:"status" json:"status"`               // free text: active/spare/retired
+	Notes        string `yaml:"notes" json:"notes"`
 }
 
 // Validate checks the name and (if present) the purchase/warranty dates.

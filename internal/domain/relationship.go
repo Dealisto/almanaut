@@ -26,12 +26,12 @@ type EntityRef struct {
 
 // Relationship is a directional, typed edge between two entities: "from kind to".
 type Relationship struct {
-	ID       int64  `yaml:"id"`
-	FromType string `yaml:"from_type"`
-	FromID   int64  `yaml:"from_id"`
-	ToType   string `yaml:"to_type"`
-	ToID     int64  `yaml:"to_id"`
-	Kind     string `yaml:"kind"`
+	ID       int64  `yaml:"id" json:"id"`
+	FromType string `yaml:"from_type" json:"from_type"`
+	FromID   int64  `yaml:"from_id" json:"from_id"`
+	ToType   string `yaml:"to_type" json:"to_type"`
+	ToID     int64  `yaml:"to_id" json:"to_id"`
+	Kind     string `yaml:"kind" json:"kind"`
 }
 
 // Validate checks the endpoint types, the kind, and that the edge is well-formed.
