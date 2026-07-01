@@ -8,10 +8,14 @@ A lightweight, self-hosted homelab inventory & documentation tool.
 ## Run with Docker
 
 ```bash
-docker run --rm -p 8080:8080 -v almanaut-data:/data ghcr.io/almanaut/almanaut:dev
+docker run --rm -p 8080:8080 -v almanaut-data:/data ghcr.io/dealisto/almanaut:dev
 ```
 
 Then open http://localhost:8080.
+
+Images are published to GHCR automatically: `:dev` tracks `master`, and a
+tagged release (`vX.Y.Z`) publishes `:X.Y.Z`, `:X.Y`, and `:latest`. Images are
+multi-arch (`linux/amd64` and `linux/arm64`).
 
 The container runs as a non-root user (uid `65532`). A fresh named volume (as
 above) inherits the right ownership automatically. If you instead bind-mount a
@@ -95,7 +99,7 @@ docker build --build-arg VERSION=v0.2.0 -t almanaut .
 To enable Docker container discovery, mount the Docker socket read-only into the container:
 
 ```bash
-docker run --rm -p 8080:8080 -v almanaut-data:/data -v /var/run/docker.sock:/var/run/docker.sock:ro ghcr.io/almanaut/almanaut:dev
+docker run --rm -p 8080:8080 -v almanaut-data:/data -v /var/run/docker.sock:/var/run/docker.sock:ro ghcr.io/dealisto/almanaut:dev
 ```
 
 If your Docker socket is at a non-standard path, override it with the `ALMANAUT_DOCKER_SOCKET` environment variable.
