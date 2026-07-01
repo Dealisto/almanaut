@@ -84,6 +84,17 @@ func TestLoadProxmox(t *testing.T) {
 	}
 }
 
+func TestLoadSecureCookies(t *testing.T) {
+	t.Setenv("ALMANAUT_SECURE_COOKIES", "")
+	if Load().SecureCookies {
+		t.Error("SecureCookies should default to false")
+	}
+	t.Setenv("ALMANAUT_SECURE_COOKIES", "true")
+	if !Load().SecureCookies {
+		t.Error("SecureCookies should be true for \"true\"")
+	}
+}
+
 func TestLoadReadsAuthCredentials(t *testing.T) {
 	t.Setenv("ALMANAUT_AUTH_USER", "admin")
 	t.Setenv("ALMANAUT_AUTH_PASS", "secret")
