@@ -44,6 +44,10 @@ ALMANAUT_DATA_DIR=./data ./almanaut
 | `ALMANAUT_AUTH_USER`          | (empty)              | Username for optional HTTP Basic auth; enables auth when set together with `ALMANAUT_AUTH_PASS` |
 | `ALMANAUT_AUTH_PASS`          | (empty)              | Password for optional HTTP Basic auth |
 | `ALMANAUT_SECURE_COOKIES`     | `false`              | Force the `Secure` flag on cookies; set to `true` when serving HTTPS through a TLS-terminating reverse proxy |
+| `ALMANAUT_NTFY_URL`           | (empty)              | ntfy topic URL for expiry alerts (e.g. `https://ntfy.sh/my-homelab`); empty disables notifications |
+| `ALMANAUT_NTFY_TOKEN`         | (empty)              | Optional bearer token for a protected ntfy topic (supports the `_FILE` convention) |
+| `ALMANAUT_NOTIFY_WITHIN_DAYS` | `30`                 | Days ahead to treat certificates/warranties/renewals as "expiring soon" |
+| `ALMANAUT_NOTIFY_INTERVAL`    | `24h`                | How often the notifier checks (Go duration, e.g. `12h`) |
 
 ### Secrets from files
 
@@ -69,6 +73,15 @@ Note that `/export` returns the **entire inventory**, including account entries
 (usernames, password-manager names, and secret references). In the default
 unauthenticated mode anyone who can reach the server can download it, so enable
 auth (or an authenticated reverse proxy) before storing anything sensitive.
+
+### Expiry notifications
+
+Set `ALMANAUT_NTFY_URL` to an [ntfy](https://ntfy.sh) topic URL and almanaut
+pushes a notification when a certificate, hardware warranty, or subscription
+renewal falls within `ALMANAUT_NOTIFY_WITHIN_DAYS` (default 30). Each item
+notifies **once**; renewing it (pushing the date beyond the window) re-arms it
+for next time. The check runs at startup and every `ALMANAUT_NOTIFY_INTERVAL`.
+Leave `ALMANAUT_NTFY_URL` unset to disable notifications entirely.
 
 ## Health & version
 

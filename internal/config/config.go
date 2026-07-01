@@ -4,7 +4,9 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds the runtime configuration for the server.
@@ -20,6 +22,11 @@ type Config struct {
 	AuthUser           string // ALMANAUT_AUTH_USER — enables HTTP basic auth when set with AuthPass
 	AuthPass           string // ALMANAUT_AUTH_PASS
 	SecureCookies      bool   // force the Secure flag on cookies (set behind a TLS-terminating proxy)
+
+	NtfyURL          string        // ALMANAUT_NTFY_URL — ntfy topic URL; empty disables notifications
+	NtfyToken        string        // ALMANAUT_NTFY_TOKEN — optional bearer for a protected topic
+	NotifyWithinDays int           // ALMANAUT_NOTIFY_WITHIN_DAYS — "expiring soon" window
+	NotifyInterval   time.Duration // ALMANAUT_NOTIFY_INTERVAL — how often the scheduler checks
 }
 
 // Load reads configuration from the environment, falling back to defaults. It
@@ -31,6 +38,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	authPass, err := secretFromEnv("ALMANAUT_AUTH_PASS")
+	if err != nil {
+		return Config{}, err
+	}
+	ntfyToken, err := secretFromEnv("ALMANAUT_NTFY_TOKEN")
 	if err != nil {
 		return Config{}, err
 	}
@@ -46,6 +57,10 @@ func Load() (Config, error) {
 		AuthUser:           getenv("ALMANAUT_AUTH_USER", ""),
 		AuthPass:           authPass,
 		SecureCookies:      getenvBool("ALMANAUT_SECURE_COOKIES", false),
+		NtfyURL:            getenv("ALMANAUT_NTFY_URL", ""),
+		NtfyToken:          ntfyToken,
+		NotifyWithinDays:   getenvInt("ALMANAUT_NOTIFY_WITHIN_DAYS", 30),
+		NotifyInterval:     getenvDuration("ALMANAUT_NOTIFY_INTERVAL", 24*time.Hour),
 	}, nil
 }
 
@@ -81,4 +96,32 @@ func getenvBool(key string, def bool) bool {
 		return def
 	}
 	return v == "1" || v == "true" || v == "yes"
+}
+
+// getenvInt reads a non-negative integer env var; unset, blank, unparseable, or
+// negative values return def.
+func getenvInt(key string, def int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return def
+	}
+	return n
+}
+
+// getenvDuration reads a Go duration env var (e.g. "24h", "30m"); unset, blank,
+// unparseable, or non-positive values return def.
+func getenvDuration(key string, def time.Duration) time.Duration {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		return def
+	}
+	return d
 }

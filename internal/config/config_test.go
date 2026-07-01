@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // mustLoad calls Load and fails the test if it errors. Most tests exercise
@@ -150,5 +151,49 @@ func TestSecretFileUnreadableIsFatal(t *testing.T) {
 	t.Setenv("ALMANAUT_AUTH_PASS_FILE", filepath.Join(t.TempDir(), "does-not-exist"))
 	if _, err := Load(); err == nil {
 		t.Fatal("Load must error when *_FILE points to an unreadable file")
+	}
+}
+
+func TestLoadNotifyDefaults(t *testing.T) {
+	t.Setenv("ALMANAUT_NTFY_URL", "")
+	t.Setenv("ALMANAUT_NOTIFY_WITHIN_DAYS", "")
+	t.Setenv("ALMANAUT_NOTIFY_INTERVAL", "")
+	c := mustLoad(t)
+	if c.NtfyURL != "" {
+		t.Errorf("NtfyURL = %q, want empty", c.NtfyURL)
+	}
+	if c.NotifyWithinDays != 30 {
+		t.Errorf("NotifyWithinDays = %d, want 30", c.NotifyWithinDays)
+	}
+	if c.NotifyInterval != 24*time.Hour {
+		t.Errorf("NotifyInterval = %v, want 24h", c.NotifyInterval)
+	}
+}
+
+func TestLoadNotifyFromEnv(t *testing.T) {
+	t.Setenv("ALMANAUT_NTFY_URL", "https://ntfy.sh/mylab")
+	t.Setenv("ALMANAUT_NOTIFY_WITHIN_DAYS", "7")
+	t.Setenv("ALMANAUT_NOTIFY_INTERVAL", "1h")
+	c := mustLoad(t)
+	if c.NtfyURL != "https://ntfy.sh/mylab" {
+		t.Errorf("NtfyURL = %q", c.NtfyURL)
+	}
+	if c.NotifyWithinDays != 7 {
+		t.Errorf("NotifyWithinDays = %d, want 7", c.NotifyWithinDays)
+	}
+	if c.NotifyInterval != time.Hour {
+		t.Errorf("NotifyInterval = %v, want 1h", c.NotifyInterval)
+	}
+}
+
+func TestGetenvIntAndDurationFallBackOnGarbage(t *testing.T) {
+	t.Setenv("ALMANAUT_NOTIFY_WITHIN_DAYS", "not-a-number")
+	t.Setenv("ALMANAUT_NOTIFY_INTERVAL", "nonsense")
+	c := mustLoad(t)
+	if c.NotifyWithinDays != 30 {
+		t.Errorf("garbage days should fall back to 30, got %d", c.NotifyWithinDays)
+	}
+	if c.NotifyInterval != 24*time.Hour {
+		t.Errorf("garbage interval should fall back to 24h, got %v", c.NotifyInterval)
 	}
 }
