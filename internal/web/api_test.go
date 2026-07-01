@@ -130,3 +130,15 @@ func TestAPIRelationships(t *testing.T) {
 		t.Errorf("expected snake_case keys: %s", rec.Body.String())
 	}
 }
+
+func TestAPIListEmptyReturnsArray(t *testing.T) {
+	h, _ := newTestServerDockerDB(t, fakeScanner{})
+
+	rec := getJSONResp(t, h, "/api/hosts")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code = %d", rec.Code)
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != "[]" {
+		t.Errorf("empty list body = %q, want []", got)
+	}
+}
