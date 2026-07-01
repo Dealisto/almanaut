@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"sort"
 	"strings"
 	"time"
 )
@@ -10,20 +9,7 @@ import (
 // now+withinDays (including already-expired certificates), sorted by ExpiresOn
 // ascending. Certificates whose ExpiresOn does not parse are skipped.
 func ExpiringSoon(certs []Certificate, now time.Time, withinDays int) []Certificate {
-	cutoff := now.AddDate(0, 0, withinDays)
-	out := []Certificate{}
-	for _, c := range certs {
-		expiry, err := time.Parse(DateLayout, c.ExpiresOn)
-		if err != nil {
-			continue
-		}
-		if !expiry.After(cutoff) { // expiry <= cutoff
-			out = append(out, c)
-		}
-	}
-	// ExpiresOn is YYYY-MM-DD, which sorts lexically in chronological order.
-	sort.Slice(out, func(i, j int) bool { return out[i].ExpiresOn < out[j].ExpiresOn })
-	return out
+	return expiringOnOrBefore(certs, now, withinDays, func(c Certificate) string { return c.ExpiresOn })
 }
 
 // ServicesWithoutBackup returns the services that are not linked to any backup
@@ -67,38 +53,12 @@ func HostsDown(hosts []Host) []Host {
 // now+withinDays (including already-expired), sorted by WarrantyEnd ascending.
 // Hardware with an empty or unparseable WarrantyEnd is skipped.
 func WarrantyExpiring(hw []Hardware, now time.Time, withinDays int) []Hardware {
-	cutoff := now.AddDate(0, 0, withinDays)
-	out := []Hardware{}
-	for _, h := range hw {
-		end, err := time.Parse(DateLayout, h.WarrantyEnd)
-		if err != nil {
-			continue
-		}
-		if !end.After(cutoff) { // end <= cutoff
-			out = append(out, h)
-		}
-	}
-	// WarrantyEnd is YYYY-MM-DD, which sorts lexically in chronological order.
-	sort.Slice(out, func(i, j int) bool { return out[i].WarrantyEnd < out[j].WarrantyEnd })
-	return out
+	return expiringOnOrBefore(hw, now, withinDays, func(h Hardware) string { return h.WarrantyEnd })
 }
 
 // RenewalsDue returns the subscriptions whose RenewalDate is on or before
 // now+withinDays (including already overdue), sorted by RenewalDate ascending.
 // Subscriptions with an empty or unparseable RenewalDate are skipped.
 func RenewalsDue(subs []Subscription, now time.Time, withinDays int) []Subscription {
-	cutoff := now.AddDate(0, 0, withinDays)
-	out := []Subscription{}
-	for _, s := range subs {
-		due, err := time.Parse(DateLayout, s.RenewalDate)
-		if err != nil {
-			continue
-		}
-		if !due.After(cutoff) { // due <= cutoff
-			out = append(out, s)
-		}
-	}
-	// RenewalDate is YYYY-MM-DD, which sorts lexically in chronological order.
-	sort.Slice(out, func(i, j int) bool { return out[i].RenewalDate < out[j].RenewalDate })
-	return out
+	return expiringOnOrBefore(subs, now, withinDays, func(s Subscription) string { return s.RenewalDate })
 }

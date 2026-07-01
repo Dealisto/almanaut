@@ -3,7 +3,6 @@ package domain
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
 // DateLayout is the canonical date format for date fields (YYYY-MM-DD).
@@ -24,11 +23,5 @@ func (c Certificate) Validate() error {
 	if strings.TrimSpace(c.Subject) == "" {
 		return fmt.Errorf("subject is required")
 	}
-	if strings.TrimSpace(c.ExpiresOn) == "" {
-		return fmt.Errorf("expiry date is required")
-	}
-	if _, err := time.Parse(DateLayout, c.ExpiresOn); err != nil {
-		return fmt.Errorf("expiry date must be YYYY-MM-DD, got %q", c.ExpiresOn)
-	}
-	return nil
+	return validateRequiredDate("expiry date", c.ExpiresOn)
 }
