@@ -320,6 +320,8 @@ func New(cfg Config) http.Handler {
 		r.Get("/impact", impactView(relationships, cat))
 		r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
 		r.Get("/search", searchEntities(cat, tags))
+		r.Get("/api/search", apiSearch(cat))
+		r.Get("/api/relationships", apiRelationships(relationships))
 		r.Get("/data", showData())
 		r.Get("/export", exportData(db))
 		r.Post("/import", importData(db))

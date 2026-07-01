@@ -32,11 +32,11 @@ type searchPageData struct {
 // searchEntry is one entity projected into the fields the search handler needs,
 // produced uniformly by every resource so the handler carries no per-type code.
 type searchEntry struct {
-	Type   string
-	ID     int64
-	Label  string
-	Path   string
-	Fields []string
+	Type   string   `json:"type"`
+	ID     int64    `json:"id"`
+	Label  string   `json:"label"`
+	Path   string   `json:"path"`
+	Fields []string `json:"-"`
 }
 
 // matchesQuery reports whether any field contains q, case-insensitively.

@@ -77,3 +77,56 @@ func TestAPIListAndGet(t *testing.T) {
 		t.Fatalf("bad id code = %d", rec.Code)
 	}
 }
+
+func TestAPISearch(t *testing.T) {
+	h, db := newTestServerDockerDB(t, fakeScanner{})
+	if _, err := store.NewHostRepo(db).Create(domain.Host{Name: "jellyfin-box", Type: "vm"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	rec := getJSONResp(t, h, "/api/search?q=jellyfin")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code = %d", rec.Code)
+	}
+	var hits []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &hits); err != nil {
+		t.Fatalf("unmarshal: %v; body=%s", err, rec.Body.String())
+	}
+	if len(hits) != 1 || hits[0]["label"] != "jellyfin-box" {
+		t.Fatalf("want one jellyfin hit, got %v", hits)
+	}
+	if _, ok := hits[0]["fields"]; ok {
+		t.Errorf("internal 'fields' should not be serialized: %v", hits[0])
+	}
+
+	// Empty query -> empty array (not null)
+	rec = getJSONResp(t, h, "/api/search?q=")
+	if strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Errorf("empty query body = %q, want []", rec.Body.String())
+	}
+}
+
+func TestAPIRelationships(t *testing.T) {
+	h, db := newTestServerDockerDB(t, fakeScanner{})
+	rels := store.NewRelationshipRepo(db)
+	if _, err := rels.Create(domain.Relationship{
+		FromType: "service", FromID: 1, ToType: "host", ToID: 2, Kind: "runs on",
+	}); err != nil {
+		t.Fatalf("create rel: %v", err)
+	}
+
+	rec := getJSONResp(t, h, "/api/relationships")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code = %d", rec.Code)
+	}
+	var list []domain.Relationship
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(list) != 1 || list[0].Kind != "runs on" {
+		t.Fatalf("want one relationship, got %v", list)
+	}
+	if !strings.Contains(rec.Body.String(), `"from_type"`) {
+		t.Errorf("expected snake_case keys: %s", rec.Body.String())
+	}
+}

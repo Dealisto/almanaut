@@ -3,7 +3,9 @@ package web
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
+	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
@@ -32,4 +34,42 @@ func apiServerError(w http.ResponseWriter, r *http.Request, err error) {
 	id := middleware.GetReqID(r.Context())
 	loggerFrom(r.Context()).Printf("api error: %s %s reqid=%q: %v", r.Method, r.URL.Path, id, err)
 	writeJSONError(w, http.StatusInternalServerError, "internal server error")
+}
+
+// apiSearch returns a flat JSON array of entities whose searchable fields match
+// q (case-insensitive). An empty q returns an empty array.
+func apiSearch(cat entityCatalog) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		q := strings.TrimSpace(req.URL.Query().Get("q"))
+		results := []searchEntry{}
+		if q == "" {
+			writeJSON(w, http.StatusOK, results)
+			return
+		}
+		for _, rs := range cat.resources {
+			entries, err := rs.searchEntries()
+			if err != nil {
+				apiServerError(w, req, err)
+				return
+			}
+			for _, e := range entries {
+				if matchesQuery(e.Fields, q) {
+					results = append(results, e)
+				}
+			}
+		}
+		writeJSON(w, http.StatusOK, results)
+	}
+}
+
+// apiRelationships returns all relationships as JSON.
+func apiRelationships(rels *store.RelationshipRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		list, err := rels.List()
+		if err != nil {
+			apiServerError(w, req, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, list)
+	}
 }
