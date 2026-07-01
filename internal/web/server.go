@@ -319,6 +319,7 @@ func New(cfg Config) http.Handler {
 		r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
 		r.Get("/impact", impactView(relationships, cat))
 		r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
+		r.Get("/metrics", metricsHandler(repos, relationships))
 		r.Get("/search", searchEntities(cat, tags))
 		r.Get("/api/search", apiSearch(cat))
 		r.Get("/api/relationships", apiRelationships(relationships))
