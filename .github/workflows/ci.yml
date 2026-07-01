@@ -1,6 +1,12 @@
 name: CI
 on: [push, pull_request]
 
+# Least privilege: every job only needs to read the repo. Restricting the
+# GITHUB_TOKEN here limits the blast radius if any third-party action is
+# compromised.
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -23,6 +29,18 @@ jobs:
         with:
           version: latest
           install-go: false
+
+  vuln:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
 
   test:
     runs-on: ubuntu-latest
