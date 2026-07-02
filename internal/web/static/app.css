@@ -53,6 +53,9 @@ table{border-collapse:collapse;width:100%}
 th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
 th{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
 tbody tr:nth-child(even){background:var(--row-alt)}
+tbody tr{transition:background .1s ease}
+tbody tr:hover{background:var(--active-bg)}
+thead th{background:var(--surface)}
 tbody tr:last-child td{border-bottom:0}
 td .btn{margin-right:6px}
 .empty{padding:28px;text-align:center;color:var(--muted)}
@@ -68,7 +71,8 @@ form.stack textarea{min-height:84px;resize:vertical}
 .actions{display:flex;gap:10px;align-items:center;margin-top:4px}
 .form-inline{display:inline}
 th{vertical-align:top}
-.notes{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 18px}
+.notes{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:16px 20px;margin-top:8px}
 .notes h1,.notes h2,.notes h3{margin:.4em 0}
 .tags{margin-bottom:12px}
 .tag{display:inline-flex;align-items:center;gap:4px;background:var(--row-alt);border:1px solid var(--border);
@@ -88,8 +92,8 @@ form.search-page input{flex:1;padding:8px 10px;border:1px solid var(--border);bo
 .card:hover{border-color:var(--accent);text-decoration:none}
 .card-count{font-size:1.8rem;font-weight:700}
 .card-label{color:var(--muted);font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}
-.attention{margin-bottom:12px}
-.attention h3{margin:.6em 0 .3em}
+.attention{margin:20px 0 12px}
+.attention h3{margin:.6em 0 .3em;font-size:1.05rem}
 
 @media (max-width:860px){
   .app-shell{grid-template-columns:1fr}
