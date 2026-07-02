@@ -3,6 +3,8 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
@@ -26,10 +28,23 @@ type attentionGroup struct {
 	Items   []attentionItem
 }
 
+type serviceLink struct {
+	Name     string
+	Href     string
+	External bool
+}
+
+type serviceGroup struct {
+	Category string
+	Services []serviceLink
+}
+
 type dashboardData struct {
-	Title  string
-	Counts []countCard
-	Groups []attentionGroup
+	Title        string
+	Counts       []countCard
+	Groups       []attentionGroup
+	Services     []serviceGroup
+	AnyAttention bool
 }
 
 // dashboard renders the landing page: per-entity counts and attention groups
@@ -138,16 +153,61 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo) http.HandlerFunc
 			})
 		}
 
+		groups := []attentionGroup{
+			{Title: "Certificates expiring soon", MoreURL: "/checks", Items: certItems},
+			{Title: "Services without backup", MoreURL: "/checks", Items: svcItems},
+			{Title: "Hosts down", Items: hostItems},
+			{Title: "Hardware warranty expiring", MoreURL: "/checks", Items: hwItems},
+			{Title: "Subscriptions renewing soon", MoreURL: "/checks", Items: subItems},
+		}
 		render(w, req, "dashboard.html", dashboardData{
-			Title:  "Dashboard",
-			Counts: counts,
-			Groups: []attentionGroup{
-				{Title: "Certificates expiring soon", MoreURL: "/checks", Items: certItems},
-				{Title: "Services without backup", MoreURL: "/checks", Items: svcItems},
-				{Title: "Hosts down", Items: hostItems},
-				{Title: "Hardware warranty expiring", MoreURL: "/checks", Items: hwItems},
-				{Title: "Subscriptions renewing soon", MoreURL: "/checks", Items: subItems},
-			},
+			Title:        "Dashboard",
+			Counts:       counts,
+			Groups:       groups,
+			Services:     groupServices(services),
+			AnyAttention: anyAttention(groups),
 		})
 	}
+}
+
+// groupServices arranges services into the home launcher: grouped by category
+// (blank → "Uncategorized"), groups sorted case-insensitively by category and
+// services by name. A service with a URL links out to it (External); one
+// without links to its almanaut detail page.
+func groupServices(services []domain.Service) []serviceGroup {
+	byCat := map[string][]serviceLink{}
+	for _, s := range services {
+		cat := strings.TrimSpace(s.Category)
+		if cat == "" {
+			cat = "Uncategorized"
+		}
+		link := serviceLink{Name: s.Name}
+		if strings.TrimSpace(s.URL) != "" {
+			link.Href, link.External = s.URL, true
+		} else {
+			link.Href = fmt.Sprintf("/services/%d", s.ID)
+		}
+		byCat[cat] = append(byCat[cat], link)
+	}
+	groups := make([]serviceGroup, 0, len(byCat))
+	for cat, links := range byCat {
+		sort.Slice(links, func(i, j int) bool {
+			return strings.ToLower(links[i].Name) < strings.ToLower(links[j].Name)
+		})
+		groups = append(groups, serviceGroup{Category: cat, Services: links})
+	}
+	sort.Slice(groups, func(i, j int) bool {
+		return strings.ToLower(groups[i].Category) < strings.ToLower(groups[j].Category)
+	})
+	return groups
+}
+
+// anyAttention reports whether any attention group has items.
+func anyAttention(groups []attentionGroup) bool {
+	for _, g := range groups {
+		if len(g.Items) > 0 {
+			return true
+		}
+	}
+	return false
 }
