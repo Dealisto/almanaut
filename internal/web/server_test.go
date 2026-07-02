@@ -1784,3 +1784,22 @@ func TestThemeSwitcherMarksActive(t *testing.T) {
 		t.Error("system button should not be active when theme=dark")
 	}
 }
+
+func TestSidebarToolsCluster(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, `class="nav-group nav-tools"`) {
+		t.Error("expected a compact Tools cluster in the sidebar")
+	}
+	for _, href := range []string{`href="/relationships"`, `href="/impact"`, `href="/checks"`, `href="/tags"`, `href="/discovery"`, `href="/data"`} {
+		if !strings.Contains(body, href) {
+			t.Errorf("Tools cluster missing %s", href)
+		}
+	}
+	if strings.Contains(body, ">Overview<") {
+		t.Error("the Overview group header should be gone")
+	}
+}

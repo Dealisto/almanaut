@@ -12,10 +12,7 @@
   <aside class="sidebar">
     <a class="brand" href="/">Almanaut</a>
     <nav>
-      <div class="nav-group">
-        <span class="nav-label">Overview</span>
-        <a href="/" class="{{if isActive "/"}}active{{end}}">Dashboard</a>
-      </div>
+      <a href="/" class="nav-top {{if isActive "/"}}active{{end}}">Dashboard</a>
       <div class="nav-group">
         <span class="nav-label">Inventory</span>
         <a href="/hosts" class="{{if isActive "/hosts"}}active{{end}}">Hosts</a>
@@ -28,15 +25,12 @@
         <a href="/subscriptions" class="{{if isActive "/subscriptions"}}active{{end}}">Subscriptions</a>
         <a href="/accounts" class="{{if isActive "/accounts"}}active{{end}}">Accounts</a>
       </div>
-      <div class="nav-group">
-        <span class="nav-label">Connections &amp; views</span>
+      <div class="nav-sep"></div>
+      <div class="nav-group nav-tools">
         <a href="/relationships" class="{{if isActive "/relationships"}}active{{end}}">Relationships</a>
         <a href="/impact" class="{{if isActive "/impact"}}active{{end}}">Impact</a>
         <a href="/checks" class="{{if isActive "/checks"}}active{{end}}">Checks</a>
         <a href="/tags" class="{{if isActive "/tags"}}active{{end}}">Tags</a>
-      </div>
-      <div class="nav-group">
-        <span class="nav-label">System</span>
         <a href="/discovery" class="{{if isActive "/discovery"}}active{{end}}">Discover</a>
         <a href="/data" class="{{if isActive "/data"}}active{{end}}">Data</a>
       </div>

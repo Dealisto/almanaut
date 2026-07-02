@@ -46,6 +46,11 @@ a:hover{text-decoration:underline}
 .sidebar nav a:hover{background:var(--row-alt);text-decoration:none}
 .sidebar nav a.active{background:var(--active-bg);border-left-color:var(--accent);
   color:var(--accent);font-weight:600}
+.sidebar nav a.nav-top{margin-bottom:10px}
+.nav-sep{height:1px;background:var(--border);margin:12px 10px}
+.nav-tools a{font-size:.86rem;color:var(--muted);padding-top:5px;padding-bottom:5px}
+.nav-tools a:hover{color:var(--text)}
+.nav-tools a.active{color:var(--accent)}
 .theme-switch{display:flex;gap:4px;margin-top:16px;padding:0 10px}
 .theme-switch button{flex:1;padding:5px 0;font-size:.78rem;cursor:pointer;
   border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:6px}
