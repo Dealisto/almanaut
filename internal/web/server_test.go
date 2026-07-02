@@ -1695,3 +1695,21 @@ func TestThemeDataAttributeReflectsCookie(t *testing.T) {
 		t.Error(`expected data-theme="system" with no cookie`)
 	}
 }
+
+func TestThemeSwitcherMarksActive(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "theme", Value: "dark"})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, `action="/theme"`) {
+		t.Error("theme switcher form missing")
+	}
+	if !strings.Contains(body, `value="dark" class="active"`) {
+		t.Error("dark button should be active when theme=dark")
+	}
+	if strings.Contains(body, `value="system" class="active"`) {
+		t.Error("system button should not be active when theme=dark")
+	}
+}

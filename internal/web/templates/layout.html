@@ -41,6 +41,12 @@
         <a href="/data" class="{{if isActive "/data"}}active{{end}}">Data</a>
       </div>
     </nav>
+    <form class="theme-switch" method="post" action="/theme">
+      {{ csrfField }}
+      <button name="theme" value="system" class="{{if eq (theme) "system"}}active{{end}}">System</button>
+      <button name="theme" value="light" class="{{if eq (theme) "light"}}active{{end}}">Light</button>
+      <button name="theme" value="dark" class="{{if eq (theme) "dark"}}active{{end}}">Dark</button>
+    </form>
   </aside>
   <label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
   <div class="content">
