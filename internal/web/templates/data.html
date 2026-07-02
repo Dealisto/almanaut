@@ -1,18 +1,27 @@
 {{define "content"}}
-<h1>Data</h1>
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">System</span>
+    <h1>Data</h1>
+  </div>
+</div>
 {{if .Imported}}<p class="muted">Import complete — all data was replaced.</p>{{end}}
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 
-<h2>Export</h2>
-<p class="muted">Download the entire inventory as a single YAML file.</p>
-<div class="toolbar"><a class="btn btn-primary" href="/export">Export YAML</a></div>
+<section class="panel">
+  <h2>Export</h2>
+  <p class="muted">Download the entire inventory as a single YAML file.</p>
+  <div class="toolbar"><a class="btn btn-primary" href="/export">Export YAML</a></div>
+</section>
 
-<h2>Import</h2>
-<p class="muted">Replace <strong>all</strong> current data with the contents of a YAML export.</p>
-<form class="stack" method="post" action="/import" enctype="multipart/form-data">
-{{ csrfField }}
-  <label>YAML file<input type="file" name="file" accept=".yaml,.yml" required></label>
-  <label><input type="checkbox" name="confirm" required> This permanently replaces all current data.</label>
-  <div class="actions"><button class="btn btn-danger" type="submit">Import &amp; replace</button></div>
-</form>
+<section class="panel">
+  <h2>Import</h2>
+  <p class="muted">Replace <strong>all</strong> current data with the contents of a YAML export.</p>
+  <form class="stack" method="post" action="/import" enctype="multipart/form-data">
+  {{ csrfField }}
+    <label>YAML file<input type="file" name="file" accept=".yaml,.yml" required></label>
+    <label><input type="checkbox" name="confirm" required> This permanently replaces all current data.</label>
+    <div class="actions"><button class="btn btn-danger" type="submit">Import &amp; replace</button></div>
+  </form>
+</section>
 {{end}}

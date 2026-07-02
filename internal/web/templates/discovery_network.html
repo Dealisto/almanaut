@@ -1,46 +1,57 @@
 {{define "content"}}
-<h1>Network discovery</h1>
-<p>Scan a subnet to discover live hosts and their open ports. Discovery proposes; you confirm. Manual data is never overwritten.</p>
-<form class="stack" method="post" action="/discovery/network/scan">
-{{ csrfField }}
-  <label>Subnet (CIDR)
-    <input type="text" name="subnet" value="{{.Subnet}}" placeholder="192.168.1.0/24" required>
-  </label>
-  <label>Ports (optional, comma-separated)
-    <input type="text" name="ports" value="{{.PortsInput}}" placeholder="22, 80, 443">
-  </label>
-  <div class="actions"><button class="btn btn-primary" type="submit">Scan</button></div>
-</form>
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">System</span>
+    <h1>Network discovery</h1>
+  </div>
+</div>
+<section class="panel">
+  <p class="muted">Scan a subnet to discover live hosts and their open ports. Discovery proposes; you confirm. Manual data is never overwritten.</p>
+  <form class="stack" method="post" action="/discovery/network/scan">
+  {{ csrfField }}
+    <label>Subnet (CIDR)
+      <input type="text" name="subnet" value="{{.Subnet}}" placeholder="192.168.1.0/24" required>
+    </label>
+    <label>Ports (optional, comma-separated)
+      <input type="text" name="ports" value="{{.PortsInput}}" placeholder="22, 80, 443">
+    </label>
+    <div class="actions"><button class="btn btn-primary" type="submit">Scan</button></div>
+  </form>
+</section>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 {{if .Scanned}}
 {{if .Rows}}
-<form method="post" action="/discovery/network/import">
-{{ csrfField }}
-  <label>Import discovered hosts as type
-    <select name="type">
-      {{range .Types}}<option value="{{.}}"{{if eq . $.SelectedType}} selected{{end}}>{{.}}</option>{{end}}
-    </select>
-  </label>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th></th><th>Name</th><th>IP</th><th>Open ports</th><th>Status</th></tr></thead>
-    <tbody>
-    {{range .Rows}}
-      <tr>
-        <td>{{if not .AlreadyTracked}}<input type="checkbox" name="host" value="{{.IP}}|{{.Name}}|{{.Ports}}" checked>{{end}}</td>
-        <td>{{.Name}}</td>
-        <td>{{.IP}}</td>
-        <td>{{.Ports}}</td>
-        <td>{{if .AlreadyTracked}}already tracked{{else}}new{{end}}</td>
-      </tr>
-    {{end}}
-    </tbody>
-  </table>
-  </div>
-  <div class="actions"><button class="btn btn-primary" type="submit"{{if not .NewCount}} disabled{{end}}>Import selected</button></div>
-</form>
+<section class="panel">
+  <form method="post" action="/discovery/network/import">
+  {{ csrfField }}
+    <label>Import discovered hosts as type
+      <select name="type">
+        {{range .Types}}<option value="{{.}}"{{if eq . $.SelectedType}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th></th><th>Name</th><th>IP</th><th>Open ports</th><th>Status</th></tr></thead>
+      <tbody>
+      {{range .Rows}}
+        <tr>
+          <td>{{if not .AlreadyTracked}}<input type="checkbox" name="host" value="{{.IP}}|{{.Name}}|{{.Ports}}" checked>{{end}}</td>
+          <td>{{.Name}}</td>
+          <td>{{.IP}}</td>
+          <td>{{.Ports}}</td>
+          <td>{{if .AlreadyTracked}}already tracked{{else}}new{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    </div>
+    <div class="actions"><button class="btn btn-primary" type="submit"{{if not .NewCount}} disabled{{end}}>Import selected</button></div>
+  </form>
+</section>
 {{else}}
-<div class="table-wrap"><div class="empty">No live hosts found.</div></div>
+<section class="panel">
+  <div class="table-wrap"><div class="empty">No live hosts found.</div></div>
+</section>
 {{end}}
 {{end}}
 {{end}}

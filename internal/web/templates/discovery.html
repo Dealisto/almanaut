@@ -1,13 +1,20 @@
 {{define "content"}}
-<h1>Discover</h1>
-<p>Scan an external source to discover entities. Discovery proposes; you confirm. Manual data is never overwritten.</p>
-<ul class="related">
-  <li><a href="/discovery/docker">Docker containers</a> — read a mounted Docker socket and import running containers as services.</li>
-  {{if .NetworkEnabled}}
-  <li><a href="/discovery/network">Network scan</a> — scan a subnet for live hosts and import them.</li>
-  {{end}}
-  {{if .ProxmoxEnabled}}
-  <li><a href="/discovery/proxmox">Proxmox</a> — import nodes, VMs, and LXC containers from a Proxmox VE instance.</li>
-  {{end}}
-</ul>
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">System</span>
+    <h1>Discover</h1>
+  </div>
+</div>
+<section class="panel">
+  <p class="muted">Scan an external source to discover entities. Discovery proposes; you confirm. Manual data is never overwritten.</p>
+  <ul class="related">
+    <li><a href="/discovery/docker">Docker containers</a> — read a mounted Docker socket and import running containers as services.</li>
+    {{if .NetworkEnabled}}
+    <li><a href="/discovery/network">Network scan</a> — scan a subnet for live hosts and import them.</li>
+    {{end}}
+    {{if .ProxmoxEnabled}}
+    <li><a href="/discovery/proxmox">Proxmox</a> — import nodes, VMs, and LXC containers from a Proxmox VE instance.</li>
+    {{end}}
+  </ul>
+</section>
 {{end}}
