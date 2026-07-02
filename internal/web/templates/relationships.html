@@ -1,22 +1,30 @@
 {{define "content"}}
-<h1>Relationships</h1>
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Connections &amp; views</span>
+    <h1>Relationships</h1>
+  </div>
+</div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 {{if .Options}}
-<form class="stack" method="post" action="/relationships">
-{{ csrfField }}
-  <label>From
-    <select name="from">{{range .Options}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
-  </label>
-  <label>Kind
-    <select name="kind">{{range .Kinds}}<option value="{{.}}">{{.}}</option>{{end}}</select>
-  </label>
-  <label>To
-    <select name="to">{{range .Options}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
-  </label>
-  <div class="actions"><button class="btn btn-primary" type="submit">Add relationship</button></div>
-</form>
+<section class="panel">
+  <h2>Add relationship</h2>
+  <form class="rel-form" method="post" action="/relationships">
+  {{ csrfField }}
+    <label>From
+      <select name="from">{{range .Options}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+    </label>
+    <label>Kind
+      <select name="kind">{{range .Kinds}}<option value="{{.}}">{{.}}</option>{{end}}</select>
+    </label>
+    <label>To
+      <select name="to">{{range .Options}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+    </label>
+    <button class="btn btn-primary" type="submit">Add relationship</button>
+  </form>
+</section>
 {{else}}
-<p>Create some entities first, then you can link them here.</p>
+<p class="muted">Create some entities first, then you can link them here.</p>
 {{end}}
 {{if .Relationships}}
 <div class="table-wrap">

@@ -141,6 +141,12 @@ form.search-page input{flex:1;padding:8px 10px;border:1px solid var(--border);bo
 .depgraph-wrap{overflow-x:auto}
 .depgraph{width:100%;height:auto;max-width:520px;display:block;margin:8px auto 0}
 @media (max-width:900px){.detail-top{grid-template-columns:1fr}}
+/* Relationships add-bar: From / Kind / To / button in one full-width row */
+.rel-form{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end}
+.rel-form label{display:flex;flex-direction:column;gap:5px;margin:0;font-size:.8rem;color:var(--muted)}
+.rel-form select{padding:8px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--bg);color:var(--text);font:inherit}
+@media (max-width:720px){.rel-form{grid-template-columns:1fr}}
 .home-search{margin:0 0 22px}
 .home-search input{width:100%;padding:14px 18px;font-size:1.05rem;border:1px solid var(--border);
   border-radius:10px;background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.05)}
