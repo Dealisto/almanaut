@@ -1,70 +1,87 @@
 {{define "content"}}
-<h1>{{.Heading}}</h1>
-<div class="toolbar">
-  <a class="btn" href="{{.EditURL}}">Edit</a>
-  <a class="btn" href="/{{.EntityType}}s">Back to list</a>
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">{{.EntityType}}</span>
+    <h1>{{.Heading}}</h1>
+  </div>
+  <div class="ph-actions">
+    <a class="btn btn-primary" href="{{.EditURL}}">Edit</a>
+    <a class="btn" href="{{.ListURL}}">Back to list</a>
+  </div>
 </div>
 
-<div class="table-wrap">
-<table><tbody>
-  {{range .Fields}}<tr><th>{{.Label}}</th><td>{{.Value}}</td></tr>{{end}}
-</tbody></table>
+<div class="detail-top">
+  <section class="panel">
+    <h2>Details</h2>
+    <dl class="def-grid">
+      {{range .Fields}}<dt>{{.Label}}</dt><dd>{{.Value}}</dd>{{end}}
+    </dl>
+  </section>
+
+  <section class="panel">
+    <h2>Tags</h2>
+    <div class="tags">
+      {{range .Tags}}
+        <span class="tag">#{{.Name}}
+          <form class="form-inline" method="post" action="/tags/delete">
+            {{ csrfField }}
+            <input type="hidden" name="id" value="{{.ID}}">
+            <input type="hidden" name="entity_type" value="{{.EntityType}}">
+            <input type="hidden" name="entity_id" value="{{.EntityID}}">
+            <button class="tag-x" type="submit" title="remove">&times;</button>
+          </form>
+        </span>
+      {{else}}<em>No tags.</em>{{end}}
+    </div>
+    <form class="form-inline" method="post" action="/tags">
+      {{ csrfField }}
+      <input type="hidden" name="entity_type" value="{{.EntityType}}">
+      <input type="hidden" name="entity_id" value="{{.EntityID}}">
+      <input name="tag" placeholder="add a tag" required>
+      <button class="btn btn-primary" type="submit">Add tag</button>
+    </form>
+  </section>
 </div>
 
 {{with .IPAM}}
-<h2>IP allocations</h2>
-<p class="ipam-stats">
-  {{.UsedCount}} used{{if not .Unbounded}} / {{.TotalUsable}} usable ({{.FreeCount}} free){{end}}.
-  {{if .NextFree}}Next free: <code>{{.NextFree}}</code>.{{end}}
-</p>
-{{if .Rows}}
-<div class="table-wrap">
-<table>
-  <thead><tr><th>IP</th><th>Host</th><th></th></tr></thead>
-  <tbody>
-    {{range .Rows}}
-    <tr>
-      <td><code>{{.IP}}</code></td>
-      <td><a href="/hosts/{{.HostID}}">{{.HostName}}</a></td>
-      <td>
-        {{if .IsGateway}}<span class="badge">gateway</span>{{end}}
-        {{if .Conflict}}<span class="badge badge-warn">conflict</span>{{end}}
-      </td>
-    </tr>
-    {{end}}
-  </tbody>
-</table>
-</div>
-{{else}}<p><em>No IPs allocated in this subnet.</em></p>{{end}}
+<section class="panel">
+  <h2>IP allocations</h2>
+  <p class="ipam-stats">
+    {{.UsedCount}} used{{if not .Unbounded}} / {{.TotalUsable}} usable ({{.FreeCount}} free){{end}}.
+    {{if .NextFree}}Next free: <code>{{.NextFree}}</code>.{{end}}
+  </p>
+  {{if .Rows}}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>IP</th><th>Host</th><th></th></tr></thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td><code>{{.IP}}</code></td>
+        <td><a href="/hosts/{{.HostID}}">{{.HostName}}</a></td>
+        <td>
+          {{if .IsGateway}}<span class="badge">gateway</span>{{end}}
+          {{if .Conflict}}<span class="badge badge-warn">conflict</span>{{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}<p class="muted"><em>No IPs allocated in this subnet.</em></p>{{end}}
+</section>
 {{end}}
-<h2>Notes</h2>
-<div class="notes">{{if .NotesHTML}}{{.NotesHTML}}{{else}}<em>No notes.</em>{{end}}</div>
 
-<h2>Tags</h2>
-<div class="tags">
-  {{range .Tags}}
-    <span class="tag">#{{.Name}}
-      <form class="form-inline" method="post" action="/tags/delete">
-        {{ csrfField }}
-        <input type="hidden" name="id" value="{{.ID}}">
-        <input type="hidden" name="entity_type" value="{{.EntityType}}">
-        <input type="hidden" name="entity_id" value="{{.EntityID}}">
-        <button class="tag-x" type="submit" title="remove">&times;</button>
-      </form>
-    </span>
-  {{else}}<em>No tags.</em>{{end}}
-</div>
-<form class="form-inline" method="post" action="/tags">
-  {{ csrfField }}
-  <input type="hidden" name="entity_type" value="{{.EntityType}}">
-  <input type="hidden" name="entity_id" value="{{.EntityID}}">
-  <input name="tag" placeholder="add a tag" required>
-  <button class="btn btn-primary" type="submit">Add tag</button>
-</form>
+<section class="panel">
+  <h2>Relationships</h2>
+  {{if .Related}}
+  {{with .GraphSVG}}<div class="depgraph-wrap">{{.}}</div>{{end}}
+  <ul class="related">{{range .Related}}<li>{{.Text}}</li>{{end}}</ul>
+  {{else}}<p class="muted"><em>No relationships.</em></p>{{end}}
+</section>
 
-<h2>Relationships</h2>
-{{if .Related}}
-{{with .GraphSVG}}<div class="depgraph-wrap">{{.}}</div>{{end}}
-<ul class="related">{{range .Related}}<li>{{.Text}}</li>{{end}}</ul>
-{{else}}<p><em>No relationships.</em></p>{{end}}
+<section class="panel">
+  <h2>Notes</h2>
+  <div class="notes">{{if .NotesHTML}}{{.NotesHTML}}{{else}}<em>No notes.</em>{{end}}</div>
+</section>
 {{end}}

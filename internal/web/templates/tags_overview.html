@@ -1,6 +1,12 @@
 {{define "content"}}
-<h1>Tags</h1>
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Connections &amp; views</span>
+    <h1>Tags</h1>
+  </div>
+</div>
 {{if .Selected}}
+<section class="panel">
   <div class="toolbar"><a class="btn" href="/tags">All tags</a></div>
   <h2>Entities tagged #{{.Selected}}</h2>
   {{if .Entities}}
@@ -8,7 +14,9 @@
     {{range .Entities}}<li><a href="{{.URL}}">{{.Label}}</a></li>{{end}}
   </ul>
   {{else}}<p><em>No entities carry this tag.</em></p>{{end}}
+</section>
 {{else}}
+<section class="panel">
   {{if .Counts}}
   <div class="tags">
     {{range .Counts}}
@@ -16,5 +24,6 @@
     {{end}}
   </div>
   {{else}}<p><em>No tags yet.</em></p>{{end}}
+</section>
 {{end}}
 {{end}}

@@ -1,6 +1,13 @@
 {{define "content"}}
-<h1>Certificates</h1>
-<div class="toolbar"><a class="btn btn-primary" href="/certificates/new">+ New certificate</a></div>
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Inventory</span>
+    <h1>Certificates</h1>
+  </div>
+  <div class="ph-actions">
+    <a class="btn btn-primary" href="/certificates/new">+ New certificate</a>
+  </div>
+</div>
 {{if .Items}}
 <div class="table-wrap">
 <table>

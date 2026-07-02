@@ -1,6 +1,13 @@
 {{define "content"}}
-<h1>Domains</h1>
-<div class="toolbar"><a class="btn btn-primary" href="/domains/new">+ New domain</a></div>
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Inventory</span>
+    <h1>Domains</h1>
+  </div>
+  <div class="ph-actions">
+    <a class="btn btn-primary" href="/domains/new">+ New domain</a>
+  </div>
+</div>
 {{if .Items}}
 <div class="table-wrap">
 <table>

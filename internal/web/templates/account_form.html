@@ -1,5 +1,10 @@
 {{define "content"}}
-<h1>{{.Heading}}</h1>
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Inventory</span>
+    <h1>{{.Heading}}</h1>
+  </div>
+</div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 <p style="color:var(--muted)">Never store passwords or keys here — record where the secret lives (your password manager) and point to it.</p>
 <form class="stack" method="post" action="{{.Action}}">

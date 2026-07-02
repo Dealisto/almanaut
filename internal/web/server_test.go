@@ -1247,13 +1247,14 @@ func TestDashboard(t *testing.T) {
 		t.Fatalf("GET / = %d, want 200 (dashboard, not a redirect)", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"Dashboard", "Hosts", "Services", "Certificates", "Attention"} {
+	for _, want := range []string{"Dashboard", "Needs attention", "Inventory"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard missing %q", want)
 		}
 	}
-	if !strings.Contains(body, `<span class="card-count">2</span>`) {
-		t.Errorf("expected a count card showing 2 hosts; body:\n%s", body)
+	// counts strip chip for hosts
+	if !strings.Contains(body, `Hosts <b>2</b>`) {
+		t.Errorf("expected a count chip showing 2 hosts; body:\n%s", body)
 	}
 	// down host appears under attention, linked to its detail page
 	if !strings.Contains(body, "/hosts/2") || !strings.Contains(body, "oldbox") {
@@ -1262,6 +1263,10 @@ func TestDashboard(t *testing.T) {
 	// expiring cert appears under attention, linked to its detail page
 	if !strings.Contains(body, "/certificates/1") || !strings.Contains(body, "example.com") {
 		t.Error("expiring certificate not shown in attention")
+	}
+	// with real attention items, the healthy-fallback message is suppressed
+	if strings.Contains(body, "Everything looks healthy.") {
+		t.Error("healthy fallback shown despite attention items")
 	}
 }
 
@@ -1274,11 +1279,32 @@ func TestDashboardEmpty(t *testing.T) {
 		t.Fatalf("GET / = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `<span class="card-count">0</span>`) {
-		t.Error("empty inventory should show zero counts")
+	if !strings.Contains(body, `Hosts <b>0</b>`) {
+		t.Error("empty inventory should show a zero Hosts count chip")
 	}
-	if !strings.Contains(body, "All clear.") {
-		t.Error("empty inventory should show an 'All clear.' attention line")
+	if !strings.Contains(body, "Everything looks healthy.") {
+		t.Error("empty inventory should show the healthy attention line")
+	}
+}
+
+func TestDashboardServiceLaunchTile(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/services", url.Values{
+		"name": {"Jellyfin"}, "kind": {"container"},
+		"url": {"http://nas:8096"}, "category": {"Media"},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="http://nas:8096"`) {
+		t.Error("service tile should link to the service URL")
+	}
+	if !strings.Contains(body, `rel="noopener noreferrer"`) {
+		t.Error("external service tile must carry rel=noopener noreferrer")
+	}
+	if !strings.Contains(body, "Jellyfin") {
+		t.Error("service tile should show the service name")
 	}
 }
 
@@ -1760,5 +1786,89 @@ func TestThemeSwitcherMarksActive(t *testing.T) {
 	}
 	if strings.Contains(body, `value="system" class="active"`) {
 		t.Error("system button should not be active when theme=dark")
+	}
+}
+
+func TestSidebarToolsCluster(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, `class="nav-group nav-tools"`) {
+		t.Error("expected a compact Tools cluster in the sidebar")
+	}
+	for _, href := range []string{`href="/relationships"`, `href="/impact"`, `href="/checks"`, `href="/tags"`, `href="/discovery"`, `href="/data"`} {
+		if !strings.Contains(body, href) {
+			t.Errorf("Tools cluster missing %s", href)
+		}
+	}
+	if strings.Contains(body, ">Overview<") {
+		t.Error("the Overview group header should be gone")
+	}
+}
+
+func TestHostsListHasPageHeader(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/hosts", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, `class="page-header"`) {
+		t.Error("Hosts list should use the page-header primitive")
+	}
+	if !strings.Contains(body, `class="ph-eyebrow"`) || !strings.Contains(body, ">Inventory<") {
+		t.Error("Hosts list header should carry the Inventory eyebrow")
+	}
+	if !strings.Contains(body, `href="/hosts/new"`) {
+		t.Error("Hosts list header should keep the New host action")
+	}
+}
+
+func TestListPagesHavePageHeader(t *testing.T) {
+	srv := newTestServer(t)
+	cases := []struct{ path, newHref string }{
+		{"/services", "/services/new"},
+		{"/accounts", "/accounts/new"},
+	}
+	for _, c := range cases {
+		req := httptest.NewRequest(http.MethodGet, c.path, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		body := rec.Body.String()
+		if !strings.Contains(body, `class="page-header"`) {
+			t.Errorf("%s should use the page-header primitive", c.path)
+		}
+		if !strings.Contains(body, `class="ph-eyebrow"`) || !strings.Contains(body, ">Inventory<") {
+			t.Errorf("%s header should carry the Inventory eyebrow", c.path)
+		}
+		if !strings.Contains(body, `href="`+c.newHref+`"`) {
+			t.Errorf("%s header should keep its New action (%s)", c.path, c.newHref)
+		}
+	}
+}
+
+func TestDetailPageLayout(t *testing.T) {
+	srv := newTestServer(t)
+	// hardware is the entity whose plural base path is irregular (/hardware).
+	postForm(t, srv, "/hardware", url.Values{"name": {"Rack UPS"}, "kind": {"ups"}})
+
+	req := httptest.NewRequest(http.MethodGet, "/hardware/1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `class="detail-top"`) {
+		t.Error("detail page should use the two-column detail-top layout")
+	}
+	if !strings.Contains(body, `class="def-grid"`) {
+		t.Error("detail page should render attributes as a definition grid")
+	}
+	// Back-link uses the correct base path, not the pluralized /hardwares.
+	if !strings.Contains(body, `href="/hardware">Back to list`) {
+		t.Errorf("Back-to-list should point to /hardware; body:\n%s", body)
+	}
+	if strings.Contains(body, "/hardwares") {
+		t.Error("detail page must not use the pluralized /hardwares path")
 	}
 }

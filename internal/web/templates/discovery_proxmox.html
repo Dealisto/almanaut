@@ -1,35 +1,44 @@
 {{define "content"}}
-<h1>Proxmox discovery</h1>
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">System</span>
+    <h1>Proxmox discovery</h1>
+  </div>
+</div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 {{if .Rows}}
-<form method="post" action="/discovery/proxmox/import">
-{{ csrfField }}
-  <label><input type="checkbox" name="link" value="on" checked> Link VMs/LXC to their Proxmox node</label>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th></th><th>Name</th><th>Type</th><th>Status</th><th>CPU</th><th>RAM</th><th>Disk</th><th></th></tr></thead>
-    <tbody>
-    {{range .Rows}}
-      <tr>
-        <td>{{if not .AlreadyTracked}}<input type="checkbox" name="id" value="{{.ID}}" checked>{{end}}</td>
-        <td>{{.Name}}</td>
-        <td>{{.Type}}</td>
-        <td>{{.Status}}</td>
-        <td>{{.CPU}}</td>
-        <td>{{.RAM}}</td>
-        <td>{{.Disk}}</td>
-        <td>{{if .AlreadyTracked}}already tracked{{else}}new{{end}}</td>
-      </tr>
-    {{end}}
-    </tbody>
-  </table>
-  </div>
-  <div class="actions">
-    <button class="btn btn-primary" type="submit"{{if not .NewCount}} disabled{{end}}>Import selected</button>
-  </div>
-</form>
+<section class="panel">
+  <form method="post" action="/discovery/proxmox/import">
+  {{ csrfField }}
+    <label><input type="checkbox" name="link" value="on" checked> Link VMs/LXC to their Proxmox node</label>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th></th><th>Name</th><th>Type</th><th>Status</th><th>CPU</th><th>RAM</th><th>Disk</th><th></th></tr></thead>
+      <tbody>
+      {{range .Rows}}
+        <tr>
+          <td>{{if not .AlreadyTracked}}<input type="checkbox" name="id" value="{{.ID}}" checked>{{end}}</td>
+          <td>{{.Name}}</td>
+          <td>{{.Type}}</td>
+          <td>{{.Status}}</td>
+          <td>{{.CPU}}</td>
+          <td>{{.RAM}}</td>
+          <td>{{.Disk}}</td>
+          <td>{{if .AlreadyTracked}}already tracked{{else}}new{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" type="submit"{{if not .NewCount}} disabled{{end}}>Import selected</button>
+    </div>
+  </form>
+</section>
 {{else}}{{if not .Error}}
-<div class="table-wrap"><div class="empty">No nodes, VMs, or containers found.</div></div>
+<section class="panel">
+  <div class="table-wrap"><div class="empty">No nodes, VMs, or containers found.</div></div>
+</section>
 {{end}}
 {{end}}
 {{end}}

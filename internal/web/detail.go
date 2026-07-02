@@ -24,6 +24,7 @@ type detailData struct {
 	EntityType string
 	EntityID   int64
 	EditURL    string
+	ListURL    string
 	Fields     []fieldRow
 	NotesHTML  template.HTML
 	Tags       []domain.Tag
@@ -92,7 +93,7 @@ func renderDetailExtra(
 	tags *store.TagRepo,
 	rels *store.RelationshipRepo,
 	entityType string, entityID int64,
-	heading, notes, editURL string,
+	heading, notes, editURL, listURL string,
 	fields []fieldRow,
 	ipam *ipamSection,
 ) {
@@ -138,6 +139,7 @@ func renderDetailExtra(
 		EntityType: entityType,
 		EntityID:   entityID,
 		EditURL:    editURL,
+		ListURL:    listURL,
 		Fields:     fields,
 		NotesHTML:  renderMarkdown(notes),
 		Tags:       tagList,

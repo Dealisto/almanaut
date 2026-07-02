@@ -1,37 +1,46 @@
 {{define "content"}}
-<h1>Docker discovery</h1>
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">System</span>
+    <h1>Docker discovery</h1>
+  </div>
+</div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 {{if .Proposals}}
-<form method="post" action="/discovery/docker/import">
-{{ csrfField }}
-  <label>Host these containers run on
-    <select name="host">
-      <option value="">— none —</option>
-      {{range .Hosts}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
-    </select>
-  </label>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th></th><th>Name</th><th>Ports</th><th>Category</th><th>Status</th></tr></thead>
-    <tbody>
-    {{range .Proposals}}
-      <tr>
-        <td>{{if not .AlreadyTracked}}<input type="checkbox" name="id" value="{{.ContainerID}}" checked>{{end}}</td>
-        <td>{{.Name}}</td>
-        <td>{{.Ports}}</td>
-        <td>{{.Category}}</td>
-        <td>{{if .AlreadyTracked}}already tracked{{else}}new{{end}}</td>
-      </tr>
-    {{end}}
-    </tbody>
-  </table>
-  </div>
-  <div class="actions">
-    <button class="btn btn-primary" type="submit"{{if not .NewCount}} disabled{{end}}>Import selected</button>
-  </div>
-</form>
+<section class="panel">
+  <form method="post" action="/discovery/docker/import">
+  {{ csrfField }}
+    <label>Host these containers run on
+      <select name="host">
+        <option value="">— none —</option>
+        {{range .Hosts}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+      </select>
+    </label>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th></th><th>Name</th><th>Ports</th><th>Category</th><th>Status</th></tr></thead>
+      <tbody>
+      {{range .Proposals}}
+        <tr>
+          <td>{{if not .AlreadyTracked}}<input type="checkbox" name="id" value="{{.ContainerID}}" checked>{{end}}</td>
+          <td>{{.Name}}</td>
+          <td>{{.Ports}}</td>
+          <td>{{.Category}}</td>
+          <td>{{if .AlreadyTracked}}already tracked{{else}}new{{end}}</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" type="submit"{{if not .NewCount}} disabled{{end}}>Import selected</button>
+    </div>
+  </form>
+</section>
 {{else}}{{if not .Error}}
-<div class="table-wrap"><div class="empty">No running containers found.</div></div>
+<section class="panel">
+  <div class="table-wrap"><div class="empty">No running containers found.</div></div>
+</section>
 {{end}}
 {{end}}
 {{end}}
