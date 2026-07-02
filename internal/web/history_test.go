@@ -1,7 +1,10 @@
 package web
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/Dealisto/almanaut/internal/domain"
@@ -82,5 +85,43 @@ func TestChangelogRecordsCreateUpdateDelete(t *testing.T) {
 	}
 	if len(events) != 3 || events[0].Action != domain.ActionDelete {
 		t.Fatalf("delete not recorded: %+v", events)
+	}
+}
+
+// getBody issues a GET and returns the response body, for tests that only
+// need to inspect rendered HTML (the package has no reusable GET helper yet).
+func getBody(t *testing.T, srv http.Handler, path string) string {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET %s = %d, want 200", path, rec.Code)
+	}
+	return rec.Body.String()
+}
+
+// TestHistoryPageListsRecentActivityNewestFirst drives a create then an update
+// through the real handlers and asserts the global /history feed renders both,
+// newest first.
+func TestHistoryPageListsRecentActivityNewestFirst(t *testing.T) {
+	srv, _ := newTestServerDB(t)
+
+	rec := postForm(t, srv, "/hosts", url.Values{"name": {"nas"}, "type": {"physical"}, "status": {"running"}})
+	if rec.Code != 303 {
+		t.Fatalf("POST /hosts = %d, want 303", rec.Code)
+	}
+	rec = postForm(t, srv, "/hosts/1", url.Values{"name": {"nas"}, "type": {"physical"}, "status": {"down"}})
+	if rec.Code != 303 {
+		t.Fatalf("POST /hosts/1 (update) = %d, want 303", rec.Code)
+	}
+
+	body := getBody(t, srv, "/history")
+	if !strings.Contains(body, "nas") {
+		t.Errorf("history page missing entity label:\n%s", body)
+	}
+	// update recorded after create → appears earlier (newest first)
+	if strings.Index(body, "update") > strings.Index(body, "create") {
+		t.Errorf("history not newest-first")
 	}
 }
