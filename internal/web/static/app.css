@@ -105,8 +105,7 @@ form.stack textarea{min-height:84px;resize:vertical}
 .actions{display:flex;gap:10px;align-items:center;margin-top:4px}
 .form-inline{display:inline}
 th{vertical-align:top}
-.notes{background:var(--surface);border:1px solid var(--border);border-radius:8px;
-  padding:16px 20px;margin-top:8px}
+.notes{margin:0}
 .notes h1,.notes h2,.notes h3{margin:.4em 0}
 .tags{margin-bottom:12px}
 .tag{display:inline-flex;align-items:center;gap:4px;background:var(--row-alt);border:1px solid var(--border);
@@ -132,6 +131,15 @@ form.search-page input{flex:1;padding:8px 10px;border:1px solid var(--border);bo
   text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px}
 .page-header h1{margin:0}
 .page-header .ph-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* Detail page: two-column top row + definition grid + responsive graph */
+.detail-top{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:20px;align-items:start}
+.def-grid{display:grid;grid-template-columns:auto 1fr;gap:10px 20px;margin:0}
+.def-grid dt{font-family:var(--mono);font-size:.74rem;text-transform:uppercase;letter-spacing:.03em;
+  color:var(--muted);align-self:start}
+.def-grid dd{margin:0;color:var(--text);word-break:break-word}
+.depgraph-wrap{overflow-x:auto}
+.depgraph{width:100%;height:auto;max-width:520px;display:block;margin:8px auto 0}
+@media (max-width:900px){.detail-top{grid-template-columns:1fr}}
 .home-search{margin:0 0 22px}
 .home-search input{width:100%;padding:14px 18px;font-size:1.05rem;border:1px solid var(--border);
   border-radius:10px;background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.05)}

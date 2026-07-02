@@ -1847,3 +1847,28 @@ func TestListPagesHavePageHeader(t *testing.T) {
 		}
 	}
 }
+
+func TestDetailPageLayout(t *testing.T) {
+	srv := newTestServer(t)
+	// hardware is the entity whose plural base path is irregular (/hardware).
+	postForm(t, srv, "/hardware", url.Values{"name": {"Rack UPS"}, "kind": {"ups"}})
+
+	req := httptest.NewRequest(http.MethodGet, "/hardware/1", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `class="detail-top"`) {
+		t.Error("detail page should use the two-column detail-top layout")
+	}
+	if !strings.Contains(body, `class="def-grid"`) {
+		t.Error("detail page should render attributes as a definition grid")
+	}
+	// Back-link uses the correct base path, not the pluralized /hardwares.
+	if !strings.Contains(body, `href="/hardware">Back to list`) {
+		t.Errorf("Back-to-list should point to /hardware; body:\n%s", body)
+	}
+	if strings.Contains(body, "/hardwares") {
+		t.Error("detail page must not use the pluralized /hardwares path")
+	}
+}

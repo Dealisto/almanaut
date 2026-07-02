@@ -235,7 +235,7 @@ func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
 		}
 		renderDetailExtra(w, req, d.cat, d.tags, d.rels, rs.sing, id,
 			rs.heading+": "+rs.label(item), rs.notes(item),
-			fmt.Sprintf("%s/%d/edit", rs.basePath(), id), rs.fields(item), ipam)
+			fmt.Sprintf("%s/%d/edit", rs.basePath(), id), rs.basePath(), rs.fields(item), ipam)
 	}
 }
 
