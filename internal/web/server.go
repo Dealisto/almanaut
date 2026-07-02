@@ -307,7 +307,7 @@ func New(cfg Config) http.Handler {
 		// unsafe request, so an oversize upload is rejected up front.
 		r.Use(limitBody)
 		r.Use(csrfProtect(cfg.SecureCookies))
-		r.Get("/", dashboard(repos, relationships))
+		r.Get("/", dashboard(repos, relationships, cat, changelog))
 		for _, rs := range resources {
 			rs.mount(r, deps)
 			rs.mountAPI(r)

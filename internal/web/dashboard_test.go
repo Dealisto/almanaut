@@ -1,6 +1,8 @@
 package web
 
 import (
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/Dealisto/almanaut/internal/domain"
@@ -58,5 +60,21 @@ func TestAnyAttention(t *testing.T) {
 	}
 	if !anyAttention([]attentionGroup{{Title: "a", Items: []attentionItem{{Label: "x"}}}}) {
 		t.Error("has items → want true")
+	}
+}
+
+// TestDashboardShowsRecentActivity drives a create through the real handler
+// and asserts the dashboard's "Recent activity" panel renders it.
+func TestDashboardShowsRecentActivity(t *testing.T) {
+	srv, _ := newTestServerDB(t)
+
+	rec := postForm(t, srv, "/hosts", url.Values{"name": {"nas"}, "type": {"physical"}, "status": {"running"}})
+	if rec.Code != 303 {
+		t.Fatalf("POST /hosts = %d, want 303", rec.Code)
+	}
+
+	body := getBody(t, srv, "/")
+	if !strings.Contains(body, "Recent activity") || !strings.Contains(body, "nas") {
+		t.Errorf("dashboard missing recent activity:\n%s", body)
 	}
 }
