@@ -1,8 +1,8 @@
 :root{
-  --bg:#eceff4; --surface:#ffffff; --text:#1a1f2b; --muted:#606b7a;
-  --border:#d7dde5; --accent:#0e7490; --accent-text:#ffffff;
-  --danger:#b91c1c; --row-alt:#f3f6f9;
-  --sidebar-bg:#ffffff; --active-bg:rgba(14,116,144,.10);
+  --bg:#e5eaf1; --surface:#ffffff; --text:#16202f; --muted:#586579;
+  --border:#d0d8e3; --accent:#0e7490; --accent-text:#ffffff;
+  --danger:#b91c1c; --row-alt:#eef2f7;
+  --sidebar-bg:#f7f9fc; --active-bg:rgba(14,116,144,.10);
   --ok:#15803d; --warn:#b45309; --crit:#b91c1c;
   --mono:ui-monospace,"SF Mono","Cascadia Mono","Segoe UI Mono","Roboto Mono",Menlo,Consolas,monospace;
 }
@@ -16,10 +16,10 @@
   }
 }
 [data-theme="light"]{
-  --bg:#eceff4; --surface:#ffffff; --text:#1a1f2b; --muted:#606b7a;
-  --border:#d7dde5; --accent:#0e7490; --accent-text:#ffffff;
-  --danger:#b91c1c; --row-alt:#f3f6f9;
-  --sidebar-bg:#ffffff; --active-bg:rgba(14,116,144,.10);
+  --bg:#e5eaf1; --surface:#ffffff; --text:#16202f; --muted:#586579;
+  --border:#d0d8e3; --accent:#0e7490; --accent-text:#ffffff;
+  --danger:#b91c1c; --row-alt:#eef2f7;
+  --sidebar-bg:#f7f9fc; --active-bg:rgba(14,116,144,.10);
   --ok:#15803d; --warn:#b45309; --crit:#b91c1c;
 }
 [data-theme="dark"]{
@@ -83,7 +83,7 @@ h1{margin:0 0 16px;font-size:1.5rem}
 .btn-danger{color:var(--danger)}
 .toolbar{margin-bottom:16px}
 .table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;
-  background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  background:var(--surface);box-shadow:0 1px 3px rgba(15,23,42,.08)}
 table{border-collapse:collapse;width:100%}
 th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
 th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-family:var(--mono)}
@@ -122,7 +122,7 @@ form.search-page input{flex:1;padding:8px 10px;border:1px solid var(--border);bo
   background:var(--bg);color:var(--text);font:inherit}
 /* Home page: card panels + service launcher + counts */
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;
-  padding:22px 24px;margin-bottom:20px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  padding:22px 24px;margin-bottom:20px;box-shadow:0 1px 3px rgba(15,23,42,.08)}
 .panel h2{font-size:1.05rem;margin:0 0 16px;font-weight:650}
 /* A table or form nested inside a panel is flush: the panel IS the card,
    so the inner element drops its own border/shadow/background (no card-in-card). */
@@ -153,7 +153,7 @@ form.search-page input{flex:1;padding:8px 10px;border:1px solid var(--border);bo
 @media (max-width:720px){.rel-form{grid-template-columns:1fr}}
 .home-search{margin:0 0 22px}
 .home-search input{width:100%;padding:14px 18px;font-size:1.05rem;border:1px solid var(--border);
-  border-radius:10px;background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  border-radius:10px;background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(15,23,42,.08)}
 .home-search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--active-bg)}
 .attn-group{margin-bottom:16px}
 .attn-group:last-child{margin-bottom:0}
