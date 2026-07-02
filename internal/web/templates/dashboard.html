@@ -1,23 +1,44 @@
 {{define "content"}}
 <h1>Dashboard</h1>
-<div class="cards">
-  {{range .Counts}}
-  <a class="card" href="{{.URL}}">
-    <span class="card-count">{{.Count}}</span>
-    <span class="card-label">{{.Label}}</span>
-  </a>
-  {{end}}
-</div>
 
-<h2>Attention</h2>
-{{range .Groups}}
-<div class="attention">
-  <h3>{{if .MoreURL}}<a href="{{.MoreURL}}">{{.Title}}</a>{{else}}{{.Title}}{{end}}</h3>
-  {{if .Items}}
-  <ul class="related">{{range .Items}}<li><a href="{{.URL}}">{{.Label}}</a></li>{{end}}</ul>
+<form class="home-search" method="get" action="/search" role="search">
+  <input type="search" name="q" placeholder="Search hosts, services, IPs…" aria-label="Search">
+</form>
+
+<section class="home-section">
+  <h2>Needs attention</h2>
+  {{if .AnyAttention}}
+    {{range .Groups}}{{if .Items}}
+    <div class="attention">
+      <h3>{{if .MoreURL}}<a href="{{.MoreURL}}">{{.Title}}</a>{{else}}{{.Title}}{{end}}</h3>
+      <ul class="related">{{range .Items}}<li><a href="{{.URL}}">{{.Label}}</a></li>{{end}}</ul>
+    </div>
+    {{end}}{{end}}
   {{else}}
-  <p class="muted">All clear.</p>
+    <p class="muted">Everything looks healthy.</p>
   {{end}}
-</div>
+</section>
+
+{{if .Services}}
+<section class="home-section">
+  <h2>Services</h2>
+  {{range .Services}}
+  <div class="svc-group">
+    <span class="svc-cat">{{.Category}}</span>
+    <div class="svc-tiles">
+      {{range .Services}}
+      <a class="svc-tile" href="{{.Href}}"{{if .External}} target="_blank" rel="noopener noreferrer"{{end}}>{{.Name}}{{if .External}} <span class="svc-ext">↗</span>{{end}}</a>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+</section>
 {{end}}
+
+<section class="home-section">
+  <h2>Inventory</h2>
+  <div class="count-strip">
+    {{range .Counts}}<a class="count-chip" href="{{.URL}}">{{.Label}} <b>{{.Count}}</b></a>{{end}}
+  </div>
+</section>
 {{end}}

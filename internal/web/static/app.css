@@ -104,12 +104,25 @@ ul.related{padding-left:20px}
 form.search-page{display:flex;gap:8px;margin-bottom:20px}
 form.search-page input{flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;
   background:var(--bg);color:var(--text);font:inherit}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:8px}
-.card{display:flex;flex-direction:column;gap:4px;padding:16px 18px;background:var(--surface);
-  border:1px solid var(--border);border-radius:8px;color:var(--text)}
-.card:hover{border-color:var(--accent);text-decoration:none}
-.card-count{font-size:1.8rem;font-weight:700}
-.card-label{color:var(--muted);font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}
+.home-search{margin:0 0 24px}
+.home-search input{width:100%;padding:12px 16px;font-size:1.05rem;border:1px solid var(--border);
+  border-radius:8px;background:var(--surface);color:var(--text)}
+.home-search input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+.home-section{margin-bottom:28px}
+.home-section h2{font-size:1.1rem;margin:0 0 10px}
+.svc-group{margin-bottom:14px}
+.svc-cat{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--muted);margin-bottom:6px}
+.svc-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.svc-tile{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;
+  border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-weight:600}
+.svc-tile:hover{border-color:var(--accent);text-decoration:none}
+.svc-ext{color:var(--muted);font-weight:400}
+.count-strip{display:flex;flex-wrap:wrap;gap:8px}
+.count-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--border);
+  border-radius:16px;background:var(--surface);color:var(--muted);font-size:.9rem}
+.count-chip:hover{border-color:var(--accent);text-decoration:none}
+.count-chip b{color:var(--text)}
 .attention{margin:20px 0 12px}
 .attention h3{margin:.6em 0 .3em;font-size:1.05rem}
 

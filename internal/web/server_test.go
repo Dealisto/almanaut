@@ -1247,13 +1247,14 @@ func TestDashboard(t *testing.T) {
 		t.Fatalf("GET / = %d, want 200 (dashboard, not a redirect)", rec.Code)
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"Dashboard", "Hosts", "Services", "Certificates", "Attention"} {
+	for _, want := range []string{"Dashboard", "Needs attention", "Inventory"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard missing %q", want)
 		}
 	}
-	if !strings.Contains(body, `<span class="card-count">2</span>`) {
-		t.Errorf("expected a count card showing 2 hosts; body:\n%s", body)
+	// counts strip chip for hosts
+	if !strings.Contains(body, `Hosts <b>2</b>`) {
+		t.Errorf("expected a count chip showing 2 hosts; body:\n%s", body)
 	}
 	// down host appears under attention, linked to its detail page
 	if !strings.Contains(body, "/hosts/2") || !strings.Contains(body, "oldbox") {
@@ -1274,11 +1275,32 @@ func TestDashboardEmpty(t *testing.T) {
 		t.Fatalf("GET / = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `<span class="card-count">0</span>`) {
-		t.Error("empty inventory should show zero counts")
+	if !strings.Contains(body, `Hosts <b>0</b>`) {
+		t.Error("empty inventory should show a zero Hosts count chip")
 	}
-	if !strings.Contains(body, "All clear.") {
-		t.Error("empty inventory should show an 'All clear.' attention line")
+	if !strings.Contains(body, "Everything looks healthy.") {
+		t.Error("empty inventory should show the healthy attention line")
+	}
+}
+
+func TestDashboardServiceLaunchTile(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/services", url.Values{
+		"name": {"Jellyfin"}, "kind": {"container"},
+		"url": {"http://nas:8096"}, "category": {"Media"},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="http://nas:8096"`) {
+		t.Error("service tile should link to the service URL")
+	}
+	if !strings.Contains(body, `rel="noopener noreferrer"`) {
+		t.Error("external service tile must carry rel=noopener noreferrer")
+	}
+	if !strings.Contains(body, "Jellyfin") {
+		t.Error("service tile should show the service name")
 	}
 }
 
