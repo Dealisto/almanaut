@@ -371,6 +371,19 @@ func TestDiscoveryDockerScanSocketError(t *testing.T) {
 	}
 }
 
+func TestSidebarDrawerMarkup(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	for _, want := range []string{`id="nav-toggle"`, `class="hamburger"`, `class="nav-overlay"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("layout missing drawer markup %q", want)
+		}
+	}
+}
+
 func TestDiscoveryLanding(t *testing.T) {
 	srv := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/discovery", nil)

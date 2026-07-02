@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+<input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
 <div class="app-shell">
   <aside class="sidebar">
     <a class="brand" href="/">Almanaut</a>
@@ -41,8 +42,10 @@
       </div>
     </nav>
   </aside>
+  <label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
   <div class="content">
     <div class="topbar">
+      <label for="nav-toggle" class="hamburger" aria-label="Toggle navigation" role="button">☰</label>
       <form class="search" method="get" action="/search" role="search">
         <input type="search" name="q" placeholder="Search…" aria-label="Search">
       </form>

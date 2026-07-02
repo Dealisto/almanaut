@@ -18,6 +18,10 @@ body{margin:0;background:var(--bg);color:var(--text);
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 .app-shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+.nav-toggle{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
+.hamburger{display:none;font-size:1.3rem;line-height:1;cursor:pointer;
+  padding:2px 10px;border:1px solid var(--border);border-radius:6px;color:var(--text)}
+.nav-overlay{display:none}
 .sidebar{background:var(--sidebar-bg);border-right:1px solid var(--border);
   position:sticky;top:0;height:100vh;overflow-y:auto;padding:16px 12px}
 .sidebar .brand{display:block;font-weight:700;font-size:1.2rem;color:var(--text);padding:6px 10px 14px}
@@ -86,3 +90,13 @@ form.search-page input{flex:1;padding:8px 10px;border:1px solid var(--border);bo
 .card-label{color:var(--muted);font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}
 .attention{margin-bottom:12px}
 .attention h3{margin:.6em 0 .3em}
+
+@media (max-width:860px){
+  .app-shell{grid-template-columns:1fr}
+  .sidebar{position:fixed;top:0;left:0;z-index:30;width:240px;
+    transform:translateX(-100%);transition:transform .2s ease}
+  #nav-toggle:checked ~ .app-shell .sidebar{transform:translateX(0)}
+  .hamburger{display:inline-block}
+  #nav-toggle:checked ~ .app-shell .nav-overlay{display:block;position:fixed;
+    inset:0;z-index:20;background:rgba(0,0,0,.4)}
+}
