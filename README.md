@@ -12,6 +12,7 @@ A lightweight, self-hosted homelab inventory & documentation tool.
 ## Contents
 
 - [What it does](#what-it-does)
+- [Screenshots](#screenshots)
 - [Run with Docker](#run-with-docker)
 - [Run with Docker Compose](#run-with-docker-compose)
 - [Run from source](#run-from-source)
@@ -51,6 +52,22 @@ On top of the inventory you get:
 - **A read-only JSON API** and a Prometheus **`/metrics`** endpoint
 - **YAML export/import** of the entire inventory
 - **Optional HTTP Basic auth** for when a trusted LAN isn't enough
+
+## Screenshots
+
+**Dashboard** — inventory totals and what's expiring soon, with the grouped
+sidebar navigation:
+
+![almanaut dashboard](docs/screenshots/dashboard.png)
+
+**Relationship graph** — each entity's neighbourhood is drawn on its detail
+page (here, a host with the VM it runs on and the services running on it):
+
+![relationship neighbourhood graph](docs/screenshots/graph.png)
+
+**Dark mode** — a built-in System / Light / Dark switch; System follows your OS:
+
+![almanaut in dark mode](docs/screenshots/dashboard-dark.png)
 
 ## Run with Docker
 
