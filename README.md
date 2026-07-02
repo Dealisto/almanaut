@@ -152,6 +152,32 @@ Note that `/export` returns the **entire inventory**, including account entries
 unauthenticated mode anyone who can reach the server can download it, so enable
 auth (or an authenticated reverse proxy) before storing anything sensitive.
 
+### Behind a reverse proxy (TLS)
+
+Almanaut serves plain HTTP with no built-in TLS or rate limiting, so put a
+reverse proxy in front for anything beyond localhost. Whatever proxy you use,
+set `ALMANAUT_SECURE_COOKIES=true` so cookies get the `Secure` flag once TLS is
+terminated upstream.
+
+**Caddy** — automatic Let's Encrypt TLS in two lines (`Caddyfile`):
+
+```caddyfile
+almanaut.example.com {
+    reverse_proxy almanaut:8080
+}
+```
+
+**Traefik** — as labels on the `almanaut` service in your `docker-compose.yml`:
+
+```yaml
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.almanaut.rule=Host(`almanaut.example.com`)"
+      - "traefik.http.routers.almanaut.entrypoints=websecure"
+      - "traefik.http.routers.almanaut.tls.certresolver=le"
+      - "traefik.http.services.almanaut.loadbalancer.server.port=8080"
+```
+
 ### Expiry notifications
 
 Set `ALMANAUT_NTFY_URL` to an [ntfy](https://ntfy.sh) topic URL and almanaut
