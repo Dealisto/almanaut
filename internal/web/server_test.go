@@ -484,12 +484,37 @@ func TestPagesUseSharedLayout(t *testing.T) {
 		if !strings.Contains(body, "Almanaut") {
 			t.Errorf("GET %s: missing layout brand 'Almanaut'", path)
 		}
-		if !strings.Contains(body, "<style") {
-			t.Errorf("GET %s: missing embedded stylesheet", path)
+		if !strings.Contains(body, `<link rel="stylesheet" href="/static/app.css">`) {
+			t.Errorf("GET %s: missing stylesheet link", path)
 		}
-		if !strings.Contains(body, "prefers-color-scheme") {
-			t.Errorf("GET %s: missing dark-mode CSS", path)
-		}
+	}
+}
+
+func TestStaticCSSServed(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/static/app.css", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /static/app.css = %d, want 200", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/css") {
+		t.Errorf("Content-Type = %q, want text/css", ct)
+	}
+	if rec.Body.Len() == 0 {
+		t.Error("empty CSS body")
+	}
+	etag := rec.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("missing ETag")
+	}
+	// Conditional request with matching ETag → 304.
+	req2 := httptest.NewRequest(http.MethodGet, "/static/app.css", nil)
+	req2.Header.Set("If-None-Match", etag)
+	rec2 := httptest.NewRecorder()
+	srv.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusNotModified {
+		t.Errorf("conditional GET = %d, want 304", rec2.Code)
 	}
 }
 

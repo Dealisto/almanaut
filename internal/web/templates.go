@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-//go:embed templates/*.html
+//go:embed templates/*.html static/app.css
 var templatesFS embed.FS
 
 // pages maps each content page to a template set that combines the shared
