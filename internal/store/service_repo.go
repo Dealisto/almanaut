@@ -27,6 +27,19 @@ func (r *ServiceRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
+// CreateTx inserts s within tx and returns its new id.
+func (r *ServiceRepo) CreateTx(tx *sql.Tx, s domain.Service) (int64, error) {
+	return r.WithTx(tx).Create(s)
+}
+
+// UpdateTx overwrites the service with s.ID within tx.
+func (r *ServiceRepo) UpdateTx(tx *sql.Tx, s domain.Service) error { return r.WithTx(tx).Update(s) }
+
+// GetTx returns the service with the given id within tx.
+func (r *ServiceRepo) GetTx(tx *sql.Tx, id int64) (domain.Service, error) {
+	return r.WithTx(tx).Get(id)
+}
+
 // Create inserts s and returns its new ID.
 func (r *ServiceRepo) Create(s domain.Service) (int64, error) {
 	res, err := r.db.Exec(

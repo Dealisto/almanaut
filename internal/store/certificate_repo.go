@@ -27,6 +27,21 @@ func (r *CertificateRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
+// CreateTx inserts c within tx and returns its new id.
+func (r *CertificateRepo) CreateTx(tx *sql.Tx, c domain.Certificate) (int64, error) {
+	return r.WithTx(tx).Create(c)
+}
+
+// UpdateTx overwrites the certificate with c.ID within tx.
+func (r *CertificateRepo) UpdateTx(tx *sql.Tx, c domain.Certificate) error {
+	return r.WithTx(tx).Update(c)
+}
+
+// GetTx returns the certificate with the given id within tx.
+func (r *CertificateRepo) GetTx(tx *sql.Tx, id int64) (domain.Certificate, error) {
+	return r.WithTx(tx).Get(id)
+}
+
 // Create inserts c and returns its new ID.
 func (r *CertificateRepo) Create(c domain.Certificate) (int64, error) {
 	res, err := r.db.Exec(

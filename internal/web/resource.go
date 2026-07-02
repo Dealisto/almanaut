@@ -23,6 +23,9 @@ type crud[T any] interface {
 	Update(T) error
 	Delete(id int64) error
 	DeleteTx(tx *sql.Tx, id int64) error
+	CreateTx(tx *sql.Tx, v T) (int64, error)
+	UpdateTx(tx *sql.Tx, v T) error
+	GetTx(tx *sql.Tx, id int64) (T, error)
 }
 
 // validatable is satisfied by every domain entity (value-receiver Validate).

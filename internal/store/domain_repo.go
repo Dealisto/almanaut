@@ -27,6 +27,19 @@ func (r *DomainRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
+// CreateTx inserts d within tx and returns its new id.
+func (r *DomainRepo) CreateTx(tx *sql.Tx, d domain.Domain) (int64, error) {
+	return r.WithTx(tx).Create(d)
+}
+
+// UpdateTx overwrites the domain with d.ID within tx.
+func (r *DomainRepo) UpdateTx(tx *sql.Tx, d domain.Domain) error { return r.WithTx(tx).Update(d) }
+
+// GetTx returns the domain with the given id within tx.
+func (r *DomainRepo) GetTx(tx *sql.Tx, id int64) (domain.Domain, error) {
+	return r.WithTx(tx).Get(id)
+}
+
 // Count returns the number of domains.
 func (r *DomainRepo) Count() (int, error) {
 	var n int

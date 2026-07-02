@@ -28,6 +28,15 @@ func (r *HostRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
+// CreateTx inserts h within tx and returns its new id.
+func (r *HostRepo) CreateTx(tx *sql.Tx, h domain.Host) (int64, error) { return r.WithTx(tx).Create(h) }
+
+// UpdateTx overwrites the host with h.ID within tx.
+func (r *HostRepo) UpdateTx(tx *sql.Tx, h domain.Host) error { return r.WithTx(tx).Update(h) }
+
+// GetTx returns the host with the given id within tx.
+func (r *HostRepo) GetTx(tx *sql.Tx, id int64) (domain.Host, error) { return r.WithTx(tx).Get(id) }
+
 // Create inserts h and returns its new ID.
 func (r *HostRepo) Create(h domain.Host) (int64, error) {
 	if h.IPs == nil {

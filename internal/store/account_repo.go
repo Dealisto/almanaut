@@ -27,6 +27,19 @@ func (r *AccountRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
+// CreateTx inserts a within tx and returns its new id.
+func (r *AccountRepo) CreateTx(tx *sql.Tx, a domain.Account) (int64, error) {
+	return r.WithTx(tx).Create(a)
+}
+
+// UpdateTx overwrites the account with a.ID within tx.
+func (r *AccountRepo) UpdateTx(tx *sql.Tx, a domain.Account) error { return r.WithTx(tx).Update(a) }
+
+// GetTx returns the account with the given id within tx.
+func (r *AccountRepo) GetTx(tx *sql.Tx, id int64) (domain.Account, error) {
+	return r.WithTx(tx).Get(id)
+}
+
 // Count returns the number of accounts.
 func (r *AccountRepo) Count() (int, error) {
 	var n int

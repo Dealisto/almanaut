@@ -27,6 +27,21 @@ func (r *SubscriptionRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
+// CreateTx inserts s within tx and returns its new id.
+func (r *SubscriptionRepo) CreateTx(tx *sql.Tx, s domain.Subscription) (int64, error) {
+	return r.WithTx(tx).Create(s)
+}
+
+// UpdateTx overwrites the subscription with s.ID within tx.
+func (r *SubscriptionRepo) UpdateTx(tx *sql.Tx, s domain.Subscription) error {
+	return r.WithTx(tx).Update(s)
+}
+
+// GetTx returns the subscription with the given id within tx.
+func (r *SubscriptionRepo) GetTx(tx *sql.Tx, id int64) (domain.Subscription, error) {
+	return r.WithTx(tx).Get(id)
+}
+
 const subscriptionColumns = `id, name, kind, provider, amount, currency, billing_cycle, renewal_date, auto_renew, status, notes`
 
 // Create inserts s and returns its new ID.

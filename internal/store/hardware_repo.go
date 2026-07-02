@@ -27,6 +27,19 @@ func (r *HardwareRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
+// CreateTx inserts h within tx and returns its new id.
+func (r *HardwareRepo) CreateTx(tx *sql.Tx, h domain.Hardware) (int64, error) {
+	return r.WithTx(tx).Create(h)
+}
+
+// UpdateTx overwrites the hardware with h.ID within tx.
+func (r *HardwareRepo) UpdateTx(tx *sql.Tx, h domain.Hardware) error { return r.WithTx(tx).Update(h) }
+
+// GetTx returns the hardware with the given id within tx.
+func (r *HardwareRepo) GetTx(tx *sql.Tx, id int64) (domain.Hardware, error) {
+	return r.WithTx(tx).Get(id)
+}
+
 const hardwareColumns = `id, name, kind, manufacturer, model, serial, location, purchase_date, warranty_end, status, notes`
 
 // Create inserts h and returns its new ID.
