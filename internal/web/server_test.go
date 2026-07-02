@@ -1644,3 +1644,23 @@ func TestCreateAccountInvalidShowsError(t *testing.T) {
 		t.Errorf("expected validation error in body; got:\n%s", rec.Body.String())
 	}
 }
+
+func TestThemeDataAttributeReflectsCookie(t *testing.T) {
+	srv := newTestServer(t)
+
+	// With a dark cookie, the html tag must carry data-theme="dark".
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "theme", Value: "dark"})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), `data-theme="dark"`) {
+		t.Error(`expected data-theme="dark" with theme=dark cookie`)
+	}
+
+	// With no cookie, it defaults to system.
+	rec2 := httptest.NewRecorder()
+	srv.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/", nil))
+	if !strings.Contains(rec2.Body.String(), `data-theme="system"`) {
+		t.Error(`expected data-theme="system" with no cookie`)
+	}
+}

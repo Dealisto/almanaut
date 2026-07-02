@@ -21,6 +21,7 @@ var pages = func() map[string]*template.Template {
 				Funcs(template.FuncMap{
 					"csrfField": func() template.HTML { return "" },
 					"isActive":  func(string) bool { return false },
+					"theme":     func() string { return "system" },
 				}).
 				ParseFS(templatesFS, "templates/layout.html", "templates/"+page),
 		)
@@ -50,6 +51,7 @@ func render(w http.ResponseWriter, r *http.Request, page string, data any) {
 				`" value="` + template.HTMLEscapeString(token) + `">`)
 		},
 		"isActive": func(base string) bool { return navIsActive(r.URL.Path, base) },
+		"theme":    func() string { return themeFromCookie(r) },
 	})
 	var buf bytes.Buffer
 	if err := clone.ExecuteTemplate(&buf, "layout", data); err != nil {
