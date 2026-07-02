@@ -1807,3 +1807,20 @@ func TestSidebarToolsCluster(t *testing.T) {
 		t.Error("the Overview group header should be gone")
 	}
 }
+
+func TestHostsListHasPageHeader(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/hosts", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, `class="page-header"`) {
+		t.Error("Hosts list should use the page-header primitive")
+	}
+	if !strings.Contains(body, `class="ph-eyebrow"`) || !strings.Contains(body, ">Inventory<") {
+		t.Error("Hosts list header should carry the Inventory eyebrow")
+	}
+	if !strings.Contains(body, `href="/hosts/new"`) {
+		t.Error("Hosts list header should keep the New host action")
+	}
+}
