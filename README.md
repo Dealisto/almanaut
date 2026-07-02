@@ -5,6 +5,48 @@ A lightweight, self-hosted homelab inventory & documentation tool.
 
 > Status: early development (v0.1).
 
+## Contents
+
+- [What it does](#what-it-does)
+- [Run with Docker](#run-with-docker)
+- [Run with Docker Compose](#run-with-docker-compose)
+- [Run from source](#run-from-source)
+- [Configuration](#configuration)
+- [Export & import](#export--import)
+- [JSON API](#json-api)
+- [Metrics](#metrics)
+- [Health & version](#health--version)
+- [Auto-discovery](#auto-discovery)
+
+## What it does
+
+Almanaut is a single Go binary (SQLite storage, server-rendered UI, no
+client-side JS framework) for keeping track of your homelab. It tracks nine
+entity types and the relationships between them:
+
+- **Hosts** — physical machines, VMs, and LXC containers
+- **Services** — the things running on your hosts
+- **Networks** — subnets, with built-in IPAM (usage, capacity, next-free IP)
+- **Domains** — DNS names / FQDNs
+- **Certificates** — TLS certs with expiry tracking
+- **Backups** — what's backed up, from where
+- **Hardware** — devices with warranty tracking
+- **Subscriptions** — recurring services with renewal dates
+- **Accounts** — logins and secret references
+
+On top of the inventory you get:
+
+- **Relationships & a neighbourhood graph** on each detail page (e.g. a service
+  *runs on* a host, *is backed up by* a backup)
+- **Global search** across every entity type
+- **A dashboard** summarising your inventory and what's expiring soon
+- **Auto-discovery** from Docker, a network subnet scan, and Proxmox VE
+- **Expiry notifications** via [ntfy](https://ntfy.sh) for certs, warranties,
+  and renewals
+- **A read-only JSON API** and a Prometheus **`/metrics`** endpoint
+- **YAML export/import** of the entire inventory
+- **Optional HTTP Basic auth** for when a trusted LAN isn't enough
+
 ## Run with Docker
 
 ```bash
@@ -21,6 +63,37 @@ The container runs as a non-root user (uid `65532`). A fresh named volume (as
 above) inherits the right ownership automatically. If you instead bind-mount a
 host directory (`-v /host/path:/data`), make it writable by that uid first —
 `sudo chown 65532:65532 /host/path` — otherwise the database cannot be created.
+
+## Run with Docker Compose
+
+Drop this into `docker-compose.yml` and run `docker compose up -d`:
+
+```yaml
+services:
+  almanaut:
+    image: ghcr.io/dealisto/almanaut:dev
+    container_name: almanaut
+    ports:
+      - "8080:8080"
+    volumes:
+      - almanaut-data:/data
+      # Uncomment to enable Docker container auto-discovery (read-only):
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # All optional — see the Configuration table below. A few common ones:
+      # ALMANAUT_AUTH_USER: admin
+      # ALMANAUT_AUTH_PASS: change-me
+      # ALMANAUT_ENABLE_NETWORK_SCAN: "true"
+      # ALMANAUT_NTFY_URL: https://ntfy.sh/my-homelab
+      TZ: Etc/UTC
+    restart: unless-stopped
+
+volumes:
+  almanaut-data:
+```
+
+Then open http://localhost:8080. The image ships its own `HEALTHCHECK`, so
+`docker compose ps` reports the container's health directly.
 
 ## Run from source
 
@@ -82,6 +155,28 @@ renewal falls within `ALMANAUT_NOTIFY_WITHIN_DAYS` (default 30). Each item
 notifies **once**; renewing it (pushing the date beyond the window) re-arms it
 for next time. The check runs at startup and every `ALMANAUT_NOTIFY_INTERVAL`.
 Leave `ALMANAUT_NTFY_URL` unset to disable notifications entirely.
+
+## Export & import
+
+The whole inventory round-trips through a single YAML file. **Data → Export**
+(or `GET /export`) downloads `almanaut-export.yaml`; **Data → Import** uploads
+one back. This is your backup/restore and migration path.
+
+> ⚠️ Import **replaces the entire inventory** — every existing record is
+> deleted and re-created from the file. It is not a merge. The import form
+> makes you tick a confirmation checkbox first.
+
+### Try it with sample data
+
+Want to see the app populated before entering your own data? This repo ships a
+small example homelab (three hosts, some services, a network, a certificate, a
+backup, and the relationships between them). Grab
+[`examples/inventory.yaml`](examples/inventory.yaml), then go to **Data →
+Import**, upload it, tick the confirmation box, and import. You'll land on a
+populated dashboard with a browsable relationship graph.
+
+Since import wipes existing data, only load the sample into a fresh instance
+(or export your real data first).
 
 ## JSON API
 
