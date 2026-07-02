@@ -1,5 +1,9 @@
 # Almanaut
 
+[![CI](https://github.com/Dealisto/almanaut/actions/workflows/ci.yml/badge.svg)](https://github.com/Dealisto/almanaut/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Container image](https://img.shields.io/badge/ghcr.io-dealisto%2Falmanaut-2496ed?logo=docker&logoColor=white)](https://github.com/Dealisto/almanaut/pkgs/container/almanaut)
+
 A lightweight, self-hosted homelab inventory & documentation tool.
 "NetBox for the rest of us."
 
@@ -17,6 +21,7 @@ A lightweight, self-hosted homelab inventory & documentation tool.
 - [Metrics](#metrics)
 - [Health & version](#health--version)
 - [Auto-discovery](#auto-discovery)
+- [License](#license)
 
 ## What it does
 
@@ -24,7 +29,7 @@ Almanaut is a single Go binary (SQLite storage, server-rendered UI, no
 client-side JS framework) for keeping track of your homelab. It tracks nine
 entity types and the relationships between them:
 
-- **Hosts** — physical machines, VMs, and LXC containers
+- **Hosts** — physical machines, VMs, LXC containers, and VPSes
 - **Services** — the things running on your hosts
 - **Networks** — subnets, with built-in IPAM (usage, capacity, next-free IP)
 - **Domains** — DNS names / FQDNs
