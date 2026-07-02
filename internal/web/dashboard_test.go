@@ -11,7 +11,9 @@ func TestGroupServices(t *testing.T) {
 		{ID: 1, Name: "Jellyfin", URL: "http://nas:8096", Category: "Media"},
 		{ID: 2, Name: "PostgreSQL", Category: "Database"}, // no URL
 		{ID: 3, Name: "Nginx Proxy Manager", URL: "http://nas:81", Category: "Media"},
-		{ID: 4, Name: "orphan", Category: ""}, // blank category
+		{ID: 4, Name: "orphan", Category: ""},                         // blank category
+		{ID: 5, Name: "spaces-url", URL: "   ", Category: "Database"}, // whitespace-only URL → no url
+		{ID: 6, Name: "spaces-cat", Category: "  "},                   // whitespace-only category → Uncategorized
 	}
 	groups := groupServices(svcs)
 	if len(groups) != 3 {
@@ -33,6 +35,20 @@ func TestGroupServices(t *testing.T) {
 	pg := groups[0].Services[0]
 	if pg.External || pg.Href != "/services/2" {
 		t.Errorf("PostgreSQL = %+v, want internal /services/2", pg)
+	}
+	// Whitespace-only URL is treated as no URL → internal detail link, not external.
+	// Database sorted by name: PostgreSQL, spaces-url.
+	db := groups[0].Services
+	if len(db) != 2 || db[1].Name != "spaces-url" {
+		t.Fatalf("database = %+v", db)
+	}
+	if db[1].External || db[1].Href != "/services/5" {
+		t.Errorf("spaces-url = %+v, want internal /services/5", db[1])
+	}
+	// Whitespace-only category collapses into Uncategorized, alongside the blank one.
+	unc := groups[2].Services
+	if len(unc) != 2 || unc[0].Name != "orphan" || unc[1].Name != "spaces-cat" {
+		t.Fatalf("uncategorized = %+v", unc)
 	}
 }
 

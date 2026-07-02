@@ -182,8 +182,8 @@ func groupServices(services []domain.Service) []serviceGroup {
 			cat = "Uncategorized"
 		}
 		link := serviceLink{Name: s.Name}
-		if strings.TrimSpace(s.URL) != "" {
-			link.Href, link.External = s.URL, true
+		if u := strings.TrimSpace(s.URL); u != "" {
+			link.Href, link.External = u, true
 		} else {
 			link.Href = fmt.Sprintf("/services/%d", s.ID)
 		}

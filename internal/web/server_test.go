@@ -1264,6 +1264,10 @@ func TestDashboard(t *testing.T) {
 	if !strings.Contains(body, "/certificates/1") || !strings.Contains(body, "example.com") {
 		t.Error("expiring certificate not shown in attention")
 	}
+	// with real attention items, the healthy-fallback message is suppressed
+	if strings.Contains(body, "Everything looks healthy.") {
+		t.Error("healthy fallback shown despite attention items")
+	}
 }
 
 func TestDashboardEmpty(t *testing.T) {
