@@ -324,6 +324,7 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/search", apiSearch(cat))
 		r.Get("/api/relationships", apiRelationships(relationships))
 		r.Get("/data", showData())
+		r.Post("/theme", setTheme(cfg.SecureCookies))
 		r.Get("/static/app.css", staticCSS(cfg.Version))
 		r.Get("/export", exportData(db))
 		r.Post("/import", importData(db))

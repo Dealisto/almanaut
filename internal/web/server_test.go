@@ -835,6 +835,86 @@ func postForm(t *testing.T, srv http.Handler, path string, form url.Values) *htt
 	return rec
 }
 
+func TestSetThemeHandler(t *testing.T) {
+	srv := newTestServer(t)
+
+	rec := postForm(t, srv, "/theme", url.Values{"theme": {"dark"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /theme = %d, want 303", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/" {
+		t.Errorf("redirect Location = %q, want /", loc)
+	}
+	if got := cookieValue(rec, "theme"); got != "dark" {
+		t.Errorf("theme cookie = %q, want dark", got)
+	}
+
+	// An invalid value resets to system.
+	rec2 := postForm(t, srv, "/theme", url.Values{"theme": {"blue"}})
+	if got := cookieValue(rec2, "theme"); got != "system" {
+		t.Errorf("theme cookie for invalid value = %q, want system", got)
+	}
+}
+
+func TestSetThemeCookieFlags(t *testing.T) {
+	srv := newTestServer(t)
+
+	rec := postForm(t, srv, "/theme", url.Values{"theme": {"dark"}})
+
+	var found *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "theme" {
+			found = c
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("theme cookie not set")
+	}
+	if found.Path != "/" {
+		t.Errorf("theme cookie Path = %q, want /", found.Path)
+	}
+	if !found.HttpOnly {
+		t.Error("theme cookie HttpOnly = false, want true")
+	}
+	if found.SameSite != http.SameSiteLaxMode {
+		t.Errorf("theme cookie SameSite = %v, want SameSiteLaxMode", found.SameSite)
+	}
+	if found.MaxAge <= 0 {
+		t.Errorf("theme cookie MaxAge = %d, want > 0", found.MaxAge)
+	}
+}
+
+func TestSetThemeRedirectsToReferer(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := url.Values{}
+	form.Set(csrfFieldName, csrfTestToken)
+	form.Set("theme", "light")
+	req := httptest.NewRequest(http.MethodPost, "/theme", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Referer", "http://example.com/hosts")
+	req.Host = "example.com"
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: csrfTestToken})
+
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if loc := rec.Header().Get("Location"); loc != "/hosts" {
+		t.Errorf("redirect Location = %q, want /hosts", loc)
+	}
+}
+
+// cookieValue returns the value of the named Set-Cookie on rec, or "".
+func cookieValue(rec *httptest.ResponseRecorder, name string) string {
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == name {
+			return c.Value
+		}
+	}
+	return ""
+}
+
 func getPageBody(t *testing.T, srv http.Handler, path string) string {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -1642,5 +1722,43 @@ func TestCreateAccountInvalidShowsError(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "name is required") {
 		t.Errorf("expected validation error in body; got:\n%s", rec.Body.String())
+	}
+}
+
+func TestThemeDataAttributeReflectsCookie(t *testing.T) {
+	srv := newTestServer(t)
+
+	// With a dark cookie, the html tag must carry data-theme="dark".
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "theme", Value: "dark"})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), `data-theme="dark"`) {
+		t.Error(`expected data-theme="dark" with theme=dark cookie`)
+	}
+
+	// With no cookie, it defaults to system.
+	rec2 := httptest.NewRecorder()
+	srv.ServeHTTP(rec2, httptest.NewRequest(http.MethodGet, "/", nil))
+	if !strings.Contains(rec2.Body.String(), `data-theme="system"`) {
+		t.Error(`expected data-theme="system" with no cookie`)
+	}
+}
+
+func TestThemeSwitcherMarksActive(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "theme", Value: "dark"})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, `action="/theme"`) {
+		t.Error("theme switcher form missing")
+	}
+	if !strings.Contains(body, `value="dark" class="active"`) {
+		t.Error("dark button should be active when theme=dark")
+	}
+	if strings.Contains(body, `value="system" class="active"`) {
+		t.Error("system button should not be active when theme=dark")
 	}
 }
