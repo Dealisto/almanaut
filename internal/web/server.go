@@ -271,8 +271,10 @@ func New(cfg Config) http.Handler {
 			listTmpl: "accounts.html", formTmpl: "account_form.html",
 		},
 	}
+	changelog := store.NewChangelogRepo(db)
+	journal := store.NewJournalRepo(db)
 	cat := entityCatalog{resources: resources}
-	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, db: db}
+	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, db: db}
 	r := chi.NewRouter()
 	logger := cfg.Logger
 	if logger == nil {
