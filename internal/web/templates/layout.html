@@ -4,92 +4,54 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · Almanaut</title>
-<style>
-:root{
-  --bg:#f6f7f9; --surface:#ffffff; --text:#1b1f24; --muted:#5b6470;
-  --border:#dfe3e8; --accent:#2f6feb; --accent-text:#ffffff;
-  --danger:#c0392b; --row-alt:#fafbfc;
-}
-@media (prefers-color-scheme: dark){
-  :root{
-    --bg:#0d1117; --surface:#161b22; --text:#e6edf3; --muted:#9198a1;
-    --border:#30363d; --accent:#4d8dfb; --accent-text:#ffffff;
-    --danger:#f0816f; --row-alt:#1b2129;
-  }
-}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);
-  font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-a{color:var(--accent);text-decoration:none}
-a:hover{text-decoration:underline}
-header.app{background:var(--surface);border-bottom:1px solid var(--border)}
-header.app .wrap{max-width:960px;margin:0 auto;padding:14px 20px;
-  display:flex;align-items:center;gap:16px}
-header.app .brand{font-weight:700;font-size:1.2rem;color:var(--text)}
-header.app nav a{color:var(--muted);margin-right:14px}
-main{max-width:960px;margin:0 auto;padding:24px 20px}
-h1{margin:0 0 16px;font-size:1.5rem}
-.btn{display:inline-block;padding:7px 13px;border-radius:6px;border:1px solid var(--border);
-  background:var(--surface);color:var(--text);cursor:pointer;font-size:.95rem;line-height:1.2}
-.btn:hover{text-decoration:none;border-color:var(--accent)}
-.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-text)}
-.btn-danger{color:var(--danger)}
-.toolbar{margin-bottom:16px}
-.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
-table{border-collapse:collapse;width:100%}
-th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
-th{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
-tbody tr:nth-child(even){background:var(--row-alt)}
-tbody tr:last-child td{border-bottom:0}
-td .btn{margin-right:6px}
-.empty{padding:28px;text-align:center;color:var(--muted)}
-form.stack{max-width:540px;background:var(--surface);border:1px solid var(--border);
-  border-radius:8px;padding:20px}
-form.stack label{display:block;margin-bottom:14px;font-size:.85rem;color:var(--muted)}
-form.stack input,form.stack select,form.stack textarea{display:block;width:100%;margin-top:6px;
-  padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);
-  color:var(--text);font:inherit}
-form.stack textarea{min-height:84px;resize:vertical}
-.error{background:rgba(192,57,43,.12);color:var(--danger);border:1px solid var(--danger);
-  padding:10px 14px;border-radius:6px;margin-bottom:16px}
-.actions{display:flex;gap:10px;align-items:center;margin-top:4px}
-.form-inline{display:inline}
-th{vertical-align:top}
-.notes{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 18px}
-.notes h1,.notes h2,.notes h3{margin:.4em 0}
-.tags{margin-bottom:12px}
-.tag{display:inline-flex;align-items:center;gap:4px;background:var(--row-alt);border:1px solid var(--border);
-  border-radius:12px;padding:2px 10px;margin:0 6px 6px 0;font-size:.85rem}
-.tag .form-inline{display:inline}
-.tag-x{border:0;background:none;color:var(--danger);cursor:pointer;font-size:1rem;line-height:1;padding:0}
-.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:.78rem;
-  background:var(--row-alt);border:1px solid var(--border);color:var(--muted)}
-.badge-warn{background:rgba(192,57,43,.12);border-color:var(--danger);color:var(--danger)}
-ul.related{padding-left:20px}
-header.app .search{margin-left:auto}
-header.app .search input{padding:6px 10px;border:1px solid var(--border);border-radius:6px;
-  background:var(--bg);color:var(--text);font:inherit;font-size:.9rem}
-form.search-page{display:flex;gap:8px;margin-bottom:20px}
-form.search-page input{flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;
-  background:var(--bg);color:var(--text);font:inherit}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:8px}
-.card{display:flex;flex-direction:column;gap:4px;padding:16px 18px;background:var(--surface);
-  border:1px solid var(--border);border-radius:8px;color:var(--text)}
-.card:hover{border-color:var(--accent);text-decoration:none}
-.card-count{font-size:1.8rem;font-weight:700}
-.card-label{color:var(--muted);font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}
-.attention{margin-bottom:12px}
-.attention h3{margin:.6em 0 .3em}
-</style>
+<link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<header class="app"><div class="wrap">
-  <a class="brand" href="/">Almanaut</a>
-  <nav><a href="/">Dashboard</a><a href="/hosts">Hosts</a><a href="/services">Services</a><a href="/networks">Networks</a><a href="/domains">Domains</a><a href="/certificates">Certificates</a><a href="/backups">Backups</a><a href="/hardware">Hardware</a><a href="/subscriptions">Subscriptions</a><a href="/accounts">Accounts</a><a href="/tags">Tags</a><a href="/relationships">Relationships</a><a href="/impact">Impact</a><a href="/checks">Checks</a><a href="/discovery">Discover</a><a href="/data">Data</a></nav>
-  <form class="search" method="get" action="/search" role="search">
-    <input type="search" name="q" placeholder="Search…" aria-label="Search">
-  </form>
-</div></header>
-<main>{{template "content" .}}</main>
+<input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="/">Almanaut</a>
+    <nav>
+      <div class="nav-group">
+        <span class="nav-label">Overview</span>
+        <a href="/" class="{{if isActive "/"}}active{{end}}">Dashboard</a>
+      </div>
+      <div class="nav-group">
+        <span class="nav-label">Inventory</span>
+        <a href="/hosts" class="{{if isActive "/hosts"}}active{{end}}">Hosts</a>
+        <a href="/services" class="{{if isActive "/services"}}active{{end}}">Services</a>
+        <a href="/networks" class="{{if isActive "/networks"}}active{{end}}">Networks</a>
+        <a href="/domains" class="{{if isActive "/domains"}}active{{end}}">Domains</a>
+        <a href="/certificates" class="{{if isActive "/certificates"}}active{{end}}">Certificates</a>
+        <a href="/backups" class="{{if isActive "/backups"}}active{{end}}">Backups</a>
+        <a href="/hardware" class="{{if isActive "/hardware"}}active{{end}}">Hardware</a>
+        <a href="/subscriptions" class="{{if isActive "/subscriptions"}}active{{end}}">Subscriptions</a>
+        <a href="/accounts" class="{{if isActive "/accounts"}}active{{end}}">Accounts</a>
+      </div>
+      <div class="nav-group">
+        <span class="nav-label">Connections &amp; views</span>
+        <a href="/relationships" class="{{if isActive "/relationships"}}active{{end}}">Relationships</a>
+        <a href="/impact" class="{{if isActive "/impact"}}active{{end}}">Impact</a>
+        <a href="/checks" class="{{if isActive "/checks"}}active{{end}}">Checks</a>
+        <a href="/tags" class="{{if isActive "/tags"}}active{{end}}">Tags</a>
+      </div>
+      <div class="nav-group">
+        <span class="nav-label">System</span>
+        <a href="/discovery" class="{{if isActive "/discovery"}}active{{end}}">Discover</a>
+        <a href="/data" class="{{if isActive "/data"}}active{{end}}">Data</a>
+      </div>
+    </nav>
+  </aside>
+  <label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
+  <div class="content">
+    <div class="topbar">
+      <label for="nav-toggle" class="hamburger" aria-label="Toggle navigation" role="button">☰</label>
+      <form class="search" method="get" action="/search" role="search">
+        <input type="search" name="q" placeholder="Search…" aria-label="Search">
+      </form>
+    </div>
+    <main>{{template "content" .}}</main>
+  </div>
+</div>
 </body>
 </html>{{end}}
