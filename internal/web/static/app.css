@@ -39,6 +39,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 @media (prefers-reduced-motion: reduce){
   *{transition:none!important;animation:none!important}
 }
+.muted{color:var(--muted)}
 .app-shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
 .nav-toggle{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
 .hamburger{display:none;font-size:1.3rem;line-height:1;cursor:pointer;
