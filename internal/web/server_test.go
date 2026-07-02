@@ -856,6 +856,55 @@ func TestSetThemeHandler(t *testing.T) {
 	}
 }
 
+func TestSetThemeCookieFlags(t *testing.T) {
+	srv := newTestServer(t)
+
+	rec := postForm(t, srv, "/theme", url.Values{"theme": {"dark"}})
+
+	var found *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "theme" {
+			found = c
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("theme cookie not set")
+	}
+	if found.Path != "/" {
+		t.Errorf("theme cookie Path = %q, want /", found.Path)
+	}
+	if !found.HttpOnly {
+		t.Error("theme cookie HttpOnly = false, want true")
+	}
+	if found.SameSite != http.SameSiteLaxMode {
+		t.Errorf("theme cookie SameSite = %v, want SameSiteLaxMode", found.SameSite)
+	}
+	if found.MaxAge <= 0 {
+		t.Errorf("theme cookie MaxAge = %d, want > 0", found.MaxAge)
+	}
+}
+
+func TestSetThemeRedirectsToReferer(t *testing.T) {
+	srv := newTestServer(t)
+
+	form := url.Values{}
+	form.Set(csrfFieldName, csrfTestToken)
+	form.Set("theme", "light")
+	req := httptest.NewRequest(http.MethodPost, "/theme", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Referer", "http://example.com/hosts")
+	req.Host = "example.com"
+	req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: csrfTestToken})
+
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if loc := rec.Header().Get("Location"); loc != "/hosts" {
+		t.Errorf("redirect Location = %q, want /hosts", loc)
+	}
+}
+
 // cookieValue returns the value of the named Set-Cookie on rec, or "".
 func cookieValue(rec *httptest.ResponseRecorder, name string) string {
 	for _, c := range rec.Result().Cookies() {

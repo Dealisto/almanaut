@@ -40,6 +40,9 @@ func TestSafeRedirectTarget(t *testing.T) {
 		{name: "same host path+query", referer: "http://example.com/search?q=x", want: "/search?q=x"},
 		{name: "foreign host", referer: "http://evil.com/steal", want: "/"},
 		{name: "garbage", referer: "://nonsense", want: "/"},
+		{name: "protocol-relative", referer: "//evil.com/x", want: "/"},
+		{name: "backslash path", referer: "http://example.com/\\evil.com", want: "/"},
+		{name: "host:port mismatch", referer: "http://example.com:8080/x", want: "/"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -45,6 +45,11 @@ func safeRedirectTarget(r *http.Request) string {
 	if !strings.HasPrefix(u.Path, "/") {
 		return "/"
 	}
+	// Reject paths a browser could coerce into an off-site (protocol-relative)
+	// redirect: a leading "//" or any backslash.
+	if strings.HasPrefix(u.Path, "//") || strings.Contains(u.Path, `\`) {
+		return "/"
+	}
 	if u.RawQuery != "" {
 		return u.Path + "?" + u.RawQuery
 	}
