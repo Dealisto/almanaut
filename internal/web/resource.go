@@ -279,7 +279,7 @@ func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
 		if rs.ipam != nil {
 			ipam = rs.ipam(item)
 		}
-		renderDetailExtra(w, req, d.cat, d.tags, d.rels, rs.sing, id,
+		renderDetailExtra(w, req, d.cat, d.tags, d.rels, d.journal, d.changelog, rs.sing, id,
 			rs.heading+": "+rs.label(item), rs.notes(item),
 			fmt.Sprintf("%s/%d/edit", rs.basePath(), id), rs.basePath(), rs.fields(item), ipam)
 	}
@@ -336,6 +336,7 @@ func (rs resource[T]) mount(r chi.Router, d handlerDeps) {
 	r.Get(rs.basePath()+"/{id}/edit", rs.editForm)
 	r.Post(rs.basePath()+"/{id}", rs.update(d))
 	r.Post(rs.basePath()+"/{id}/delete", rs.del(d))
+	r.Post(rs.basePath()+"/{id}/journal", rs.addJournal(d))
 }
 
 // listJSON writes all entities of this type as a JSON array.

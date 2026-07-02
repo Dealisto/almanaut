@@ -196,3 +196,37 @@ form.search-page input{flex:1;padding:8px 10px;border:1px solid var(--border);bo
   #nav-toggle:checked ~ .app-shell .nav-overlay{display:block;position:fixed;
     inset:0;z-index:20;background:rgba(0,0,0,.4)}
 }
+
+/* Journal: kind-coloured dot + inline add form, mirrors the .tags layout */
+.journal{list-style:none;margin:0;padding:0}
+.journal-entry{display:flex;align-items:baseline;gap:10px;padding:8px 0;
+  border-bottom:1px solid var(--border)}
+.journal-entry:last-child{border-bottom:0}
+.journal-body{flex:1;min-width:0}
+.journal-body p{margin:0}
+.journal-entry time{color:var(--muted);font-size:.8rem;white-space:nowrap}
+.journal-add{display:flex;gap:8px;margin-bottom:16px}
+.journal-add select{padding:8px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--bg);color:var(--text);font:inherit}
+.journal-add input{flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--bg);color:var(--text);font:inherit}
+.jk{flex:none;display:inline-block;width:.6rem;height:.6rem;border-radius:50%;
+  margin-top:.4em;background:var(--muted)}
+.jk-info{background:var(--accent)}
+.jk-success{background:var(--ok)}
+.jk-warning{background:var(--warn)}
+.jk-incident{background:var(--crit)}
+
+/* Change history: collapsible list of changelog rows */
+.changelog summary{cursor:pointer;color:var(--muted);font-size:.9rem}
+.changelog-list{list-style:none;margin:10px 0 0;padding:0}
+.changelog-list>li{padding:8px 0;border-bottom:1px solid var(--border)}
+.changelog-list>li:last-child{border-bottom:0}
+.cl-action{display:inline-block;font-weight:650;text-transform:uppercase;font-size:.72rem;
+  letter-spacing:.04em;padding:1px 8px;border-radius:10px;background:var(--row-alt);
+  border:1px solid var(--border);color:var(--muted)}
+.cl-create{color:var(--ok);border-color:var(--ok)}
+.cl-update{color:var(--warn);border-color:var(--warn)}
+.cl-delete{color:var(--crit);border-color:var(--crit)}
+.cl-actor{color:var(--muted);font-size:.85em}
+.cl-fields{list-style:none;margin:6px 0 0;padding-left:18px;color:var(--text);font-size:.9rem}

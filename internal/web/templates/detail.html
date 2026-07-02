@@ -81,6 +81,51 @@
 </section>
 
 <section class="panel">
+  <h2>Journal</h2>
+  <form class="journal-add" method="post" action="{{.ListURL}}/{{.EntityID}}/journal">
+    {{ csrfField }}
+    <select name="kind" aria-label="kind">
+      {{range .JournalKinds}}<option value="{{.}}">{{.}}</option>{{end}}
+    </select>
+    <input name="body" placeholder="add a journal entry…" required>
+    <button class="btn btn-primary" type="submit">Add</button>
+  </form>
+  {{if .JournalEntries}}
+  <ul class="journal">
+    {{range .JournalEntries}}
+    <li class="journal-entry">
+      <span class="jk jk-{{.Kind}}" title="{{.Kind}}"></span>
+      <div class="journal-body">{{.BodyHTML}}</div>
+      <time>{{.CreatedAt}}</time>
+      <form class="form-inline" method="post" action="/journal/{{.ID}}/delete">
+        {{ csrfField }}
+        <button class="tag-x" type="submit" title="delete">&times;</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}<p class="muted"><em>No journal entries.</em></p>{{end}}
+</section>
+
+<section class="panel">
+  <h2>Change history</h2>
+  {{if .Changelog}}
+  <details class="changelog">
+    <summary>{{len .Changelog}} change(s)</summary>
+    <ul class="changelog-list">
+      {{range .Changelog}}
+      <li>
+        <span class="cl-action cl-{{.Action}}">{{.Action}}</span>
+        <time>{{.CreatedAt}}</time>{{if .Actor}} <span class="cl-actor">by {{.Actor}}</span>{{end}}
+        {{if .Changes}}<ul class="cl-fields">{{range .Changes}}<li><b>{{.Field}}</b>: {{.Old}} → {{.New}}</li>{{end}}</ul>{{end}}
+      </li>
+      {{end}}
+    </ul>
+  </details>
+  {{else}}<p class="muted"><em>No changes recorded.</em></p>{{end}}
+</section>
+
+<section class="panel">
   <h2>Notes</h2>
   <div class="notes">{{if .NotesHTML}}{{.NotesHTML}}{{else}}<em>No notes.</em>{{end}}</div>
 </section>
