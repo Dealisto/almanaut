@@ -1,0 +1,175 @@
+# Sample almanaut inventory — a small, coherent homelab you can import to see
+# the app populated. Import from the UI at Data → Import (this REPLACES all
+# current data). Format matches `GET /export`; ids are referenced by the
+# relationships below, so keep them stable if you edit.
+version: 1
+
+hosts:
+  - id: 1
+    name: pve
+    type: physical
+    os: Proxmox VE 8
+    cpu: Ryzen 5 5600
+    ram: 64 GB
+    disk: 2 TB NVMe
+    status: up
+    ips: ["192.168.1.10"]
+    notes: Hypervisor
+  - id: 2
+    name: docker01
+    type: vm
+    os: Debian 12
+    cpu: 4 vCPU
+    ram: 8 GB
+    disk: 100 GB
+    status: up
+    ips: ["192.168.1.20"]
+    notes: ""
+  - id: 3
+    name: nas
+    type: physical
+    os: TrueNAS SCALE
+    cpu: Intel N100
+    ram: 32 GB
+    disk: 4x 8 TB RAIDZ1
+    status: up
+    ips: ["192.168.1.30"]
+    notes: ""
+
+services:
+  - id: 1
+    name: Jellyfin
+    kind: container
+    url: http://192.168.1.20:8096
+    ports: "8096"
+    category: Media
+    notes: ""
+  - id: 2
+    name: Nginx Proxy Manager
+    kind: container
+    url: http://192.168.1.20:81
+    ports: "80, 443, 81"
+    category: Networking
+    notes: Reverse proxy / TLS termination
+  - id: 3
+    name: PostgreSQL
+    kind: container
+    url: ""
+    ports: "5432"
+    category: Database
+    notes: ""
+
+networks:
+  - id: 1
+    name: LAN
+    cidr: 192.168.1.0/24
+    vlan: "1"
+    gateway: 192.168.1.1
+    notes: Main home network
+
+domains:
+  - id: 1
+    fqdn: jellyfin.home.lan
+    provider: Pi-hole
+    notes: ""
+
+certificates:
+  - id: 1
+    subject: "*.home.lan"
+    issuer: Let's Encrypt
+    expires_on: "2026-10-01"
+    auto_renew: true
+    notes: Wildcard cert served by NPM
+
+backups:
+  - id: 1
+    source: PostgreSQL
+    destination: nas:/mnt/pool/backups/pg
+    frequency: daily
+    last_run: "2026-07-01"
+    notes: pg_dump via cron
+
+hardware:
+  - id: 1
+    name: Rack UPS
+    kind: ups
+    manufacturer: APC
+    model: Back-UPS 1500
+    serial: 3B12345
+    location: Rack, garage
+    purchase_date: "2024-03-15"
+    warranty_end: "2027-03-15"
+    status: active
+    notes: ""
+
+subscriptions:
+  - id: 1
+    name: Backup VPS
+    kind: vps
+    provider: Hetzner
+    amount: "4.51"
+    currency: EUR
+    billing_cycle: monthly
+    renewal_date: "2026-08-01"
+    auto_renew: true
+    status: active
+    notes: Offsite backup target
+
+accounts:
+  - id: 1
+    name: Proxmox root
+    kind: infrastructure
+    username: root@pam
+    password_manager: Bitwarden
+    secret_ref: Proxmox root
+    url: https://192.168.1.10:8006
+    status: active
+    notes: ""
+
+# Relationships wire the entities together (kinds: runs on, connected to,
+# exposed via, secured by, backed up by, depends on).
+relationships:
+  - id: 1
+    from_type: host
+    from_id: 2
+    to_type: host
+    to_id: 1
+    kind: runs on          # docker01 (VM) runs on pve
+  - id: 2
+    from_type: service
+    from_id: 1
+    to_type: host
+    to_id: 2
+    kind: runs on          # Jellyfin runs on docker01
+  - id: 3
+    from_type: service
+    from_id: 3
+    to_type: host
+    to_id: 2
+    kind: runs on          # PostgreSQL runs on docker01
+  - id: 4
+    from_type: service
+    from_id: 1
+    to_type: service
+    to_id: 2
+    kind: exposed via      # Jellyfin exposed via Nginx Proxy Manager
+  - id: 5
+    from_type: service
+    from_id: 1
+    to_type: certificate
+    to_id: 1
+    kind: secured by       # Jellyfin secured by the wildcard cert
+  - id: 6
+    from_type: service
+    from_id: 3
+    to_type: backup
+    to_id: 1
+    kind: backed up by     # PostgreSQL backed up by the daily dump
+  - id: 7
+    from_type: host
+    from_id: 1
+    to_type: network
+    to_id: 1
+    kind: connected to     # pve connected to the LAN
+
+tags: []
