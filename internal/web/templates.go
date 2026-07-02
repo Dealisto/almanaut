@@ -18,7 +18,10 @@ var pages = func() map[string]*template.Template {
 	for _, page := range []string{"hosts.html", "host_form.html", "services.html", "service_form.html", "networks.html", "network_form.html", "domains.html", "domain_form.html", "certificates.html", "certificate_form.html", "backups.html", "backup_form.html", "hardware.html", "hardware_form.html", "subscriptions.html", "subscription_form.html", "accounts.html", "account_form.html", "relationships.html", "impact.html", "checks.html", "detail.html", "tags_overview.html", "search.html", "data.html", "dashboard.html", "discovery.html", "discovery_docker.html", "discovery_network.html", "discovery_proxmox.html"} {
 		m[page] = template.Must(
 			template.New("layout.html").
-				Funcs(template.FuncMap{"csrfField": func() template.HTML { return "" }}).
+				Funcs(template.FuncMap{
+					"csrfField": func() template.HTML { return "" },
+					"isActive":  func(string) bool { return false },
+				}).
 				ParseFS(templatesFS, "templates/layout.html", "templates/"+page),
 		)
 	}
@@ -46,6 +49,7 @@ func render(w http.ResponseWriter, r *http.Request, page string, data any) {
 			return template.HTML(`<input type="hidden" name="` + csrfFieldName +
 				`" value="` + template.HTMLEscapeString(token) + `">`)
 		},
+		"isActive": func(base string) bool { return navIsActive(r.URL.Path, base) },
 	})
 	var buf bytes.Buffer
 	if err := clone.ExecuteTemplate(&buf, "layout", data); err != nil {

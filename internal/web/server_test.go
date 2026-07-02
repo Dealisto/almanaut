@@ -518,6 +518,20 @@ func TestStaticCSSServed(t *testing.T) {
 	}
 }
 
+func TestSidebarMarksActiveItem(t *testing.T) {
+	srv := newTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/hosts", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/hosts" class="active"`) {
+		t.Error("Hosts nav item should be marked active on /hosts")
+	}
+	if strings.Contains(body, `href="/" class="active"`) {
+		t.Error("Dashboard should not be active on /hosts")
+	}
+}
+
 func TestCreateAndListService(t *testing.T) {
 	srv := newTestServer(t)
 
