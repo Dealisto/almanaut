@@ -37,13 +37,14 @@ type historyData struct {
 // buildActivityRows turns changelog events into display rows, linking each to
 // its entity's detail page when that entity still exists. Delete/import rows
 // (and rows whose entity is gone) show the frozen label, unlinked.
-func buildActivityRows(cat entityCatalog, events []store.ChangeEvent) []historyRow {
+func buildActivityRows(cat entityCatalog, events []store.ChangeEvent) ([]historyRow, error) {
 	opts, err := cat.options()
+	if err != nil {
+		return nil, err
+	}
 	live := map[string]bool{}
-	if err == nil {
-		for _, o := range opts {
-			live[o.Value] = true
-		}
+	for _, o := range opts {
+		live[o.Value] = true
 	}
 	rows := make([]historyRow, 0, len(events))
 	for _, e := range events {
@@ -57,7 +58,7 @@ func buildActivityRows(cat entityCatalog, events []store.ChangeEvent) []historyR
 			Action: e.Action, Actor: e.Actor, Changes: e.Changes, CreatedAt: e.CreatedAt,
 		})
 	}
-	return rows
+	return rows, nil
 }
 
 // history renders the global activity feed (most recent first).
@@ -69,6 +70,11 @@ func history(cat entityCatalog, changelog *store.ChangelogRepo) http.HandlerFunc
 			serverError(w, req, err)
 			return
 		}
-		render(w, req, "history.html", historyData{Title: "History", Rows: buildActivityRows(cat, events)})
+		rows, err := buildActivityRows(cat, events)
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
+		render(w, req, "history.html", historyData{Title: "History", Rows: rows})
 	}
 }

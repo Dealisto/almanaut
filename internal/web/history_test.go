@@ -120,8 +120,10 @@ func TestHistoryPageListsRecentActivityNewestFirst(t *testing.T) {
 	if !strings.Contains(body, "nas") {
 		t.Errorf("history page missing entity label:\n%s", body)
 	}
-	// update recorded after create → appears earlier (newest first)
-	if strings.Index(body, "update") > strings.Index(body, "create") {
+	// update recorded after create → its row (cl-update) renders before the
+	// create row (cl-create). Anchor on the precise action classes rather than
+	// bare "update"/"create" substrings, which could match anywhere in markup.
+	if strings.Index(body, "cl-update") > strings.Index(body, "cl-create") {
 		t.Errorf("history not newest-first")
 	}
 }
