@@ -4,31 +4,33 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 )
 
 // Snapshot is the full inventory in a form that round-trips through YAML.
 type Snapshot struct {
-	Version       int                   `yaml:"version"`
-	Hosts         []domain.Host         `yaml:"hosts"`
-	Services      []domain.Service      `yaml:"services"`
-	Networks      []domain.Network      `yaml:"networks"`
-	Domains       []domain.Domain       `yaml:"domains"`
-	Certificates  []domain.Certificate  `yaml:"certificates"`
-	Backups       []domain.Backup       `yaml:"backups"`
-	Hardware      []domain.Hardware     `yaml:"hardware"`
-	Subscriptions []domain.Subscription `yaml:"subscriptions"`
-	Accounts      []domain.Account      `yaml:"accounts"`
-	Relationships []domain.Relationship `yaml:"relationships"`
-	Tags          []domain.Tag          `yaml:"tags"`
+	Version        int                   `yaml:"version"`
+	Hosts          []domain.Host         `yaml:"hosts"`
+	Services       []domain.Service      `yaml:"services"`
+	Networks       []domain.Network      `yaml:"networks"`
+	Domains        []domain.Domain       `yaml:"domains"`
+	Certificates   []domain.Certificate  `yaml:"certificates"`
+	Backups        []domain.Backup       `yaml:"backups"`
+	Hardware       []domain.Hardware     `yaml:"hardware"`
+	Subscriptions  []domain.Subscription `yaml:"subscriptions"`
+	Accounts       []domain.Account      `yaml:"accounts"`
+	Relationships  []domain.Relationship `yaml:"relationships"`
+	Tags           []domain.Tag          `yaml:"tags"`
+	JournalEntries []domain.JournalEntry `yaml:"journal_entries"`
 }
 
 // Export gathers the entire inventory into a Snapshot, reusing the existing
 // per-repo List() read paths. The first List error (in field order) is
 // returned; later lists short-circuit once err is set.
 //
-// All eleven lists run inside a single read transaction so the snapshot is
+// All twelve lists run inside a single read transaction so the snapshot is
 // internally consistent: without it a concurrent write between two lists could
 // produce a YAML dump with, say, a relationship pointing at a host that the
 // hosts list no longer contains — a corruption only discovered at re-import.
@@ -43,18 +45,19 @@ func Export(db *sql.DB) (Snapshot, error) {
 
 	var listErr error
 	snap := Snapshot{
-		Version:       1,
-		Hosts:         exportList(&listErr, NewHostRepo(db).WithTx(tx).List),
-		Services:      exportList(&listErr, NewServiceRepo(db).WithTx(tx).List),
-		Networks:      exportList(&listErr, NewNetworkRepo(db).WithTx(tx).List),
-		Domains:       exportList(&listErr, NewDomainRepo(db).WithTx(tx).List),
-		Certificates:  exportList(&listErr, NewCertificateRepo(db).WithTx(tx).List),
-		Backups:       exportList(&listErr, NewBackupRepo(db).WithTx(tx).List),
-		Hardware:      exportList(&listErr, NewHardwareRepo(db).WithTx(tx).List),
-		Subscriptions: exportList(&listErr, NewSubscriptionRepo(db).WithTx(tx).List),
-		Accounts:      exportList(&listErr, NewAccountRepo(db).WithTx(tx).List),
-		Relationships: exportList(&listErr, NewRelationshipRepo(db).WithTx(tx).List),
-		Tags:          exportList(&listErr, NewTagRepo(db).WithTx(tx).List),
+		Version:        1,
+		Hosts:          exportList(&listErr, NewHostRepo(db).WithTx(tx).List),
+		Services:       exportList(&listErr, NewServiceRepo(db).WithTx(tx).List),
+		Networks:       exportList(&listErr, NewNetworkRepo(db).WithTx(tx).List),
+		Domains:        exportList(&listErr, NewDomainRepo(db).WithTx(tx).List),
+		Certificates:   exportList(&listErr, NewCertificateRepo(db).WithTx(tx).List),
+		Backups:        exportList(&listErr, NewBackupRepo(db).WithTx(tx).List),
+		Hardware:       exportList(&listErr, NewHardwareRepo(db).WithTx(tx).List),
+		Subscriptions:  exportList(&listErr, NewSubscriptionRepo(db).WithTx(tx).List),
+		Accounts:       exportList(&listErr, NewAccountRepo(db).WithTx(tx).List),
+		Relationships:  exportList(&listErr, NewRelationshipRepo(db).WithTx(tx).List),
+		Tags:           exportList(&listErr, NewTagRepo(db).WithTx(tx).List),
+		JournalEntries: exportList(&listErr, NewJournalRepo(db).WithTx(tx).List),
 	}
 	if listErr != nil {
 		return Snapshot{}, listErr
@@ -92,6 +95,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 		validateAll("account", snap.Accounts, func(a domain.Account) int64 { return a.ID }),
 		validateAll("relationship", snap.Relationships, func(r domain.Relationship) int64 { return r.ID }),
 		validateAll("tag", snap.Tags, func(t domain.Tag) int64 { return t.ID }),
+		validateAll("journal_entry", snap.JournalEntries, func(e domain.JournalEntry) int64 { return e.ID }),
 	} {
 		if err != nil {
 			return err
@@ -99,7 +103,18 @@ func Import(db *sql.DB, snap Snapshot) error {
 	}
 
 	return WithTx(db, func(tx *sql.Tx) error {
-		return replaceInventory(tx, snap)
+		if err := replaceInventory(tx, snap); err != nil {
+			return err
+		}
+		n := len(snap.Hosts) + len(snap.Services) + len(snap.Networks) + len(snap.Domains) +
+			len(snap.Certificates) + len(snap.Backups) + len(snap.Hardware) +
+			len(snap.Subscriptions) + len(snap.Accounts) + len(snap.Relationships) +
+			len(snap.Tags) + len(snap.JournalEntries)
+		return NewChangelogRepo(db).WithTx(tx).Create(ChangeEvent{
+			EntityType: "", EntityID: 0, Label: "inventory", Action: domain.ActionImport,
+			Changes:   []domain.FieldChange{{Field: "records", New: fmt.Sprintf("%d", n)}},
+			CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		})
 	})
 }
 
@@ -107,7 +122,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 // inside WithTx, which owns begin/commit/rollback and is panic-safe, so any
 // failure rolls the whole replacement back.
 func replaceInventory(tx *sql.Tx, snap Snapshot) error {
-	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "relationships", "tags"} {
+	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "relationships", "tags", "journal_entries"} {
 		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 			return fmt.Errorf("clear %s: %w", table, err)
 		}
@@ -212,6 +227,14 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 		if err := insert("tag", tg.ID,
 			`INSERT INTO tags (id, entity_type, entity_id, name) VALUES (?, ?, ?, ?)`,
 			tg.ID, tg.EntityType, tg.EntityID, tg.Name); err != nil {
+			return err
+		}
+	}
+	for _, e := range snap.JournalEntries {
+		if err := insert("journal_entry", e.ID,
+			`INSERT INTO journal_entries (id, entity_type, entity_id, kind, body, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			e.ID, e.EntityType, e.EntityID, e.Kind, e.Body, e.CreatedAt); err != nil {
 			return err
 		}
 	}
