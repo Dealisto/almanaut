@@ -23,9 +23,10 @@ type attentionItem struct {
 }
 
 type attentionGroup struct {
-	Title   string
-	MoreURL string
-	Items   []attentionItem
+	Title    string
+	MoreURL  string
+	Severity string // "warn" or "crit" — drives the dashboard severity dot
+	Items    []attentionItem
 }
 
 type serviceLink struct {
@@ -154,11 +155,11 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo) http.HandlerFunc
 		}
 
 		groups := []attentionGroup{
-			{Title: "Certificates expiring soon", MoreURL: "/checks", Items: certItems},
-			{Title: "Services without backup", MoreURL: "/checks", Items: svcItems},
-			{Title: "Hosts down", Items: hostItems},
-			{Title: "Hardware warranty expiring", MoreURL: "/checks", Items: hwItems},
-			{Title: "Subscriptions renewing soon", MoreURL: "/checks", Items: subItems},
+			{Title: "Certificates expiring soon", MoreURL: "/checks", Severity: "warn", Items: certItems},
+			{Title: "Services without backup", MoreURL: "/checks", Severity: "warn", Items: svcItems},
+			{Title: "Hosts down", Severity: "crit", Items: hostItems},
+			{Title: "Hardware warranty expiring", MoreURL: "/checks", Severity: "warn", Items: hwItems},
+			{Title: "Subscriptions renewing soon", MoreURL: "/checks", Severity: "warn", Items: subItems},
 		}
 		render(w, req, "dashboard.html", dashboardData{
 			Title:        "Dashboard",

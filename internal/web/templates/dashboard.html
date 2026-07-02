@@ -5,37 +5,30 @@
   <input type="search" name="q" placeholder="Search hosts, services, IPs…" aria-label="Search">
 </form>
 
-<section class="home-section">
+<section class="panel">
   <h2>Needs attention</h2>
   {{if .AnyAttention}}
     {{range .Groups}}{{if .Items}}
-    <div class="attention">
-      <h3>{{if .MoreURL}}<a href="{{.MoreURL}}">{{.Title}}</a>{{else}}{{.Title}}{{end}}</h3>
-      <ul class="related">{{range .Items}}<li><a href="{{.URL}}">{{.Label}}</a></li>{{end}}</ul>
+    <div class="attn-group">
+      <p class="attn-title"><span class="sev sev-{{.Severity}}"></span>{{if .MoreURL}}<a href="{{.MoreURL}}">{{.Title}}</a>{{else}}{{.Title}}{{end}}<span class="attn-count">{{len .Items}}</span></p>
+      <ul class="attn-list">{{range .Items}}<li><a href="{{.URL}}">{{.Label}}</a></li>{{end}}</ul>
     </div>
     {{end}}{{end}}
   {{else}}
-    <p class="muted">Everything looks healthy.</p>
+    <p class="healthy"><span class="sev sev-ok"></span>Everything looks healthy.</p>
   {{end}}
 </section>
 
 {{if .Services}}
-<section class="home-section">
+<section class="panel">
   <h2>Services</h2>
-  {{range .Services}}
-  <div class="svc-group">
-    <span class="svc-cat">{{.Category}}</span>
-    <div class="svc-tiles">
-      {{range .Services}}
-      <a class="svc-tile" href="{{.Href}}"{{if .External}} target="_blank" rel="noopener noreferrer"{{end}}>{{.Name}}{{if .External}} <span class="svc-ext">↗</span>{{end}}</a>
-      {{end}}
-    </div>
+  <div class="svc-tiles">
+    {{range .Services}}{{$cat := .Category}}{{range .Services}}<a class="svc-tile" href="{{.Href}}"{{if .External}} target="_blank" rel="noopener noreferrer"{{end}}><span class="svc-name">{{.Name}}{{if .External}} <span class="svc-ext">↗</span>{{end}}</span><span class="svc-cat-tag">{{$cat}}</span></a>{{end}}{{end}}
   </div>
-  {{end}}
 </section>
 {{end}}
 
-<section class="home-section">
+<section class="panel">
   <h2>Inventory</h2>
   <div class="count-strip">
     {{range .Counts}}<a class="count-chip" href="{{.URL}}">{{.Label}} <b>{{.Count}}</b></a>{{end}}
