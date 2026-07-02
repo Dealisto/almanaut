@@ -30,3 +30,27 @@ func TestThemeFromCookie(t *testing.T) {
 		})
 	}
 }
+
+func TestSafeRedirectTarget(t *testing.T) {
+	cases := []struct {
+		name, referer, want string
+	}{
+		{name: "no referer", referer: "", want: "/"},
+		{name: "same host path", referer: "http://example.com/hosts", want: "/hosts"},
+		{name: "same host path+query", referer: "http://example.com/search?q=x", want: "/search?q=x"},
+		{name: "foreign host", referer: "http://evil.com/steal", want: "/"},
+		{name: "garbage", referer: "://nonsense", want: "/"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/theme", nil)
+			req.Host = "example.com"
+			if c.referer != "" {
+				req.Header.Set("Referer", c.referer)
+			}
+			if got := safeRedirectTarget(req); got != c.want {
+				t.Errorf("safeRedirectTarget(%q) = %q, want %q", c.referer, got, c.want)
+			}
+		})
+	}
+}

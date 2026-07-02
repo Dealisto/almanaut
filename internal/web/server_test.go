@@ -835,6 +835,37 @@ func postForm(t *testing.T, srv http.Handler, path string, form url.Values) *htt
 	return rec
 }
 
+func TestSetThemeHandler(t *testing.T) {
+	srv := newTestServer(t)
+
+	rec := postForm(t, srv, "/theme", url.Values{"theme": {"dark"}})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /theme = %d, want 303", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/" {
+		t.Errorf("redirect Location = %q, want /", loc)
+	}
+	if got := cookieValue(rec, "theme"); got != "dark" {
+		t.Errorf("theme cookie = %q, want dark", got)
+	}
+
+	// An invalid value resets to system.
+	rec2 := postForm(t, srv, "/theme", url.Values{"theme": {"blue"}})
+	if got := cookieValue(rec2, "theme"); got != "system" {
+		t.Errorf("theme cookie for invalid value = %q, want system", got)
+	}
+}
+
+// cookieValue returns the value of the named Set-Cookie on rec, or "".
+func cookieValue(rec *httptest.ResponseRecorder, name string) string {
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == name {
+			return c.Value
+		}
+	}
+	return ""
+}
+
 func getPageBody(t *testing.T, srv http.Handler, path string) string {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, path, nil)
