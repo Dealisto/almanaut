@@ -1,6 +1,12 @@
 {{define "content"}}
-<h1>Checks</h1>
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Connections &amp; views</span>
+    <h1>Checks</h1>
+  </div>
+</div>
 
+<section class="panel">
 <h2>Services without a backup</h2>
 {{if .UnbackedServices}}
 <div class="table-wrap">
@@ -16,7 +22,9 @@
 {{else}}
 <div class="table-wrap"><div class="empty">Every service is linked to a backup. Nice.</div></div>
 {{end}}
+</section>
 
+<section class="panel">
 <h2>Certificates expiring within {{.WithinDays}} days</h2>
 {{if .ExpiringCerts}}
 <div class="table-wrap">
@@ -32,7 +40,9 @@
 {{else}}
 <div class="table-wrap"><div class="empty">No certificates expiring soon.</div></div>
 {{end}}
+</section>
 
+<section class="panel">
 <h2>Hardware warranties expiring within {{.WithinDays}} days</h2>
 {{if .ExpiringWarranties}}
 <div class="table-wrap">
@@ -48,7 +58,9 @@
 {{else}}
 <div class="table-wrap"><div class="empty">No hardware warranties expiring soon.</div></div>
 {{end}}
+</section>
 
+<section class="panel">
 <h2>Subscriptions renewing within {{.WithinDays}} days</h2>
 {{if .RenewalsDue}}
 <div class="table-wrap">
@@ -64,4 +76,5 @@
 {{else}}
 <div class="table-wrap"><div class="empty">No subscriptions renewing soon.</div></div>
 {{end}}
+</section>
 {{end}}

@@ -1,25 +1,35 @@
 {{define "content"}}
-<h1>What breaks if...</h1>
-<form class="stack" method="get" action="/impact">
-  <label>If this is down
-    <select name="ref">
-      <option value="">-- choose an entity --</option>
-      {{range .Options}}<option value="{{.Value}}" {{if eq .Value $.Selected}}selected{{end}}>{{.Label}}</option>{{end}}
-    </select>
-  </label>
-  <div class="actions"><button class="btn btn-primary" type="submit">Show impact</button></div>
-</form>
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Connections &amp; views</span>
+    <h1>Impact</h1>
+  </div>
+</div>
+<section class="panel">
+  <h2>What breaks if...</h2>
+  <form class="stack" method="get" action="/impact">
+    <label>If this is down
+      <select name="ref">
+        <option value="">-- choose an entity --</option>
+        {{range .Options}}<option value="{{.Value}}" {{if eq .Value $.Selected}}selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+    </label>
+    <div class="actions"><button class="btn btn-primary" type="submit">Show impact</button></div>
+  </form>
+</section>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 {{if .Computed}}
-<h2>If "{{.SelectedLabel}}" fails, these break:</h2>
-{{if .Impacted}}
-<div class="table-wrap">
-<table><tbody>
-  {{range .Impacted}}<tr><td>{{.}}</td></tr>{{end}}
-</tbody></table>
-</div>
-{{else}}
-<div class="table-wrap"><div class="empty">Nothing depends on it.</div></div>
-{{end}}
+<section class="panel">
+  <h2>If "{{.SelectedLabel}}" fails, these break:</h2>
+  {{if .Impacted}}
+  <div class="table-wrap">
+  <table><tbody>
+    {{range .Impacted}}<tr><td>{{.}}</td></tr>{{end}}
+  </tbody></table>
+  </div>
+  {{else}}
+  <div class="table-wrap"><div class="empty">Nothing depends on it.</div></div>
+  {{end}}
+</section>
 {{end}}
 {{end}}
