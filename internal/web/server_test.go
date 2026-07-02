@@ -1824,3 +1824,26 @@ func TestHostsListHasPageHeader(t *testing.T) {
 		t.Error("Hosts list header should keep the New host action")
 	}
 }
+
+func TestListPagesHavePageHeader(t *testing.T) {
+	srv := newTestServer(t)
+	cases := []struct{ path, newHref string }{
+		{"/services", "/services/new"},
+		{"/accounts", "/accounts/new"},
+	}
+	for _, c := range cases {
+		req := httptest.NewRequest(http.MethodGet, c.path, nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		body := rec.Body.String()
+		if !strings.Contains(body, `class="page-header"`) {
+			t.Errorf("%s should use the page-header primitive", c.path)
+		}
+		if !strings.Contains(body, `class="ph-eyebrow"`) || !strings.Contains(body, ">Inventory<") {
+			t.Errorf("%s header should carry the Inventory eyebrow", c.path)
+		}
+		if !strings.Contains(body, `href="`+c.newHref+`"`) {
+			t.Errorf("%s header should keep its New action (%s)", c.path, c.newHref)
+		}
+	}
+}
