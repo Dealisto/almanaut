@@ -210,6 +210,45 @@ func TestPortabilityAccountRoundTrip(t *testing.T) {
 	}
 }
 
+func TestJournalRoundTripsAndImportLogsOneEvent(t *testing.T) {
+	db := newTestDB(t)
+	if _, err := NewHostRepo(db).Create(domain.Host{Name: "nas", Type: "physical"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewJournalRepo(db).Create(domain.JournalEntry{
+		EntityType: "host", EntityID: 1, Kind: domain.JournalInfo, Body: "note", CreatedAt: "2026-07-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	snap, err := Export(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.JournalEntries) != 1 || snap.JournalEntries[0].Body != "note" {
+		t.Fatalf("journal not exported: %+v", snap.JournalEntries)
+	}
+
+	dst := newTestDB(t)
+	if err := Import(dst, snap); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := NewJournalRepo(dst).ListForEntity("host", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Body != "note" {
+		t.Fatalf("journal not imported: %+v", entries)
+	}
+	events, err := NewChangelogRepo(dst).ListRecent(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Action != domain.ActionImport {
+		t.Fatalf("import should log exactly one import event, got %+v", events)
+	}
+}
+
 func TestPortabilityHardwareRoundTrip(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := Open(dbPath)

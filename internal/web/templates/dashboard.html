@@ -21,6 +21,22 @@
   {{end}}
 </section>
 
+<section class="panel">
+  <h2>Recent activity</h2>
+  {{if .Recent}}
+  <ul class="changelog-list">
+    {{range .Recent}}
+    <li>
+      <span class="cl-action cl-{{.Action}}">{{.Action}}</span>
+      {{if .Path}}<a href="{{.Path}}">{{.Label}}</a>{{else}}{{.Label}}{{end}}
+      <time>{{.CreatedAt}}</time>
+    </li>
+    {{end}}
+  </ul>
+  <p><a href="/history">All history →</a></p>
+  {{else}}<p class="muted"><em>No activity yet.</em></p>{{end}}
+</section>
+
 {{if .Services}}
 <section class="panel">
   <h2>Services</h2>

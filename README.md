@@ -47,6 +47,9 @@ On top of the inventory you get:
 - **Global search** across every entity type
 - **A dashboard** summarising your inventory and what's expiring soon
 - **Auto-discovery** from Docker, a network subnet scan, and Proxmox VE
+- **History & journal** — an automatic per-entity change log (field-level
+  diffs), manual categorised journal entries on each detail page, and a global
+  `/history` activity feed (also surfaced on the dashboard)
 - **Expiry notifications** via [ntfy](https://ntfy.sh) for certs, warranties,
   and renewals
 - **A read-only JSON API** and a Prometheus **`/metrics`** endpoint
@@ -265,6 +268,17 @@ behind the same optional Basic auth as the rest of the app (configure
 ```bash
 curl -s http://localhost:8080/metrics
 ```
+
+## History & journal
+
+Every create, update, and delete is recorded automatically with a field-level
+diff (e.g. `status: running → down`). Each entity's detail page shows its
+**Journal** — manual, categorised notes (info / success / warning / incident)
+you add as a running log — and a collapsible **Change history**. A global
+**`/history`** feed (and a "Recent activity" panel on the dashboard) lists the
+latest changes across every entity; delete events remain visible there even
+after the entity is gone. Journal entries are included in the YAML export;
+the change log is not.
 
 ## Health & version
 

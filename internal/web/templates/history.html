@@ -1,0 +1,20 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles"><h1>History</h1></div>
+</div>
+<section class="panel">
+  {{if .Rows}}
+  <ul class="changelog-list">
+    {{range .Rows}}
+    <li>
+      <span class="cl-action cl-{{.Action}}">{{.Action}}</span>
+      {{if .Path}}<a href="{{.Path}}">{{.Label}}</a>{{else}}{{.Label}}{{end}}
+      <span class="cl-actor">{{.EntityType}}</span>
+      <time>{{.CreatedAt}}</time>{{if .Actor}} <span class="cl-actor">by {{.Actor}}</span>{{end}}
+      {{if .Changes}}<ul class="cl-fields">{{range .Changes}}<li><b>{{.Field}}</b>: {{.Old}} → {{.New}}</li>{{end}}</ul>{{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{else}}<p class="muted"><em>No activity yet.</em></p>{{end}}
+</section>
+{{end}}

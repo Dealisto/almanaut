@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -109,5 +110,31 @@ func TestHostRepoNotFound(t *testing.T) {
 	}
 	if err := repo.Update(domain.Host{ID: id, Name: "keep", Type: "vm", IPs: []string{"10.0.0.9"}}); err != nil {
 		t.Errorf("Update(no-op) error = %v, want nil", err)
+	}
+}
+
+func TestHostRepoTxMethods(t *testing.T) {
+	db := newTestDB(t)
+	repo := NewHostRepo(db)
+	var id int64
+	err := WithTx(db, func(tx *sql.Tx) error {
+		var e error
+		id, e = repo.CreateTx(tx, domain.Host{Name: "nas", Type: "physical"})
+		if e != nil {
+			return e
+		}
+		got, e := repo.GetTx(tx, id)
+		if e != nil {
+			return e
+		}
+		got.Status = "down"
+		return repo.UpdateTx(tx, got)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := repo.Get(id)
+	if err != nil || got.Status != "down" {
+		t.Fatalf("tx methods did not persist: %+v err=%v", got, err)
 	}
 }

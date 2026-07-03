@@ -27,6 +27,19 @@ func (r *BackupRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
+// CreateTx inserts b within tx and returns its new id.
+func (r *BackupRepo) CreateTx(tx *sql.Tx, b domain.Backup) (int64, error) {
+	return r.WithTx(tx).Create(b)
+}
+
+// UpdateTx overwrites the backup with b.ID within tx.
+func (r *BackupRepo) UpdateTx(tx *sql.Tx, b domain.Backup) error { return r.WithTx(tx).Update(b) }
+
+// GetTx returns the backup with the given id within tx.
+func (r *BackupRepo) GetTx(tx *sql.Tx, id int64) (domain.Backup, error) {
+	return r.WithTx(tx).Get(id)
+}
+
 // Count returns the number of backups.
 func (r *BackupRepo) Count() (int, error) {
 	var n int

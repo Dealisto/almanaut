@@ -271,8 +271,10 @@ func New(cfg Config) http.Handler {
 			listTmpl: "accounts.html", formTmpl: "account_form.html",
 		},
 	}
+	changelog := store.NewChangelogRepo(db)
+	journal := store.NewJournalRepo(db)
 	cat := entityCatalog{resources: resources}
-	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, db: db}
+	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, db: db}
 	r := chi.NewRouter()
 	logger := cfg.Logger
 	if logger == nil {
@@ -305,7 +307,7 @@ func New(cfg Config) http.Handler {
 		// unsafe request, so an oversize upload is rejected up front.
 		r.Use(limitBody)
 		r.Use(csrfProtect(cfg.SecureCookies))
-		r.Get("/", dashboard(repos, relationships))
+		r.Get("/", dashboard(repos, relationships, cat, changelog))
 		for _, rs := range resources {
 			rs.mount(r, deps)
 			rs.mountAPI(r)
@@ -317,7 +319,9 @@ func New(cfg Config) http.Handler {
 		r.Get("/relationships", listRelationships(relationships, cat))
 		r.Post("/relationships", createRelationship(relationships, cat))
 		r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
+		r.Post("/journal/{id}/delete", deleteJournal(cat, deps))
 		r.Get("/impact", impactView(relationships, cat))
+		r.Get("/history", history(cat, changelog))
 		r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
 		r.Get("/metrics", metricsHandler(repos, relationships))
 		r.Get("/search", searchEntities(cat, tags))

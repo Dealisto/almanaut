@@ -27,6 +27,19 @@ func (r *NetworkRepo) DeleteTx(tx *sql.Tx, id int64) error {
 	return r.WithTx(tx).Delete(id)
 }
 
+// CreateTx inserts n within tx and returns its new id.
+func (r *NetworkRepo) CreateTx(tx *sql.Tx, n domain.Network) (int64, error) {
+	return r.WithTx(tx).Create(n)
+}
+
+// UpdateTx overwrites the network with n.ID within tx.
+func (r *NetworkRepo) UpdateTx(tx *sql.Tx, n domain.Network) error { return r.WithTx(tx).Update(n) }
+
+// GetTx returns the network with the given id within tx.
+func (r *NetworkRepo) GetTx(tx *sql.Tx, id int64) (domain.Network, error) {
+	return r.WithTx(tx).Get(id)
+}
+
 // Count returns the number of networks.
 func (r *NetworkRepo) Count() (int, error) {
 	var n int

@@ -46,11 +46,12 @@ type dashboardData struct {
 	Groups       []attentionGroup
 	Services     []serviceGroup
 	AnyAttention bool
+	Recent       []historyRow
 }
 
 // dashboard renders the landing page: per-entity counts and attention groups
 // (expiring certs, services without backup, hosts down).
-func dashboard(repos entityRepos, rels *store.RelationshipRepo) http.HandlerFunc {
+func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalog, changelog *store.ChangelogRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		fail := func(err error) { serverError(w, req, err) }
 
@@ -161,12 +162,23 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo) http.HandlerFunc
 			{Title: "Hardware warranty expiring", MoreURL: "/checks", Severity: "warn", Items: hwItems},
 			{Title: "Subscriptions renewing soon", MoreURL: "/checks", Severity: "warn", Items: subItems},
 		}
+		recentEvents, err := changelog.ListRecent(5)
+		if err != nil {
+			fail(err)
+			return
+		}
+		recent, err := buildActivityRows(cat, recentEvents)
+		if err != nil {
+			fail(err)
+			return
+		}
 		render(w, req, "dashboard.html", dashboardData{
 			Title:        "Dashboard",
 			Counts:       counts,
 			Groups:       groups,
 			Services:     groupServices(services),
 			AnyAttention: anyAttention(groups),
+			Recent:       recent,
 		})
 	}
 }

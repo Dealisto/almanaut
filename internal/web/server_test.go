@@ -42,6 +42,31 @@ func newTestServer(t *testing.T) http.Handler {
 	return newTestServerFull(t, fakeScanner{}, fakeNetworkScanner{}, NetDiscoveryOptions{})
 }
 
+// newTestServerDB is like newTestServerFull but also returns the *sql.DB it
+// opens, so a test can inspect tables (e.g. the changelog) the handler doesn't
+// expose through its own routes.
+func newTestServerDB(t *testing.T) (http.Handler, *sql.DB) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := store.Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	srv := New(Config{
+		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
+		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
+		Hardware: store.NewHardwareRepo(db), Subscriptions: store.NewSubscriptionRepo(db), Accounts: store.NewAccountRepo(db),
+		Relationships: store.NewRelationshipRepo(db), Tags: store.NewTagRepo(db), DB: db,
+		Logger: log.New(io.Discard, "", 0),
+		Docker: fakeScanner{}, NetScan: fakeNetworkScanner{}, NetOpts: NetDiscoveryOptions{}, Proxmox: fakeProxmoxScanner{}, PVEOpts: ProxmoxOptions{},
+	})
+	return srv, db
+}
+
 func newTestServerWithScanner(t *testing.T, scanner dockerScanner) http.Handler {
 	return newTestServerFull(t, scanner, fakeNetworkScanner{}, NetDiscoveryOptions{})
 }

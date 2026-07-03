@@ -31,6 +31,10 @@ type detailData struct {
 	Related    []relatedItem
 	GraphSVG   template.HTML
 	IPAM       *ipamSection
+
+	JournalEntries []journalView
+	JournalKinds   []string
+	Changelog      []store.ChangeEvent
 }
 
 // ipamRow is one IP allocation as shown in the network detail IPAM table.
@@ -92,6 +96,8 @@ func renderDetailExtra(
 	cat entityCatalog,
 	tags *store.TagRepo,
 	rels *store.RelationshipRepo,
+	journal *store.JournalRepo,
+	changelog *store.ChangelogRepo,
 	entityType string, entityID int64,
 	heading, notes, editURL, listURL string,
 	fields []fieldRow,
@@ -133,6 +139,23 @@ func renderDetailExtra(
 		}
 	}
 
+	entries, err := journal.ListForEntity(entityType, entityID)
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	views := make([]journalView, 0, len(entries))
+	for _, e := range entries {
+		views = append(views, journalView{
+			ID: e.ID, Kind: e.Kind, BodyHTML: renderMarkdown(e.Body), CreatedAt: e.CreatedAt,
+		})
+	}
+	events, err := changelog.ListForEntity(entityType, entityID)
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+
 	render(w, r, "detail.html", detailData{
 		Title:      heading,
 		Heading:    heading,
@@ -146,5 +169,9 @@ func renderDetailExtra(
 		Related:    related,
 		GraphSVG:   buildNeighborhoodSVG(heading, neighbors),
 		IPAM:       ipam,
+
+		JournalEntries: views,
+		JournalKinds:   domain.JournalKinds,
+		Changelog:      events,
 	})
 }
