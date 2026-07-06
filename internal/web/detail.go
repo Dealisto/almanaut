@@ -14,6 +14,25 @@ type fieldRow struct {
 	Value string
 }
 
+// childRef is one child entity link shown in a detail page's children section.
+type childRef struct {
+	Label string
+	Path  string
+}
+
+// childrenSection lists an entity's child entities (e.g. a Site's Locations).
+type childrenSection struct {
+	Title string
+	Items []childRef
+}
+
+// detailExtras bundles the optional, entity-specific detail-page sections so
+// renderDetailExtra keeps a fixed parameter list as more are added.
+type detailExtras struct {
+	ipam     *ipamSection
+	children *childrenSection
+}
+
 type relatedItem struct {
 	Text string
 }
@@ -31,6 +50,7 @@ type detailData struct {
 	Related    []relatedItem
 	GraphSVG   template.HTML
 	IPAM       *ipamSection
+	Children   *childrenSection
 
 	JournalEntries []journalView
 	JournalKinds   []string
@@ -101,7 +121,7 @@ func renderDetailExtra(
 	entityType string, entityID int64,
 	heading, notes, editURL, listURL string,
 	fields []fieldRow,
-	ipam *ipamSection,
+	extras detailExtras,
 ) {
 	tagList, err := tags.ListForEntity(entityType, entityID)
 	if err != nil {
@@ -168,7 +188,8 @@ func renderDetailExtra(
 		Tags:       tagList,
 		Related:    related,
 		GraphSVG:   buildNeighborhoodSVG(heading, neighbors),
-		IPAM:       ipam,
+		IPAM:       extras.ipam,
+		Children:   extras.children,
 
 		JournalEntries: views,
 		JournalKinds:   domain.JournalKinds,

@@ -69,13 +69,14 @@ type resource[T validatable] struct {
 	id       func(T) int64
 	setID    func(item *T, id int64) // writes the id back onto a decoded/parsed T (JSON writes)
 	notes    func(T) string
-	fields   func(T) []fieldRow    // detail-page rows
-	search   func(T) []string      // free-text fields matched by global search
-	ipam     func(T) *ipamSection  // optional; nil for all but network
-	newItem  T                     // zero value with form defaults
-	listTmpl string                // "hosts.html"
-	formTmpl string                // "host_form.html"
-	extras   func() map[string]any // form selects (Types, Kinds…); may be nil
+	fields   func(T) []fieldRow                               // detail-page rows
+	search   func(T) []string                                 // free-text fields matched by global search
+	ipam     func(T) *ipamSection                             // optional; nil for all but network
+	children func(T, entityCatalog) (*childrenSection, error) // optional; nil for all but Site/Location
+	newItem  T                                                // zero value with form defaults
+	listTmpl string                                           // "hosts.html"
+	formTmpl string                                           // "host_form.html"
+	extras   func() map[string]any                            // form selects (Types, Kinds…); may be nil
 }
 
 func (rs resource[T]) singular() string { return rs.sing }
@@ -340,9 +341,18 @@ func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
 		if rs.ipam != nil {
 			ipam = rs.ipam(item)
 		}
+		var children *childrenSection
+		if rs.children != nil {
+			children, err = rs.children(item, d.cat)
+			if err != nil {
+				serverError(w, req, err)
+				return
+			}
+		}
 		renderDetailExtra(w, req, d.cat, d.tags, d.rels, d.journal, d.changelog, rs.sing, id,
 			rs.heading+": "+rs.label(item), rs.notes(item),
-			fmt.Sprintf("%s/%d/edit", rs.basePath(), id), rs.basePath(), rs.fields(item), ipam)
+			fmt.Sprintf("%s/%d/edit", rs.basePath(), id), rs.basePath(), rs.fields(item),
+			detailExtras{ipam: ipam, children: children})
 	}
 }
 
