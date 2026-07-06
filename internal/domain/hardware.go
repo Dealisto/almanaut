@@ -19,6 +19,10 @@ type Hardware struct {
 	WarrantyEnd  string `yaml:"warranty_end" json:"warranty_end"`   // optional YYYY-MM-DD
 	Status       string `yaml:"status" json:"status"`               // free text: active/spare/retired
 	Notes        string `yaml:"notes" json:"notes"`
+
+	RackID       int64 `yaml:"rack_id" json:"rack_id"`
+	RackPosition int   `yaml:"rack_position" json:"rack_position"`
+	UHeight      int   `yaml:"u_height" json:"u_height"`
 }
 
 // Validate checks the name and (if present) the purchase/warranty dates.
@@ -29,5 +33,8 @@ func (h Hardware) Validate() error {
 	if err := validateOptionalDate("purchase date", h.PurchaseDate); err != nil {
 		return err
 	}
-	return validateOptionalDate("warranty end", h.WarrantyEnd)
+	if err := validateOptionalDate("warranty end", h.WarrantyEnd); err != nil {
+		return err
+	}
+	return validateRackPlacement(h.RackID, h.RackPosition, h.UHeight)
 }

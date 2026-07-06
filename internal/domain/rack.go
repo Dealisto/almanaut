@@ -25,3 +25,19 @@ func (r Rack) Validate() error {
 	}
 	return nil
 }
+
+// validateRackPlacement checks an occupant's rack placement. Placement is only
+// meaningful when the occupant is assigned to a rack (rackID != 0); an
+// unassigned occupant (rackID 0) is unconstrained.
+func validateRackPlacement(rackID int64, position, uHeight int) error {
+	if rackID == 0 {
+		return nil
+	}
+	if position < 1 {
+		return fmt.Errorf("rack position must be at least 1 when assigned to a rack")
+	}
+	if uHeight < 1 {
+		return fmt.Errorf("u_height must be at least 1 when assigned to a rack")
+	}
+	return nil
+}
