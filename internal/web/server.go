@@ -358,7 +358,6 @@ func New(cfg Config) http.Handler {
 		r.Get("/impact", impactView(relationships, cat))
 		r.Get("/history", history(cat, changelog))
 		r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
-		r.Get("/metrics", metricsHandler(repos, relationships))
 		r.Get("/search", searchEntities(cat, tags))
 		r.Get("/data", showData())
 		r.Post("/theme", setTheme(cfg.SecureCookies))
@@ -388,6 +387,9 @@ func New(cfg Config) http.Handler {
 		}
 		r.Get("/api/search", apiSearch(cat))
 		r.Get("/api/relationships", apiRelationships(relationships))
+		// /metrics is a GET: reachable with a bearer API token (Prometheus) or a
+		// session cookie (logged-in browser). Not under CSRF; no creds → 401.
+		r.Get("/metrics", metricsHandler(repos, relationships))
 	})
 	return r
 }

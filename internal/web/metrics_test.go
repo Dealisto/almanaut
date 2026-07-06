@@ -3,7 +3,6 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -52,26 +51,48 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 }
 
-// TestMetricsBehindAuth verifies /metrics sits inside the same
-// session-auth-protected route group as the rest of the UI when auth is
-// enabled, unlike /healthz and /version which are intentionally
-// unauthenticated.
-func TestMetricsBehindAuth(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
+// TestMetricsBearerTokenAllowed verifies that with auth enabled a Prometheus
+// scraper reaches /metrics with an API bearer token.
+func TestMetricsBearerTokenAllowed(t *testing.T) {
+	h, _, raw := apiAuthServer(t)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req.Header.Set("Authorization", "Bearer "+raw)
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bearer /metrics = %d, want 200 (body %s)", rec.Code, rec.Body)
 	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
+	if !strings.Contains(rec.Body.String(), "almanaut_entities_total") {
+		t.Errorf("metrics body missing almanaut_entities_total:\n%s", rec.Body)
 	}
-	h := newAuthedTestHandler(t, db)
+}
+
+// TestMetricsSessionCookieAllowed verifies a logged-in browser can still view
+// /metrics via its session cookie (apiAuth's GET fallback).
+func TestMetricsSessionCookieAllowed(t *testing.T) {
+	h, session := authTestServer(t)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req.AddCookie(session)
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("session-cookie /metrics = %d, want 200", rec.Code)
+	}
+}
+
+// TestMetricsNoCredentials401 verifies an unauthenticated scrape gets a 401 JSON
+// error (not a redirect to /login), which is the correct machine-facing response.
+func TestMetricsNoCredentials401(t *testing.T) {
+	h, _, _ := apiAuthServer(t)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("code = %d, want 303 redirect to /login", rec.Code)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauth /metrics = %d, want 401", rec.Code)
 	}
 }
 

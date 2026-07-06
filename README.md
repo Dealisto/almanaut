@@ -351,13 +351,10 @@ curl -s http://localhost:8080/api/certificates | jq '.[] | {subject, expires_on}
 
 ## Metrics
 
-`GET /metrics` exposes aggregate inventory gauges in the Prometheus text format,
-behind the same login session as the rest of the app — a scrape without a
-valid session cookie gets redirected to `/login` rather than serving metrics.
-Unlike `/api/*`, `/metrics` does not accept an API token, so there's still no
-scrape-friendly credential for it; put Prometheus behind the same
-authenticated reverse proxy/VPN as the rest of Almanaut, or scrape from a
-session established via `/login`.
+`GET /metrics` exposes aggregate inventory gauges in the Prometheus text format.
+When authentication is enabled, `/metrics` is authenticated like the JSON API:
+create an API token at **API tokens** (`/account/tokens`) and pass it as a
+bearer token. A logged-in browser can also view it via its session cookie.
 
 | Metric | Meaning |
 |---|---|
@@ -368,6 +365,19 @@ session established via `/login`.
 | `almanaut_subscriptions_renewal_due_total` | Renewals due within 30 days |
 | `almanaut_hosts_down_total` | Hosts marked down/offline/stopped |
 | `almanaut_services_without_backup_total` | Services with no backup relationship |
+
+### Prometheus scrape config
+
+```yaml
+scrape_configs:
+  - job_name: almanaut
+    authorization:
+      credentials: alm_...        # an API token from /account/tokens
+    static_configs:
+      - targets: ["almanaut.example:8080"]
+```
+
+When authentication is disabled, the endpoint is open:
 
 ```bash
 curl -s http://localhost:8080/metrics
