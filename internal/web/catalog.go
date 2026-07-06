@@ -8,7 +8,7 @@ import (
 	"github.com/Dealisto/almanaut/internal/store"
 )
 
-// entityRepos bundles the nine entity repositories that the dashboard and
+// entityRepos bundles the entity repositories that the dashboard and
 // search handlers read directly — they need entity-specific fields the
 // relationship-option list does not expose.
 type entityRepos struct {
@@ -21,6 +21,9 @@ type entityRepos struct {
 	hardware      *store.HardwareRepo
 	subscriptions *store.SubscriptionRepo
 	accounts      *store.AccountRepo
+	sites         *store.SiteRepo
+	locations     *store.LocationRepo
+	racks         *store.RackRepo
 }
 
 // entityOption is one selectable entity in a relationship dropdown.
