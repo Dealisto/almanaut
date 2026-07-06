@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/Dealisto/almanaut/internal/store"
@@ -109,10 +110,12 @@ func TestAPICreateGetUpdateDelete(t *testing.T) {
 		t.Fatalf("created = %+v", created)
 	}
 
+	idPath := "/api/hosts/" + strconv.FormatInt(created.ID, 10)
+
 	// Update (full replace)
 	rec = httptest.NewRecorder()
 	body := []byte(`{"name":"nas2","type":"physical"}`)
-	req = httptest.NewRequest(http.MethodPut, "/api/hosts/1", bytes.NewReader(body))
+	req = httptest.NewRequest(http.MethodPut, idPath, bytes.NewReader(body))
 	auth(req)
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -121,7 +124,7 @@ func TestAPICreateGetUpdateDelete(t *testing.T) {
 
 	// Delete
 	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodDelete, "/api/hosts/1", nil)
+	req = httptest.NewRequest(http.MethodDelete, idPath, nil)
 	auth(req)
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {
@@ -130,11 +133,27 @@ func TestAPICreateGetUpdateDelete(t *testing.T) {
 
 	// Delete again → 404
 	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodDelete, "/api/hosts/1", nil)
+	req = httptest.NewRequest(http.MethodDelete, idPath, nil)
 	auth(req)
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("second DELETE = %d, want 404", rec.Code)
+	}
+}
+
+// TestAPIReadSessionCookieOnlyAllowed is the positive counterpart to
+// TestAPIWriteSessionCookieOnlyRejected: reads are explicitly permitted to fall
+// back to the session cookie (see apiAuth), so a logged-in browser/dashboard
+// keeps read access without minting a token. This locks down that allowed path,
+// not just the write-rejection path.
+func TestAPIReadSessionCookieOnlyAllowed(t *testing.T) {
+	h, cookie := authTestServer(t)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/hosts", nil)
+	req.AddCookie(cookie)
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("session-cookie-only read = %d, want 200 (body %s)", rec.Code, rec.Body)
 	}
 }
 
