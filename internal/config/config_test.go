@@ -120,6 +120,17 @@ func TestLoadReadsAuthCredentials(t *testing.T) {
 	}
 }
 
+func TestLoadResetAdmin(t *testing.T) {
+	t.Setenv("ALMANAUT_RESET_ADMIN", "")
+	if mustLoad(t).ResetAdmin {
+		t.Error("ResetAdmin should default to false")
+	}
+	t.Setenv("ALMANAUT_RESET_ADMIN", "true")
+	if !mustLoad(t).ResetAdmin {
+		t.Error("ResetAdmin should be true for \"true\"")
+	}
+}
+
 func TestSecretFromFileTrimsTrailingNewline(t *testing.T) {
 	// A file written with `echo secret > file` carries a trailing newline that
 	// must not become part of the credential.

@@ -19,9 +19,10 @@ type Config struct {
 	ProxmoxURL         string // Proxmox VE API base URL, e.g. https://pve.lan:8006
 	ProxmoxToken       string // Proxmox API token "user@realm!tokenid=secret"
 	ProxmoxInsecure    bool   // skip TLS verification (self-signed Proxmox cert)
-	AuthUser           string // ALMANAUT_AUTH_USER — enables HTTP basic auth when set with AuthPass
-	AuthPass           string // ALMANAUT_AUTH_PASS
+	AuthUser           string // ALMANAUT_AUTH_USER — username for the initial admin seeded at first startup
+	AuthPass           string // ALMANAUT_AUTH_PASS — password for the initial admin (else a random one is logged)
 	SecureCookies      bool   // force the Secure flag on cookies (set behind a TLS-terminating proxy)
+	ResetAdmin         bool   // ALMANAUT_RESET_ADMIN — reset the admin password at startup (lockout recovery)
 
 	NtfyURL          string        // ALMANAUT_NTFY_URL — ntfy topic URL; empty disables notifications
 	NtfyToken        string        // ALMANAUT_NTFY_TOKEN — optional bearer for a protected topic
@@ -57,6 +58,7 @@ func Load() (Config, error) {
 		AuthUser:           getenv("ALMANAUT_AUTH_USER", ""),
 		AuthPass:           authPass,
 		SecureCookies:      getenvBool("ALMANAUT_SECURE_COOKIES", false),
+		ResetAdmin:         getenvBool("ALMANAUT_RESET_ADMIN", false),
 		NtfyURL:            getenv("ALMANAUT_NTFY_URL", ""),
 		NtfyToken:          ntfyToken,
 		NotifyWithinDays:   getenvInt("ALMANAUT_NOTIFY_WITHIN_DAYS", 30),
