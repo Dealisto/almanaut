@@ -519,6 +519,9 @@ func parseFormBool(v string) bool {
 }
 
 func parseHost(get func(string) string, id int64) domain.Host {
+	rackID, _ := strconv.ParseInt(get("rack_id"), 10, 64)
+	rackPos, _ := strconv.Atoi(strings.TrimSpace(get("rack_position")))
+	uHeight, _ := strconv.Atoi(strings.TrimSpace(get("u_height")))
 	return domain.Host{
 		ID:     id,
 		Name:   strings.TrimSpace(get("name")),
@@ -530,6 +533,10 @@ func parseHost(get func(string) string, id int64) domain.Host {
 		Status: get("status"),
 		Notes:  get("notes"),
 		IPs:    parseIPs(get("ips")),
+
+		RackID:       rackID,
+		RackPosition: rackPos,
+		UHeight:      uHeight,
 	}
 }
 
@@ -588,6 +595,9 @@ func parseBackup(get func(string) string, id int64) domain.Backup {
 }
 
 func parseHardware(get func(string) string, id int64) domain.Hardware {
+	rackID, _ := strconv.ParseInt(get("rack_id"), 10, 64)
+	rackPos, _ := strconv.Atoi(strings.TrimSpace(get("rack_position")))
+	uHeight, _ := strconv.Atoi(strings.TrimSpace(get("u_height")))
 	return domain.Hardware{
 		ID:           id,
 		Name:         strings.TrimSpace(get("name")),
@@ -600,6 +610,10 @@ func parseHardware(get func(string) string, id int64) domain.Hardware {
 		WarrantyEnd:  strings.TrimSpace(get("warranty_end")),
 		Status:       strings.TrimSpace(get("status")),
 		Notes:        get("notes"),
+
+		RackID:       rackID,
+		RackPosition: rackPos,
+		UHeight:      uHeight,
 	}
 }
 

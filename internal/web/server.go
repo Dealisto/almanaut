@@ -3,6 +3,7 @@ package web
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -68,14 +69,18 @@ func New(cfg Config) http.Handler {
 				return []fieldRow{
 					{"Type", h.Type}, {"OS", h.OS}, {"CPU", h.CPU}, {"RAM", h.RAM},
 					{"Disk", h.Disk}, {"Status", h.Status}, {"IPs", strings.Join(h.IPs, ", ")},
+					{"Rack", rackLabel(racks, h.RackID)}, {"Rack position (U)", rackPosLabel(h.RackID, h.RackPosition, h.UHeight)},
 				}
 			},
 			search: func(h domain.Host) []string {
 				return []string{h.Name, h.OS, h.CPU, h.RAM, h.Disk, h.Status, h.Notes, strings.Join(h.IPs, " ")}
 			},
-			newItem:  domain.Host{Type: "physical"},
+			newItem:  domain.Host{Type: "physical", UHeight: 1},
 			listTmpl: "hosts.html", formTmpl: "host_form.html",
-			extras: func() map[string]any { return map[string]any{"Types": domain.HostTypes} },
+			extras: func() map[string]any {
+				rackList, _ := racks.List()
+				return map[string]any{"Types": domain.HostTypes, "Racks": rackList}
+			},
 		},
 		resource[domain.Service]{
 			name: "services", sing: "service", title: "Services", heading: "Service",
@@ -219,12 +224,18 @@ func New(cfg Config) http.Handler {
 					{"Purchase date", h.PurchaseDate},
 					{"Warranty end", h.WarrantyEnd},
 					{"Status", h.Status},
+					{"Rack", rackLabel(racks, h.RackID)},
+					{"Rack position (U)", rackPosLabel(h.RackID, h.RackPosition, h.UHeight)},
 				}
 			},
 			search: func(h domain.Hardware) []string {
 				return []string{h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.Status, h.Notes}
 			},
-			newItem:  domain.Hardware{},
+			extras: func() map[string]any {
+				rackList, _ := racks.List()
+				return map[string]any{"Racks": rackList}
+			},
+			newItem:  domain.Hardware{UHeight: 1},
 			listTmpl: "hardware.html", formTmpl: "hardware_form.html",
 		},
 		resource[domain.Subscription]{
@@ -796,6 +807,26 @@ func locationLabel(locations *store.LocationRepo, id int64) string {
 		return "(unknown)"
 	}
 	return l.Name
+}
+
+// rackLabel resolves an occupant's soft rack_id to a display name.
+func rackLabel(racks *store.RackRepo, id int64) string {
+	if id == 0 {
+		return "—"
+	}
+	k, err := racks.Get(id)
+	if err != nil {
+		return "(unknown)"
+	}
+	return k.Name
+}
+
+// rackPosLabel formats an occupant's U position + height for the detail page.
+func rackPosLabel(rackID int64, position, uHeight int) string {
+	if rackID == 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%d (%dU)", position, uHeight)
 }
 
 // parseIPs splits a comma-separated field into trimmed, non-empty values.
