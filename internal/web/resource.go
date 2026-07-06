@@ -632,3 +632,34 @@ func parseAccount(get func(string) string, id int64) domain.Account {
 		Notes:           get("notes"),
 	}
 }
+
+func parseSite(get func(string) string, id int64) domain.Site {
+	return domain.Site{
+		ID:      id,
+		Name:    strings.TrimSpace(get("name")),
+		Address: strings.TrimSpace(get("address")),
+		Notes:   get("notes"),
+	}
+}
+
+func parseLocation(get func(string) string, id int64) domain.Location {
+	siteID, _ := strconv.ParseInt(get("site_id"), 10, 64)
+	return domain.Location{
+		ID:     id,
+		Name:   strings.TrimSpace(get("name")),
+		SiteID: siteID,
+		Notes:  get("notes"),
+	}
+}
+
+func parseRack(get func(string) string, id int64) domain.Rack {
+	locationID, _ := strconv.ParseInt(get("location_id"), 10, 64)
+	uHeight, _ := strconv.Atoi(strings.TrimSpace(get("u_height")))
+	return domain.Rack{
+		ID:         id,
+		Name:       strings.TrimSpace(get("name")),
+		LocationID: locationID,
+		UHeight:    uHeight,
+		Notes:      get("notes"),
+	}
+}

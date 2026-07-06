@@ -1,0 +1,24 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Infrastructure</span>
+    <h1>{{.Heading}}</h1>
+  </div>
+</div>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+<form class="stack" method="post" action="{{.Action}}">
+{{ csrfField }}
+  <label>Name<input name="name" value="{{.Item.Name}}" required></label>
+  <label>Site
+    <select name="site_id">
+      <option value="0">— none —</option>
+      {{range .Extras.Sites}}<option value="{{.ID}}"{{if eq .ID $.Item.SiteID}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+  </label>
+  <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
+    <a class="btn" href="/locations">Cancel</a>
+  </div>
+</form>
+{{end}}
