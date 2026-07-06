@@ -33,7 +33,7 @@ type Snapshot struct {
 // per-repo List() read paths. The first List error (in field order) is
 // returned; later lists short-circuit once err is set.
 //
-// All twelve lists run inside a single read transaction so the snapshot is
+// All fifteen lists run inside a single read transaction so the snapshot is
 // internally consistent: without it a concurrent write between two lists could
 // produce a YAML dump with, say, a relationship pointing at a host that the
 // hosts list no longer contains — a corruption only discovered at re-import.
