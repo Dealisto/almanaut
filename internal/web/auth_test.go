@@ -177,3 +177,36 @@ func TestSessionAuthValidSessionPasses(t *testing.T) {
 		t.Fatalf("authenticated /hosts code = %d, want 200", rec.Code)
 	}
 }
+
+func TestNewAPITokenIsPrefixedAndRandom(t *testing.T) {
+	a, err := newAPIToken()
+	if err != nil {
+		t.Fatalf("newAPIToken: %v", err)
+	}
+	b, _ := newAPIToken()
+	if !strings.HasPrefix(a, "alm_") {
+		t.Fatalf("token %q missing alm_ prefix", a)
+	}
+	if a == b {
+		t.Fatalf("tokens not unique: %q", a)
+	}
+	if hashToken(a) == a || len(hashToken(a)) != 64 {
+		t.Fatalf("hashToken should be 64-char sha256 hex, got %q", hashToken(a))
+	}
+}
+
+func TestBearerToken(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/hosts", nil)
+	if _, ok := bearerToken(req); ok {
+		t.Fatal("no header should yield ok=false")
+	}
+	req.Header.Set("Authorization", "Bearer alm_xyz")
+	got, ok := bearerToken(req)
+	if !ok || got != "alm_xyz" {
+		t.Fatalf("bearerToken = %q, %v; want alm_xyz, true", got, ok)
+	}
+	req.Header.Set("Authorization", "bearer alm_lower") // scheme is case-insensitive
+	if got, ok := bearerToken(req); !ok || got != "alm_lower" {
+		t.Fatalf("case-insensitive scheme: got %q, %v", got, ok)
+	}
+}
