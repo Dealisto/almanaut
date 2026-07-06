@@ -170,6 +170,26 @@ func (rs resource[T]) newForm(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
+// createEntityTx inserts item and records a create in the changelog on the given
+// transaction. item's id is expected to be zero; the new id is returned.
+func (rs resource[T]) createEntityTx(tx *sql.Tx, d handlerDeps, item T, actor string) (int64, error) {
+	id, err := rs.repo.CreateTx(tx, item)
+	if err != nil {
+		return 0, err
+	}
+	var zero T
+	changes, err := domain.Diff(zero, item)
+	if err != nil {
+		return 0, err
+	}
+	err = d.changelog.WithTx(tx).Create(store.ChangeEvent{
+		EntityType: rs.sing, EntityID: id, Label: rs.label(item),
+		Action: domain.ActionCreate, Actor: actor,
+		Changes: changes, CreatedAt: nowRFC3339(),
+	})
+	return id, err
+}
+
 // createEntity inserts item and records a create in the changelog, atomically.
 // The caller supplies actor (username) so both the HTML and JSON paths attribute
 // correctly. item's id is expected to be zero; the new id is returned.
@@ -177,47 +197,42 @@ func (rs resource[T]) createEntity(d handlerDeps, item T, actor string) (int64, 
 	var id int64
 	err := store.WithTx(d.db, func(tx *sql.Tx) error {
 		var err error
-		id, err = rs.repo.CreateTx(tx, item)
-		if err != nil {
-			return err
-		}
-		var zero T
-		changes, err := domain.Diff(zero, item)
-		if err != nil {
-			return err
-		}
-		return d.changelog.WithTx(tx).Create(store.ChangeEvent{
-			EntityType: rs.sing, EntityID: id, Label: rs.label(item),
-			Action: domain.ActionCreate, Actor: actor,
-			Changes: changes, CreatedAt: nowRFC3339(),
-		})
+		id, err = rs.createEntityTx(tx, d, item, actor)
+		return err
 	})
 	return id, err
+}
+
+// updateEntityTx overwrites the row identified by rs.id(item) and records the
+// diff in the changelog on the given transaction. A no-op edit (empty diff)
+// records nothing.
+func (rs resource[T]) updateEntityTx(tx *sql.Tx, d handlerDeps, item T, actor string) error {
+	old, err := rs.repo.GetTx(tx, rs.id(item))
+	if err != nil {
+		return err
+	}
+	if err := rs.repo.UpdateTx(tx, item); err != nil {
+		return err
+	}
+	changes, err := domain.Diff(old, item)
+	if err != nil {
+		return err
+	}
+	if len(changes) == 0 {
+		return nil // no-op save: nothing worth logging
+	}
+	return d.changelog.WithTx(tx).Create(store.ChangeEvent{
+		EntityType: rs.sing, EntityID: rs.id(item), Label: rs.label(item),
+		Action: domain.ActionUpdate, Actor: actor,
+		Changes: changes, CreatedAt: nowRFC3339(),
+	})
 }
 
 // updateEntity overwrites the row identified by rs.id(item) and records the diff
 // in the changelog, atomically. A no-op edit (empty diff) records nothing.
 func (rs resource[T]) updateEntity(d handlerDeps, item T, actor string) error {
 	return store.WithTx(d.db, func(tx *sql.Tx) error {
-		old, err := rs.repo.GetTx(tx, rs.id(item))
-		if err != nil {
-			return err
-		}
-		if err := rs.repo.UpdateTx(tx, item); err != nil {
-			return err
-		}
-		changes, err := domain.Diff(old, item)
-		if err != nil {
-			return err
-		}
-		if len(changes) == 0 {
-			return nil // no-op save: nothing worth logging
-		}
-		return d.changelog.WithTx(tx).Create(store.ChangeEvent{
-			EntityType: rs.sing, EntityID: rs.id(item), Label: rs.label(item),
-			Action: domain.ActionUpdate, Actor: actor,
-			Changes: changes, CreatedAt: nowRFC3339(),
-		})
+		return rs.updateEntityTx(tx, d, item, actor)
 	})
 }
 
