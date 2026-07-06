@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -495,6 +496,7 @@ type mountable interface {
 	basePath() string
 	searchHeading() string
 	searchEntries() ([]searchEntry, error)
+	importCSV(d handlerDeps, r io.Reader, actor string) (int, int, []string, error)
 }
 
 // parseFormBool interprets a checkbox ("on") or a CSV-style boolean cell.
