@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
 )
 
@@ -64,6 +65,32 @@ func TestImportCSVHandlerHappyPath(t *testing.T) {
 	}
 	if len(hosts) != 1 || hosts[0].Name != "edge" {
 		t.Fatalf("hosts after import = %+v, want one host named edge", hosts)
+	}
+}
+
+// TestImportCSVHandlerRecordsPerRowChangelog checks the M1 history payoff for
+// CSV import: each created row gets its own "create" changelog entry, not one
+// entry for the whole batch.
+func TestImportCSVHandlerRecordsPerRowChangelog(t *testing.T) {
+	srv, db := newTestServerDB(t)
+
+	rec := uploadCSV(t, srv, "host", "name,type,ips\nedge,physical,10.0.0.9\ncore,physical,10.0.0.10\n")
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("import-csv = %d, want 303; body=%s", rec.Code, rec.Body.String())
+	}
+
+	events, err := store.NewChangelogRepo(db).ListRecent(10)
+	if err != nil {
+		t.Fatalf("ListRecent: %v", err)
+	}
+	var creates int
+	for _, e := range events {
+		if e.EntityType == "host" && e.Action == domain.ActionCreate {
+			creates++
+		}
+	}
+	if creates != 2 {
+		t.Fatalf("want 2 host create changelog entries, got %d (events=%+v)", creates, events)
 	}
 }
 

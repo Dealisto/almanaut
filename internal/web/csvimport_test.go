@@ -134,6 +134,25 @@ func TestImportCSVInvalidRowAbortsBatch(t *testing.T) {
 	}
 }
 
+func TestImportCSVQuotedMultiValueIPs(t *testing.T) {
+	rs, deps := hostResourceForTest(t)
+	csv := "name,type,ips\n" + `edge,physical,"10.0.0.1,10.0.0.2"` + "\n"
+	created, updated, rowErrs, err := rs.importCSV(deps, strings.NewReader(csv), "tester")
+	if err != nil || len(rowErrs) != 0 {
+		t.Fatalf("importCSV err=%v rowErrs=%v", err, rowErrs)
+	}
+	if created != 1 || updated != 0 {
+		t.Fatalf("got created=%d updated=%d, want 1/0", created, updated)
+	}
+	hosts, _ := rs.repo.List()
+	if len(hosts) != 1 {
+		t.Fatalf("want 1 host, got %d", len(hosts))
+	}
+	if len(hosts[0].IPs) != 2 {
+		t.Fatalf("want 2 IPs parsed from the quoted cell, got %d: %v", len(hosts[0].IPs), hosts[0].IPs)
+	}
+}
+
 func TestImportCSVUnknownIDIsRowError(t *testing.T) {
 	rs, deps := hostResourceForTest(t)
 	_, _, rowErrs, err := rs.importCSV(deps, strings.NewReader("id,name,type\n9999,x,vm\n"), "t")

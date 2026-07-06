@@ -44,6 +44,9 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 	if len(records) == 0 {
 		return 0, 0, []string{"the file is empty"}, nil
 	}
+	// Spreadsheets that save as "CSV UTF-8" prepend a BOM; strip it so the first
+	// header cell is not read as "\uFEFFname" and rejected as an unknown column.
+	records[0][0] = strings.TrimPrefix(records[0][0], "\uFEFF")
 
 	header := records[0]
 	allowed := csvFields(rs.newItem)
