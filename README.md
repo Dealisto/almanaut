@@ -41,6 +41,22 @@ entity types and the relationships between them:
 - **Subscriptions** — recurring services with renewal dates
 - **Accounts** — logins and secret references
 
+### Sites, Locations & Racks
+
+almanaut models physical placement as a **Site → Location → Rack** hierarchy:
+
+- A **Site** is a building or campus.
+- A **Location** is a room/area within a site.
+- A **Rack** is an equipment rack within a location, with a height in rack units (U).
+
+Each level references its parent (chosen from a dropdown). A site's detail page
+lists its locations, and a location's lists its racks, so you can navigate the
+hierarchy top-down. Like every entity, they support search, tags, relationships,
+change history, the JSON API, and CSV import.
+
+Assigning hardware and hosts to a rack position — and the rack elevation view —
+land in a follow-up.
+
 On top of the inventory you get:
 
 - **Relationships & a neighbourhood graph** on each detail page (e.g. a service

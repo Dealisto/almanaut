@@ -249,6 +249,31 @@ func TestJournalRoundTripsAndImportLogsOneEvent(t *testing.T) {
 	}
 }
 
+func TestExportImportRoundTripsRacks(t *testing.T) {
+	db := newTestDB(t)
+	sid, _ := NewSiteRepo(db).Create(domain.Site{Name: "HQ"})
+	lid, _ := NewLocationRepo(db).Create(domain.Location{Name: "Room", SiteID: sid})
+	if _, err := NewRackRepo(db).Create(domain.Rack{Name: "R1", LocationID: lid, UHeight: 24}); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := Export(db)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if len(snap.Sites) != 1 || len(snap.Locations) != 1 || len(snap.Racks) != 1 {
+		t.Fatalf("snapshot missing rack entities: %+v", snap)
+	}
+
+	db2 := newTestDB(t)
+	if err := Import(db2, snap); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	racks, _ := NewRackRepo(db2).List()
+	if len(racks) != 1 || racks[0].UHeight != 24 || racks[0].LocationID != lid {
+		t.Fatalf("rack not restored: %+v", racks)
+	}
+}
+
 func TestPortabilityHardwareRoundTrip(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := Open(dbPath)

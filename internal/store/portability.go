@@ -21,6 +21,9 @@ type Snapshot struct {
 	Hardware       []domain.Hardware     `yaml:"hardware"`
 	Subscriptions  []domain.Subscription `yaml:"subscriptions"`
 	Accounts       []domain.Account      `yaml:"accounts"`
+	Sites          []domain.Site         `yaml:"sites"`
+	Locations      []domain.Location     `yaml:"locations"`
+	Racks          []domain.Rack         `yaml:"racks"`
 	Relationships  []domain.Relationship `yaml:"relationships"`
 	Tags           []domain.Tag          `yaml:"tags"`
 	JournalEntries []domain.JournalEntry `yaml:"journal_entries"`
@@ -30,7 +33,7 @@ type Snapshot struct {
 // per-repo List() read paths. The first List error (in field order) is
 // returned; later lists short-circuit once err is set.
 //
-// All twelve lists run inside a single read transaction so the snapshot is
+// All fifteen lists run inside a single read transaction so the snapshot is
 // internally consistent: without it a concurrent write between two lists could
 // produce a YAML dump with, say, a relationship pointing at a host that the
 // hosts list no longer contains — a corruption only discovered at re-import.
@@ -55,6 +58,9 @@ func Export(db *sql.DB) (Snapshot, error) {
 		Hardware:       exportList(&listErr, NewHardwareRepo(db).WithTx(tx).List),
 		Subscriptions:  exportList(&listErr, NewSubscriptionRepo(db).WithTx(tx).List),
 		Accounts:       exportList(&listErr, NewAccountRepo(db).WithTx(tx).List),
+		Sites:          exportList(&listErr, NewSiteRepo(db).WithTx(tx).List),
+		Locations:      exportList(&listErr, NewLocationRepo(db).WithTx(tx).List),
+		Racks:          exportList(&listErr, NewRackRepo(db).WithTx(tx).List),
 		Relationships:  exportList(&listErr, NewRelationshipRepo(db).WithTx(tx).List),
 		Tags:           exportList(&listErr, NewTagRepo(db).WithTx(tx).List),
 		JournalEntries: exportList(&listErr, NewJournalRepo(db).WithTx(tx).List),
@@ -93,6 +99,9 @@ func Import(db *sql.DB, snap Snapshot) error {
 		validateAll("hardware", snap.Hardware, func(h domain.Hardware) int64 { return h.ID }),
 		validateAll("subscription", snap.Subscriptions, func(s domain.Subscription) int64 { return s.ID }),
 		validateAll("account", snap.Accounts, func(a domain.Account) int64 { return a.ID }),
+		validateAll("site", snap.Sites, func(s domain.Site) int64 { return s.ID }),
+		validateAll("location", snap.Locations, func(l domain.Location) int64 { return l.ID }),
+		validateAll("rack", snap.Racks, func(k domain.Rack) int64 { return k.ID }),
 		validateAll("relationship", snap.Relationships, func(r domain.Relationship) int64 { return r.ID }),
 		validateAll("tag", snap.Tags, func(t domain.Tag) int64 { return t.ID }),
 		validateAll("journal_entry", snap.JournalEntries, func(e domain.JournalEntry) int64 { return e.ID }),
@@ -108,8 +117,9 @@ func Import(db *sql.DB, snap Snapshot) error {
 		}
 		n := len(snap.Hosts) + len(snap.Services) + len(snap.Networks) + len(snap.Domains) +
 			len(snap.Certificates) + len(snap.Backups) + len(snap.Hardware) +
-			len(snap.Subscriptions) + len(snap.Accounts) + len(snap.Relationships) +
-			len(snap.Tags) + len(snap.JournalEntries)
+			len(snap.Subscriptions) + len(snap.Accounts) +
+			len(snap.Sites) + len(snap.Locations) + len(snap.Racks) +
+			len(snap.Relationships) + len(snap.Tags) + len(snap.JournalEntries)
 		return NewChangelogRepo(db).WithTx(tx).Create(ChangeEvent{
 			EntityType: "", EntityID: 0, Label: "inventory", Action: domain.ActionImport,
 			Changes:   []domain.FieldChange{{Field: "records", New: fmt.Sprintf("%d", n)}},
@@ -122,7 +132,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 // inside WithTx, which owns begin/commit/rollback and is panic-safe, so any
 // failure rolls the whole replacement back.
 func replaceInventory(tx *sql.Tx, snap Snapshot) error {
-	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "relationships", "tags", "journal_entries"} {
+	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "sites", "locations", "racks", "relationships", "tags", "journal_entries"} {
 		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 			return fmt.Errorf("clear %s: %w", table, err)
 		}
@@ -212,6 +222,27 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 			`INSERT INTO accounts (id, name, kind, username, password_manager, secret_ref, url, status, notes)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			a.ID, a.Name, a.Kind, a.Username, a.PasswordManager, a.SecretRef, a.URL, a.Status, a.Notes); err != nil {
+			return err
+		}
+	}
+	for _, s := range snap.Sites {
+		if err := insert("site", s.ID,
+			`INSERT INTO sites (id, name, address, notes) VALUES (?, ?, ?, ?)`,
+			s.ID, s.Name, s.Address, s.Notes); err != nil {
+			return err
+		}
+	}
+	for _, l := range snap.Locations {
+		if err := insert("location", l.ID,
+			`INSERT INTO locations (id, name, site_id, notes) VALUES (?, ?, ?, ?)`,
+			l.ID, l.Name, l.SiteID, l.Notes); err != nil {
+			return err
+		}
+	}
+	for _, k := range snap.Racks {
+		if err := insert("rack", k.ID,
+			`INSERT INTO racks (id, name, location_id, u_height, notes) VALUES (?, ?, ?, ?, ?)`,
+			k.ID, k.Name, k.LocationID, k.UHeight, k.Notes); err != nil {
 			return err
 		}
 	}

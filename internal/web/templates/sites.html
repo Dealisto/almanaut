@@ -1,0 +1,36 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Infrastructure</span>
+    <h1>Sites</h1>
+  </div>
+  <div class="ph-actions">
+    <a class="btn btn-primary" href="/sites/new">+ New site</a>
+  </div>
+</div>
+{{if .Items}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>Address</th><th></th></tr></thead>
+  <tbody>
+  {{range .Items}}
+    <tr>
+      <td><a href="/sites/{{.ID}}">{{.Name}}</a></td>
+      <td>{{.Address}}</td>
+      <td>
+        <a class="btn" href="/sites/{{.ID}}/edit">Edit</a>
+        <form class="form-inline" method="post" action="/sites/{{.ID}}/delete"
+              onsubmit="return confirm('Delete this site?');">
+          {{ csrfField }}
+          <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No sites yet.</div></div>
+{{end}}
+{{end}}

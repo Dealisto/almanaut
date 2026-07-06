@@ -27,6 +27,9 @@ type Config struct {
 	Hardware      *store.HardwareRepo
 	Subscriptions *store.SubscriptionRepo
 	Accounts      *store.AccountRepo
+	Sites         *store.SiteRepo
+	Locations     *store.LocationRepo
+	Racks         *store.RackRepo
 	Relationships *store.RelationshipRepo
 	Tags          *store.TagRepo
 	DB            *sql.DB
@@ -46,6 +49,9 @@ func New(cfg Config) http.Handler {
 	hosts, services, networks := cfg.Hosts, cfg.Services, cfg.Networks
 	domains, certificates, backups := cfg.Domains, cfg.Certificates, cfg.Backups
 	hardware, subscriptions, accounts := cfg.Hardware, cfg.Subscriptions, cfg.Accounts
+	sites := cfg.Sites
+	locations := cfg.Locations
+	racks := cfg.Racks
 	relationships, tags, db := cfg.Relationships, cfg.Tags, cfg.DB
 	docker, netscan, netOpts := cfg.Docker, cfg.NetScan, cfg.NetOpts
 	proxmox, pveOpts := cfg.Proxmox, cfg.PVEOpts
@@ -278,6 +284,94 @@ func New(cfg Config) http.Handler {
 			newItem:  domain.Account{},
 			listTmpl: "accounts.html", formTmpl: "account_form.html",
 		},
+		resource[domain.Site]{
+			name: "sites", sing: "site", title: "Sites", heading: "Site",
+			repo:  sites,
+			parse: parseSite,
+			label: func(s domain.Site) string { return s.Name },
+			id:    func(s domain.Site) int64 { return s.ID },
+			setID: func(s *domain.Site, id int64) { s.ID = id },
+			notes: func(s domain.Site) string { return s.Notes },
+			fields: func(s domain.Site) []fieldRow {
+				return []fieldRow{{"Address", s.Address}}
+			},
+			children: func(s domain.Site, cat entityCatalog) (*childrenSection, error) {
+				locs, err := locations.List()
+				if err != nil {
+					return nil, err
+				}
+				items := []childRef{}
+				for _, l := range locs {
+					if l.SiteID == s.ID {
+						items = append(items, childRef{Label: l.Name, Path: cat.path("location", l.ID)})
+					}
+				}
+				return &childrenSection{Title: "Locations", Items: items}, nil
+			},
+			search: func(s domain.Site) []string {
+				return []string{s.Name, s.Address, s.Notes}
+			},
+			newItem:  domain.Site{},
+			listTmpl: "sites.html", formTmpl: "site_form.html",
+		},
+		resource[domain.Location]{
+			name: "locations", sing: "location", title: "Locations", heading: "Location",
+			repo:  locations,
+			parse: parseLocation,
+			label: func(l domain.Location) string { return l.Name },
+			id:    func(l domain.Location) int64 { return l.ID },
+			setID: func(l *domain.Location, id int64) { l.ID = id },
+			notes: func(l domain.Location) string { return l.Notes },
+			fields: func(l domain.Location) []fieldRow {
+				return []fieldRow{{"Site", siteLabel(sites, l.SiteID)}}
+			},
+			children: func(l domain.Location, cat entityCatalog) (*childrenSection, error) {
+				rk, err := racks.List()
+				if err != nil {
+					return nil, err
+				}
+				items := []childRef{}
+				for _, k := range rk {
+					if k.LocationID == l.ID {
+						items = append(items, childRef{Label: k.Name, Path: cat.path("rack", k.ID)})
+					}
+				}
+				return &childrenSection{Title: "Racks", Items: items}, nil
+			},
+			search: func(l domain.Location) []string {
+				return []string{l.Name, l.Notes}
+			},
+			extras: func() map[string]any {
+				list, _ := sites.List()
+				return map[string]any{"Sites": list}
+			},
+			newItem:  domain.Location{},
+			listTmpl: "locations.html", formTmpl: "location_form.html",
+		},
+		resource[domain.Rack]{
+			name: "racks", sing: "rack", title: "Racks", heading: "Rack",
+			repo:  racks,
+			parse: parseRack,
+			label: func(k domain.Rack) string { return k.Name },
+			id:    func(k domain.Rack) int64 { return k.ID },
+			setID: func(k *domain.Rack, id int64) { k.ID = id },
+			notes: func(k domain.Rack) string { return k.Notes },
+			fields: func(k domain.Rack) []fieldRow {
+				return []fieldRow{
+					{"Location", locationLabel(locations, k.LocationID)},
+					{"Height (U)", strconv.Itoa(k.UHeight)},
+				}
+			},
+			search: func(k domain.Rack) []string {
+				return []string{k.Name, k.Notes}
+			},
+			extras: func() map[string]any {
+				list, _ := locations.List()
+				return map[string]any{"Locations": list}
+			},
+			newItem:  domain.Rack{UHeight: 42},
+			listTmpl: "racks.html", formTmpl: "rack_form.html",
+		},
 	}
 	changelog := store.NewChangelogRepo(db)
 	journal := store.NewJournalRepo(db)
@@ -319,6 +413,7 @@ func New(cfg Config) http.Handler {
 		hosts: hosts, services: services, networks: networks,
 		domains: domains, certificates: certificates, backups: backups,
 		hardware: hardware, subscriptions: subscriptions, accounts: accounts,
+		sites: sites, locations: locations, racks: racks,
 	}
 	// Everything else is the application UI: optionally behind session auth and
 	// always behind CSRF. Grouping scopes those middlewares to these routes
@@ -677,6 +772,30 @@ func removeTag(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 		}
 		http.Redirect(w, req, cat.path(entityType, entityID), http.StatusSeeOther)
 	}
+}
+
+// siteLabel resolves a Location's soft site_id to a display name.
+func siteLabel(sites *store.SiteRepo, id int64) string {
+	if id == 0 {
+		return "—"
+	}
+	s, err := sites.Get(id)
+	if err != nil {
+		return "(unknown)"
+	}
+	return s.Name
+}
+
+// locationLabel resolves a Rack's soft location_id to a display name.
+func locationLabel(locations *store.LocationRepo, id int64) string {
+	if id == 0 {
+		return "—"
+	}
+	l, err := locations.Get(id)
+	if err != nil {
+		return "(unknown)"
+	}
+	return l.Name
 }
 
 // parseIPs splits a comma-separated field into trimmed, non-empty values.
