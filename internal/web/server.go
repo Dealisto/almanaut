@@ -325,7 +325,7 @@ func New(cfg Config) http.Handler {
 			r.Post("/logout", logout(sessions, cfg.SecureCookies))
 			r.Get("/users", listUsers(users))
 			r.Post("/users", createUser(users))
-			r.Post("/users/{id}/delete", deleteUser(users))
+			r.Post("/users/{id}/delete", deleteUser(users, db))
 			r.Post("/users/{id}/password", resetUserPassword(users))
 			r.Get("/account/password", changePasswordForm)
 			r.Post("/account/password", changePassword(users))

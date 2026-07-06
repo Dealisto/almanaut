@@ -1,6 +1,7 @@
 package web
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
 	"strconv"
@@ -10,6 +11,10 @@ import (
 	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/go-chi/chi/v5"
 )
+
+// errLastUser signals an attempt to delete the only remaining account; the
+// guard runs inside a transaction so a concurrent delete cannot race past it.
+var errLastUser = errors.New("cannot delete the last remaining user")
 
 type usersPageData struct {
 	Title string
@@ -73,23 +78,31 @@ func createUser(users *store.UserRepo) http.HandlerFunc {
 	}
 }
 
-func deleteUser(users *store.UserRepo) http.HandlerFunc {
+func deleteUser(users *store.UserRepo, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := userIDParam(w, r)
 		if !ok {
 			return
 		}
 		// Guard against locking everyone out: never delete the last account.
-		n, err := users.Count()
-		if err != nil {
-			serverError(w, r, err)
-			return
-		}
-		if n <= 1 {
+		// The count-check-and-delete runs inside a transaction so two
+		// concurrent deletes can't both observe count > 1 and both proceed.
+		err := store.WithTx(db, func(tx *sql.Tx) error {
+			ur := users.WithTx(tx)
+			n, err := ur.Count()
+			if err != nil {
+				return err
+			}
+			if n <= 1 {
+				return errLastUser
+			}
+			return ur.Delete(id)
+		})
+		if errors.Is(err, errLastUser) {
 			renderUsers(w, r, users, "cannot delete the last remaining user")
 			return
 		}
-		if err := users.Delete(id); err != nil {
+		if err != nil {
 			serverError(w, r, err)
 			return
 		}

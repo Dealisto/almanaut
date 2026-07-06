@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/Dealisto/almanaut/internal/store"
 )
 
 // postAuthForm issues an authenticated, CSRF-valid POST and returns the
@@ -105,6 +103,3 @@ func TestSelfChangePassword(t *testing.T) {
 		t.Fatalf("correct current password reported incorrect: %s", rec.Body)
 	}
 }
-
-// Guard: id resolution helper used by handlers must reject non-numeric ids.
-var _ = store.Session{}
