@@ -16,6 +16,7 @@ A lightweight, self-hosted homelab inventory & documentation tool.
 - [Run with Docker](#run-with-docker)
 - [Run with Docker Compose](#run-with-docker-compose)
 - [Run from source](#run-from-source)
+- [Authentication](#authentication)
 - [Configuration](#configuration)
 - [Export & import](#export--import)
 - [JSON API](#json-api)
@@ -54,7 +55,8 @@ On top of the inventory you get:
   and renewals
 - **A read-only JSON API** and a Prometheus **`/metrics`** endpoint
 - **YAML export/import** of the entire inventory
-- **Optional HTTP Basic auth** for when a trusted LAN isn't enough
+- **Mandatory account-based login** — session-cookie auth with per-user
+  passwords, an auto-created admin on first run, and a `/users` admin page
 
 ## Screenshots
 
@@ -107,8 +109,8 @@ services:
       # - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       # All optional — see the Configuration table below. A few common ones:
-      # ALMANAUT_AUTH_USER: admin
-      # ALMANAUT_AUTH_PASS: change-me
+      # ALMANAUT_AUTH_USER: admin        # seeds the initial admin account
+      # ALMANAUT_AUTH_PASS: change-me    # seeds the initial admin account
       # ALMANAUT_ENABLE_NETWORK_SCAN: "true"
       # ALMANAUT_NTFY_URL: https://ntfy.sh/my-homelab
       TZ: Etc/UTC
@@ -128,6 +130,62 @@ go build -o almanaut .
 ALMANAUT_DATA_DIR=./data ./almanaut
 ```
 
+## Authentication
+
+Almanaut **requires a login** — every page and the whole JSON API sit behind a
+session-cookie auth check, with no way to run it open. (This is a breaking
+change from earlier versions' optional HTTP Basic auth.)
+
+On first startup, if the user table is empty, almanaut creates one admin
+account:
+
+- If `ALMANAUT_AUTH_USER` / `ALMANAUT_AUTH_PASS` are set, it seeds the admin
+  with that username/password (username defaults to `admin` if only the
+  password is set).
+- Otherwise it creates username `admin` with a **random password printed once
+  to the server log**, as a banner that looks like this:
+
+  ```
+  ========================================================
+  Almanaut created an initial admin account.
+    username: admin
+    password: 7f3kQ9z...
+  Log in and change it. This is shown only once.
+  ========================================================
+  ```
+
+  Copy that password immediately — it is not stored anywhere in recoverable
+  form and is never logged again.
+
+`ALMANAUT_AUTH_USER` / `ALMANAUT_AUTH_PASS` only seed that *initial* admin;
+they are **not** HTTP Basic auth credentials and are not checked on every
+request. The `_FILE` convention still applies to `ALMANAUT_AUTH_PASS` (see
+[Secrets from files](#secrets-from-files) below).
+
+Locked out? Set `ALMANAUT_RESET_ADMIN=true` and restart — almanaut resets the
+admin's password (using `ALMANAUT_AUTH_PASS` if set, otherwise a fresh random
+one) and logs the new value the same way. **Unset `ALMANAUT_RESET_ADMIN`
+afterwards**, or every restart will reset the password again.
+
+Once logged in, manage accounts at **Users** (`/users`): create, list, delete,
+and reset other users' passwords. The last remaining user cannot be deleted,
+so you can't lock yourself out entirely. Each user changes their own password
+at `/account/password`. There are no roles yet — every logged-in user has full
+access.
+
+Sessions are server-side (stored in SQLite), cookie-based, and last 30 days;
+use the **Logout** button to end one early. `/api/*` returns a plain `401`
+JSON error when called without a session — there's no separate API token yet
+(planned, [#51](https://github.com/Dealisto/almanaut/issues/51)), so
+programmatic/scripted access currently needs a valid session cookie.
+`/healthz` and `/version` are the only endpoints that bypass the login, so
+container health probes keep working.
+
+Because credentials and the session cookie travel in the request just like
+before, put a TLS-terminating reverse proxy in front of almanaut for anything
+beyond localhost (see [Behind a reverse proxy](#behind-a-reverse-proxy-tls))
+and set `ALMANAUT_SECURE_COOKIES=true` once you do.
+
 ## Configuration
 
 | Variable                      | Default              | Description                                    |
@@ -140,8 +198,9 @@ ALMANAUT_DATA_DIR=./data ./almanaut
 | `ALMANAUT_PROXMOX_URL`        | (empty)              | Proxmox VE API base URL (e.g. `https://pve.lan:8006`); enables Proxmox discovery when set with a token |
 | `ALMANAUT_PROXMOX_TOKEN`      | (empty)              | Proxmox API token (`user@realm!tokenid=secret`) |
 | `ALMANAUT_PROXMOX_INSECURE`   | `false`              | Skip TLS verification for a self-signed Proxmox certificate |
-| `ALMANAUT_AUTH_USER`          | (empty)              | Username for optional HTTP Basic auth; enables auth when set together with `ALMANAUT_AUTH_PASS` |
-| `ALMANAUT_AUTH_PASS`          | (empty)              | Password for optional HTTP Basic auth |
+| `ALMANAUT_AUTH_USER`          | `admin`              | Seeds the username of the initial admin account created on first startup |
+| `ALMANAUT_AUTH_PASS`          | (empty)              | Seeds the password of the initial admin account; a random password is generated and logged once when unset |
+| `ALMANAUT_RESET_ADMIN`        | `false`              | Reset the admin password at startup (lockout recovery) and log the new value; unset it again afterwards |
 | `ALMANAUT_SECURE_COOKIES`     | `false`              | Force the `Secure` flag on cookies; set to `true` when serving HTTPS through a TLS-terminating reverse proxy |
 | `ALMANAUT_NTFY_URL`           | (empty)              | ntfy topic URL for expiry alerts (e.g. `https://ntfy.sh/my-homelab`); empty disables notifications |
 | `ALMANAUT_NTFY_TOKEN`         | (empty)              | Optional bearer token for a protected ntfy topic (supports the `_FILE` convention) |
@@ -159,19 +218,20 @@ directly with [Docker secrets](https://docs.docker.com/engine/swarm/secrets/) an
 Kubernetes secrets, which are mounted as files. The `_FILE` variant takes
 precedence over the plain variable, and a single trailing newline is stripped.
 
-When `ALMANAUT_AUTH_USER` and `ALMANAUT_AUTH_PASS` are both set, every page
-requires those credentials via HTTP Basic auth. When either is unset, Almanaut is
-unauthenticated and intended for a trusted LAN or an authenticated reverse proxy.
-Basic auth transmits credentials base64-encoded (not encrypted), so terminate TLS
-in front of Almanaut when exposing it beyond localhost. Almanaut also does not
-rate-limit or lock out failed logins, so do not expose it directly to the
-internet — keep it behind a reverse proxy (which can add throttling and TLS) or a
-VPN.
+`ALMANAUT_AUTH_USER` / `ALMANAUT_AUTH_PASS` only seed the initial admin account
+at first startup — see [Authentication](#authentication) for the full login
+model, the bootstrap banner, and `ALMANAUT_RESET_ADMIN`. Every page and the
+JSON API require a logged-in session; there is no unauthenticated mode.
+Session cookies and login form submissions travel like any other request, so
+terminate TLS in front of Almanaut when exposing it beyond localhost. Almanaut
+also does not rate-limit or lock out failed logins, so do not expose it
+directly to the internet — keep it behind a reverse proxy (which can add
+throttling and TLS) or a VPN.
 
 Note that `/export` returns the **entire inventory**, including account entries
-(usernames, password-manager names, and secret references). In the default
-unauthenticated mode anyone who can reach the server can download it, so enable
-auth (or an authenticated reverse proxy) before storing anything sensitive.
+(usernames, password-manager names, and secret references) — anyone with a
+valid login can download it, so treat every account you create as having full
+access to that data.
 
 ### Behind a reverse proxy (TLS)
 
@@ -233,7 +293,12 @@ Since import wipes existing data, only load the sample into a fresh instance
 ## JSON API
 
 A read-only JSON API mirrors the inventory for scripts and dashboards. It sits
-behind the same optional Basic auth as the UI (open when auth is unset).
+behind the same session login as the UI: a request without a valid session
+cookie gets a plain `401 {"error":"unauthorized"}` instead of the UI's
+redirect to `/login`. There is no separate API token yet — scripted clients
+need to authenticate through `/login` and reuse the resulting cookie. Token
+auth for programmatic access is planned
+([#51](https://github.com/Dealisto/almanaut/issues/51)).
 
 | Endpoint | Returns |
 |---|---|
@@ -252,8 +317,12 @@ curl -s http://localhost:8080/api/certificates | jq '.[] | {subject, expires_on}
 ## Metrics
 
 `GET /metrics` exposes aggregate inventory gauges in the Prometheus text format,
-behind the same optional Basic auth as the rest of the app (configure
-`basic_auth` in your Prometheus scrape job if auth is enabled).
+behind the same login session as the rest of the app — a scrape without a
+valid session cookie gets redirected to `/login` rather than serving metrics.
+There's no scrape-friendly credential for this yet (tracked alongside the API
+token work in [#51](https://github.com/Dealisto/almanaut/issues/51)); until
+then, put Prometheus behind the same authenticated reverse proxy/VPN as the
+rest of Almanaut, or scrape from a session established via `/login`.
 
 | Metric | Meaning |
 |---|---|
@@ -282,7 +351,7 @@ the change log is not.
 
 ## Health & version
 
-Two unauthenticated endpoints are always available (they bypass basic auth so
+Two unauthenticated endpoints are always available (they bypass the login so
 probes can reach them):
 
 | Endpoint    | Response                                                        |
