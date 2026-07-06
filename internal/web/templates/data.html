@@ -24,4 +24,28 @@
     <div class="actions"><button class="btn btn-danger" type="submit">Import &amp; replace</button></div>
   </form>
 </section>
+
+{{if .CSVImported}}<p class="muted">CSV import complete — {{.CSVCreated}} created, {{.CSVUpdated}} updated.</p>{{end}}
+{{if .CSVErrors}}
+<div class="error">
+  <p>Import aborted — no changes were made. Fix these rows and try again:</p>
+  <ul>{{range .CSVErrors}}<li>{{.}}</li>{{end}}</ul>
+</div>
+{{end}}
+
+<section class="panel">
+  <h2>Import CSV (additive)</h2>
+  <p class="muted">Add or update rows of a <strong>single type</strong> without touching other data. The header row must use the export field names (snake_case). Include an <code>id</code> column to update existing rows; leave it blank or omit it to create.</p>
+  <form class="stack" method="post" action="/import-csv" enctype="multipart/form-data">
+  {{ csrfField }}
+    <label>Type
+      <select name="type" required>
+        {{range .Types}}<option value="{{.Value}}"{{if eq .Value $.CSVType}} selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+    </label>
+    <label>CSV file<input type="file" name="file" accept=".csv,text/csv" required></label>
+    <label><input type="checkbox" name="confirm" required> Add/update rows from this file.</label>
+    <div class="actions"><button class="btn btn-primary" type="submit">Import CSV</button></div>
+  </form>
+</section>
 {{end}}

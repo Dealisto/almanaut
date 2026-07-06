@@ -2,25 +2,41 @@ package web
 
 import (
 	"database/sql"
+	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/Dealisto/almanaut/internal/store"
 	"gopkg.in/yaml.v3"
 )
 
 type dataPageData struct {
-	Title    string
-	Error    string
-	Imported bool
+	Title       string
+	Error       string
+	Imported    bool
+	Types       []importType // CSV import type picker
+	CSVType     string       // repopulate the picker after a row-error re-render
+	CSVErrors   []string     // per-row import errors (import aborted)
+	CSVImported bool
+	CSVCreated  int
+	CSVUpdated  int
 }
 
-func showData() http.HandlerFunc {
+func showData(cat entityCatalog) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		render(w, req, "data.html", dataPageData{
+		q := req.URL.Query()
+		data := dataPageData{
 			Title:    "Data",
-			Imported: req.URL.Query().Get("imported") == "1",
-		})
+			Imported: q.Get("imported") == "1",
+			Types:    cat.importTypes(),
+		}
+		if q.Get("csv_imported") == "1" {
+			data.CSVImported = true
+			data.CSVCreated, _ = strconv.Atoi(q.Get("created"))
+			data.CSVUpdated, _ = strconv.Atoi(q.Get("updated"))
+		}
+		render(w, req, "data.html", data)
 	}
 }
 
@@ -78,5 +94,48 @@ func importData(db *sql.DB) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, req, "/data?imported=1", http.StatusSeeOther)
+	}
+}
+
+func importCSV(cat entityCatalog, deps handlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if err := req.ParseMultipartForm(10 << 20); err != nil {
+			http.Error(w, "could not parse upload", http.StatusBadRequest)
+			return
+		}
+		defer func() {
+			if req.MultipartForm != nil {
+				_ = req.MultipartForm.RemoveAll()
+			}
+		}()
+		typ := req.FormValue("type")
+		rs, ok := cat.resource(typ)
+		if !ok {
+			http.Error(w, "unknown entity type", http.StatusBadRequest)
+			return
+		}
+		if req.FormValue("confirm") == "" {
+			http.Error(w, "you must confirm the import", http.StatusBadRequest)
+			return
+		}
+		file, _, err := req.FormFile("file")
+		if err != nil {
+			http.Error(w, "missing import file", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		created, updated, rowErrs, err := rs.importCSV(deps, file, actor(req))
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
+		if len(rowErrs) > 0 {
+			render(w, req, "data.html", dataPageData{
+				Title: "Data", Types: cat.importTypes(), CSVType: typ, CSVErrors: rowErrs,
+			})
+			return
+		}
+		http.Redirect(w, req, fmt.Sprintf("/data?csv_imported=1&created=%d&updated=%d", created, updated), http.StatusSeeOther)
 	}
 }

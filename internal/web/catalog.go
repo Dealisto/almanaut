@@ -104,3 +104,28 @@ func labelOrFallback(labels map[string]string, typ string, id int64) string {
 	}
 	return key + " (deleted)"
 }
+
+// resource returns the registered resource for a singular type key.
+func (c entityCatalog) resource(sing string) (mountable, bool) {
+	for _, rs := range c.resources {
+		if rs.singular() == sing {
+			return rs, true
+		}
+	}
+	return nil, false
+}
+
+// importType is one selectable entity type in the CSV import dropdown.
+type importType struct {
+	Value string // singular type key, e.g. "host"
+	Label string // list title, e.g. "Hosts"
+}
+
+// importTypes lists every registered type for the CSV import type picker.
+func (c entityCatalog) importTypes() []importType {
+	out := make([]importType, 0, len(c.resources))
+	for _, rs := range c.resources {
+		out = append(out, importType{Value: rs.singular(), Label: rs.searchHeading()})
+	}
+	return out
+}
