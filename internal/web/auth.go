@@ -203,3 +203,73 @@ func safeNext(raw string) string {
 	}
 	return raw
 }
+
+// apiTokenPrefix marks almanaut API tokens so they are recognisable in logs and
+// config. The random suffix carries the entropy; the prefix is not secret.
+const apiTokenPrefix = "alm_"
+
+// newAPIToken returns a new API token: the alm_ prefix followed by 32 bytes of
+// crypto/rand entropy, base64url-encoded. The whole string is hashed for storage.
+func newAPIToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return apiTokenPrefix + base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// bearerToken extracts the token from an "Authorization: Bearer <token>" header.
+// The scheme is matched case-insensitively per RFC 7235.
+func bearerToken(r *http.Request) (string, bool) {
+	const prefix = "Bearer "
+	h := r.Header.Get("Authorization")
+	if len(h) > len(prefix) && strings.EqualFold(h[:len(prefix)], prefix) {
+		return strings.TrimSpace(h[len(prefix):]), true
+	}
+	return "", false
+}
+
+// apiAuth authenticates /api requests. A bearer API token resolves to its owning
+// user; failing that, a GET may fall back to the session cookie so a logged-in
+// browser/dashboard keeps read access. Writes (any non-GET/HEAD method) require a
+// bearer token — a write bearing only a session cookie is rejected. Because a
+// browser never sends a bearer header automatically, this keeps /api free of CSRF
+// without a CSRF token. All responses are JSON; a genuine backend failure is a
+// 500, never a silent 401.
+func apiAuth(tokens *store.TokenRepo, sessions *store.SessionRepo) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if raw, ok := bearerToken(r); ok {
+				u, err := tokens.UserByToken(hashToken(raw))
+				if err == nil {
+					next.ServeHTTP(w, r.WithContext(withUser(r.Context(), u)))
+					return
+				}
+				if !errors.Is(err, store.ErrNotFound) {
+					apiServerError(w, r, err)
+					return
+				}
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+				return
+			}
+			// No bearer token: writes are token-only.
+			if r.Method != http.MethodGet && r.Method != http.MethodHead {
+				writeJSONError(w, http.StatusUnauthorized, "api writes require a token")
+				return
+			}
+			// Reads may use the session cookie.
+			if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
+				u, err := sessions.UserByToken(hashToken(c.Value), nowRFC3339())
+				if err == nil {
+					next.ServeHTTP(w, r.WithContext(withUser(r.Context(), u)))
+					return
+				}
+				if !errors.Is(err, store.ErrNotFound) {
+					apiServerError(w, r, err)
+					return
+				}
+			}
+			writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		})
+	}
+}

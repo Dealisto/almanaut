@@ -53,7 +53,8 @@ On top of the inventory you get:
   `/history` activity feed (also surfaced on the dashboard)
 - **Expiry notifications** via [ntfy](https://ntfy.sh) for certs, warranties,
   and renewals
-- **A read-only JSON API** and a Prometheus **`/metrics`** endpoint
+- **A read-write JSON API** with per-user API tokens, and a Prometheus
+  **`/metrics`** endpoint
 - **YAML export/import** of the entire inventory
 - **Mandatory account-based login** — session-cookie auth with per-user
   passwords, an auto-created admin on first run, and a `/users` admin page
@@ -174,12 +175,12 @@ at `/account/password`. There are no roles yet — every logged-in user has full
 access.
 
 Sessions are server-side (stored in SQLite), cookie-based, and last 30 days;
-use the **Logout** button to end one early. `/api/*` returns a plain `401`
-JSON error when called without a session — there's no separate API token yet
-(planned, [#51](https://github.com/Dealisto/almanaut/issues/51)), so
-programmatic/scripted access currently needs a valid session cookie.
-`/healthz` and `/version` are the only endpoints that bypass the login, so
-container health probes keep working.
+use the **Logout** button to end one early. For scripted/programmatic access,
+create a personal API token at **API tokens** (`/account/tokens`) — see
+[JSON API](#json-api). `/api/*` returns a plain `401` JSON error when called
+without valid credentials (a session cookie or a bearer token). `/healthz` and
+`/version` are the only endpoints that bypass the login, so container health
+probes keep working.
 
 Because credentials and the session cookie travel in the request just like
 before, put a TLS-terminating reverse proxy in front of almanaut for anything
@@ -220,8 +221,9 @@ precedence over the plain variable, and a single trailing newline is stripped.
 
 `ALMANAUT_AUTH_USER` / `ALMANAUT_AUTH_PASS` only seed the initial admin account
 at first startup — see [Authentication](#authentication) for the full login
-model, the bootstrap banner, and `ALMANAUT_RESET_ADMIN`. Every page and the
-JSON API require a logged-in session; there is no unauthenticated mode.
+model, the bootstrap banner, and `ALMANAUT_RESET_ADMIN`. Every page requires a
+logged-in session, and the JSON API requires either a session cookie or an API
+token (see [JSON API](#json-api)); there is no unauthenticated mode.
 Session cookies and login form submissions travel like any other request, so
 terminate TLS in front of Almanaut when exposing it beyond localhost. Almanaut
 also does not rate-limit or lock out failed logins, so do not expose it
@@ -292,23 +294,56 @@ Since import wipes existing data, only load the sample into a fresh instance
 
 ## JSON API
 
-A read-only JSON API mirrors the inventory for scripts and dashboards. It sits
-behind the same session login as the UI: a request without a valid session
-cookie gets a plain `401 {"error":"unauthorized"}` instead of the UI's
-redirect to `/login`. There is no separate API token yet — scripted clients
-need to authenticate through `/login` and reuse the resulting cookie. Token
-auth for programmatic access is planned
-([#51](https://github.com/Dealisto/almanaut/issues/51)).
+A read-write JSON API mirrors the inventory for scripts and dashboards.
+**Reads** (`GET`) accept either a logged-in session cookie or an API token.
+**Writes** (`POST`/`PUT`/`DELETE`) require an API token — a request carrying
+only a session cookie is rejected, so a browser can never trigger a write via
+a plain form post (no separate CSRF token is needed for `/api`, since a
+browser never sends an `Authorization` header on its own). Any request
+missing valid credentials gets a plain `401 {"error":"…"}` instead of the
+UI's redirect to `/login`.
+
+### API tokens
+
+Create a personal token at **API tokens** (`/account/tokens`) while logged
+in: give it a label and it's created immediately. The raw token (`alm_...`)
+is shown **once**, right after creation — copy it then, since only its hash
+is stored and it cannot be redisplayed. Revoke a token from the same page at
+any time; each user only sees and can revoke their own tokens. There are no
+per-token scopes yet — a token carries its owner's full access, same as their
+session would.
+
+Send the token as a bearer header:
+
+```bash
+curl -X POST http://localhost:8080/api/hosts \
+  -H "Authorization: Bearer alm_..." \
+  -H "Content-Type: application/json" \
+  -d '{"name":"nas","type":"physical"}'
+```
+
+### Endpoints
 
 | Endpoint | Returns |
 |---|---|
 | `GET /api/{type}` | All entities of a type (e.g. `/api/hosts`, `/api/hardware`, `/api/certificates`) |
+| `POST /api/{type}` | Create an entity from a JSON body; `201` + `Location` header + the created entity, or `400` on validation/malformed-JSON errors |
 | `GET /api/{type}/{id}` | One entity, or `404 {"error":"…"}` if absent |
+| `PUT /api/{type}/{id}` | Full replace from a JSON body (not a partial patch); `200` + the updated entity, or `404`/`400` |
+| `DELETE /api/{type}/{id}` | `204` on success, `404` if absent |
 | `GET /api/search?q=<term>` | Flat array of matches: `[{"type","id","label","path"}]` |
 | `GET /api/relationships` | All relationships |
 
-Field names match the YAML export (snake_case). Responses are
-`application/json`. The API is read-only (GET); use the web UI to make changes.
+`{type}` bases mirror the web UI's routes, not a naive plural of the entity
+name — `hardware`, not `hardwares` (see the entity list under
+[What it does](#what-it-does) for the full set). Field names match the YAML
+export (snake_case), and request bodies use the same shape. Responses are
+`application/json`.
+
+Every API write is recorded in the same per-entity **change history** as UI
+edits (see [History & journal](#history--journal)), attributed to the
+token's owning user — so `GET /history` and each entity's Change history show
+exactly who made a scripted change, same as a UI edit.
 
 ```bash
 curl -s http://localhost:8080/api/certificates | jq '.[] | {subject, expires_on}'
@@ -319,10 +354,10 @@ curl -s http://localhost:8080/api/certificates | jq '.[] | {subject, expires_on}
 `GET /metrics` exposes aggregate inventory gauges in the Prometheus text format,
 behind the same login session as the rest of the app — a scrape without a
 valid session cookie gets redirected to `/login` rather than serving metrics.
-There's no scrape-friendly credential for this yet (tracked alongside the API
-token work in [#51](https://github.com/Dealisto/almanaut/issues/51)); until
-then, put Prometheus behind the same authenticated reverse proxy/VPN as the
-rest of Almanaut, or scrape from a session established via `/login`.
+Unlike `/api/*`, `/metrics` does not accept an API token, so there's still no
+scrape-friendly credential for it; put Prometheus behind the same
+authenticated reverse proxy/VPN as the rest of Almanaut, or scrape from a
+session established via `/login`.
 
 | Metric | Meaning |
 |---|---|

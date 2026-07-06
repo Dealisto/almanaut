@@ -124,3 +124,23 @@ func TestMigrateCreatesAuthTables(t *testing.T) {
 		}
 	}
 }
+
+func TestMigrateCreatesAPITokensTable(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	if err := Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	var name string
+	err = db.QueryRow(
+		`SELECT name FROM sqlite_master WHERE type='table' AND name='api_tokens'`,
+	).Scan(&name)
+	if err != nil {
+		t.Fatalf("api_tokens table not created: %v", err)
+	}
+}

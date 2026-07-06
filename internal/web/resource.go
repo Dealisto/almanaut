@@ -2,6 +2,7 @@ package web
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -65,6 +66,7 @@ type resource[T validatable] struct {
 	parse    func(r *http.Request, id int64) T // form → T; id==0 for create
 	label    func(T) string                    // name shown in catalog/detail heading
 	id       func(T) int64
+	setID    func(item *T, id int64) // writes the id back onto a decoded/parsed T (JSON writes)
 	notes    func(T) string
 	fields   func(T) []fieldRow    // detail-page rows
 	search   func(T) []string      // free-text fields matched by global search
@@ -168,6 +170,86 @@ func (rs resource[T]) newForm(w http.ResponseWriter, req *http.Request) {
 	})
 }
 
+// createEntity inserts item and records a create in the changelog, atomically.
+// The caller supplies actor (username) so both the HTML and JSON paths attribute
+// correctly. item's id is expected to be zero; the new id is returned.
+func (rs resource[T]) createEntity(d handlerDeps, item T, actor string) (int64, error) {
+	var id int64
+	err := store.WithTx(d.db, func(tx *sql.Tx) error {
+		var err error
+		id, err = rs.repo.CreateTx(tx, item)
+		if err != nil {
+			return err
+		}
+		var zero T
+		changes, err := domain.Diff(zero, item)
+		if err != nil {
+			return err
+		}
+		return d.changelog.WithTx(tx).Create(store.ChangeEvent{
+			EntityType: rs.sing, EntityID: id, Label: rs.label(item),
+			Action: domain.ActionCreate, Actor: actor,
+			Changes: changes, CreatedAt: nowRFC3339(),
+		})
+	})
+	return id, err
+}
+
+// updateEntity overwrites the row identified by rs.id(item) and records the diff
+// in the changelog, atomically. A no-op edit (empty diff) records nothing.
+func (rs resource[T]) updateEntity(d handlerDeps, item T, actor string) error {
+	return store.WithTx(d.db, func(tx *sql.Tx) error {
+		old, err := rs.repo.GetTx(tx, rs.id(item))
+		if err != nil {
+			return err
+		}
+		if err := rs.repo.UpdateTx(tx, item); err != nil {
+			return err
+		}
+		changes, err := domain.Diff(old, item)
+		if err != nil {
+			return err
+		}
+		if len(changes) == 0 {
+			return nil // no-op save: nothing worth logging
+		}
+		return d.changelog.WithTx(tx).Create(store.ChangeEvent{
+			EntityType: rs.sing, EntityID: rs.id(item), Label: rs.label(item),
+			Action: domain.ActionUpdate, Actor: actor,
+			Changes: changes, CreatedAt: nowRFC3339(),
+		})
+	})
+}
+
+// deleteEntity removes the entity and its relationship/tag/journal edges and
+// records a delete in the changelog, atomically.
+func (rs resource[T]) deleteEntity(d handlerDeps, id int64, actor string) error {
+	return store.WithTx(d.db, func(tx *sql.Tx) error {
+		item, err := rs.repo.GetTx(tx, id)
+		if err != nil {
+			return err
+		}
+		label := rs.label(item)
+		if err := rs.repo.DeleteTx(tx, id); err != nil {
+			return err
+		}
+		if err := d.rels.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
+			return err
+		}
+		if err := d.tags.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
+			return err
+		}
+		if err := d.journal.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
+			return err
+		}
+		return d.changelog.WithTx(tx).Create(store.ChangeEvent{
+			EntityType: rs.sing, EntityID: id, Label: label,
+			Action: domain.ActionDelete, Actor: actor,
+			Changes: nil, CreatedAt: nowRFC3339(),
+		})
+	})
+}
+
 func (rs resource[T]) create(d handlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		item := rs.parse(req, 0)
@@ -179,23 +261,7 @@ func (rs resource[T]) create(d handlerDeps) http.HandlerFunc {
 			})
 			return
 		}
-		err := store.WithTx(d.db, func(tx *sql.Tx) error {
-			id, err := rs.repo.CreateTx(tx, item)
-			if err != nil {
-				return err
-			}
-			var zero T
-			changes, err := domain.Diff(zero, item)
-			if err != nil {
-				return err
-			}
-			return d.changelog.WithTx(tx).Create(store.ChangeEvent{
-				EntityType: rs.sing, EntityID: id, Label: rs.label(item),
-				Action: domain.ActionCreate, Actor: actor(req),
-				Changes: changes, CreatedAt: nowRFC3339(),
-			})
-		})
-		if err != nil {
+		if _, err := rs.createEntity(d, item, actor(req)); err != nil {
 			serverError(w, req, err)
 			return
 		}
@@ -235,28 +301,7 @@ func (rs resource[T]) update(d handlerDeps) http.HandlerFunc {
 			})
 			return
 		}
-		err := store.WithTx(d.db, func(tx *sql.Tx) error {
-			old, err := rs.repo.GetTx(tx, id)
-			if err != nil {
-				return err
-			}
-			if err := rs.repo.UpdateTx(tx, item); err != nil {
-				return err
-			}
-			changes, err := domain.Diff(old, item)
-			if err != nil {
-				return err
-			}
-			if len(changes) == 0 {
-				return nil // no-op save: nothing worth logging
-			}
-			return d.changelog.WithTx(tx).Create(store.ChangeEvent{
-				EntityType: rs.sing, EntityID: id, Label: rs.label(item),
-				Action: domain.ActionUpdate, Actor: actor(req),
-				Changes: changes, CreatedAt: nowRFC3339(),
-			})
-		})
-		if err != nil {
+		if err := rs.updateEntity(d, item, actor(req)); err != nil {
 			notFoundOrServerError(w, req, rs.sing, err)
 			return
 		}
@@ -291,35 +336,7 @@ func (rs resource[T]) del(d handlerDeps) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		// Delete the entity and its relationship/tag/journal edges atomically: a
-		// partial failure would otherwise orphan edges that then render as
-		// "(deleted)". The entity is fetched first (inside the tx) so its label
-		// can still be recorded in the changelog after the row is gone.
-		err := store.WithTx(d.db, func(tx *sql.Tx) error {
-			item, err := rs.repo.GetTx(tx, id)
-			if err != nil {
-				return err
-			}
-			label := rs.label(item)
-			if err := rs.repo.DeleteTx(tx, id); err != nil {
-				return err
-			}
-			if err := d.rels.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
-				return err
-			}
-			if err := d.tags.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
-				return err
-			}
-			if err := d.journal.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
-				return err
-			}
-			return d.changelog.WithTx(tx).Create(store.ChangeEvent{
-				EntityType: rs.sing, EntityID: id, Label: label,
-				Action: domain.ActionDelete, Actor: actor(req),
-				Changes: nil, CreatedAt: nowRFC3339(),
-			})
-		})
-		if err != nil {
+		if err := rs.deleteEntity(d, id, actor(req)); err != nil {
 			notFoundOrServerError(w, req, rs.sing, err)
 			return
 		}
@@ -368,16 +385,96 @@ func (rs resource[T]) getJSON(w http.ResponseWriter, req *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
-// mountAPI registers this resource's read-only JSON routes.
-func (rs resource[T]) mountAPI(r chi.Router) {
-	r.Get("/api"+rs.basePath(), rs.listJSON)
-	r.Get("/api"+rs.basePath()+"/{id}", rs.getJSON)
+// createJSON decodes a JSON entity, validates it, and creates it. The client's
+// id (if any) is ignored. Returns 201 with the created entity and a Location.
+func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		var item T
+		if err := json.NewDecoder(req.Body).Decode(&item); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		rs.setID(&item, 0)
+		if err := item.Validate(); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		id, err := rs.createEntity(d, item, actor(req))
+		if err != nil {
+			apiServerError(w, req, err)
+			return
+		}
+		rs.setID(&item, id)
+		w.Header().Set("Location", fmt.Sprintf("/api%s/%d", rs.basePath(), id))
+		writeJSON(w, http.StatusCreated, item)
+	}
+}
+
+// updateJSON decodes a JSON entity and full-replaces the row at {id}. The URL id
+// is authoritative (any id in the body is overwritten). 404 if the row is absent.
+func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid id")
+			return
+		}
+		var item T
+		if err := json.NewDecoder(req.Body).Decode(&item); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		rs.setID(&item, id)
+		if err := item.Validate(); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := rs.updateEntity(d, item, actor(req)); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
+				return
+			}
+			apiServerError(w, req, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+	}
+}
+
+// deleteJSON removes the entity at {id}. 204 on success, 404 if absent.
+func (rs resource[T]) deleteJSON(d handlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid id")
+			return
+		}
+		if err := rs.deleteEntity(d, id, actor(req)); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
+				return
+			}
+			apiServerError(w, req, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// mountAPI registers this resource's JSON routes (read + write).
+func (rs resource[T]) mountAPI(r chi.Router, d handlerDeps) {
+	base := "/api" + rs.basePath()
+	r.Get(base, rs.listJSON)
+	r.Post(base, rs.createJSON(d))
+	r.Get(base+"/{id}", rs.getJSON)
+	r.Put(base+"/{id}", rs.updateJSON(d))
+	r.Delete(base+"/{id}", rs.deleteJSON(d))
 }
 
 // mountable lets New store heterogeneous resource[T] values in one slice.
 type mountable interface {
 	mount(r chi.Router, d handlerDeps)
-	mountAPI(r chi.Router)
+	mountAPI(r chi.Router, d handlerDeps)
 	options() ([]entityOption, error)
 	singular() string
 	basePath() string

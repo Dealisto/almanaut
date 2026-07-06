@@ -1,0 +1,40 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Account</span>
+    <h1>API tokens</h1>
+  </div>
+</div>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .NewToken}}
+<div class="notice">
+  <p>New token — copy it now, it will not be shown again:</p>
+  <code class="token">{{.NewToken}}</code>
+</div>
+{{end}}
+<table class="list">
+  <thead><tr><th>Label</th><th>Created</th><th></th></tr></thead>
+  <tbody>
+  {{range .Tokens}}
+    <tr>
+      <td>{{.Label}}</td>
+      <td>{{.CreatedAt}}</td>
+      <td class="row-actions">
+        <form method="post" action="/account/tokens/{{.ID}}/delete" class="inline">
+          {{ csrfField }}
+          <button class="btn btn-danger" type="submit">Revoke</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+<h2>New token</h2>
+<form class="stack" method="post" action="/account/tokens">
+  {{ csrfField }}
+  <label>Label<input name="label" required></label>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">Create token</button>
+  </div>
+</form>
+{{end}}
