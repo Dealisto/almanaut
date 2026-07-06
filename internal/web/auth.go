@@ -31,6 +31,11 @@ func verifyPassword(hash, pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
 }
 
+// dummyPasswordHash is compared against when a login names an unknown user, so
+// the request pays the same bcrypt cost as a real user with a wrong password —
+// closing a username-enumeration timing oracle.
+var dummyPasswordHash, _ = bcrypt.GenerateFromPassword([]byte("almanaut-timing-equalizer"), bcrypt.DefaultCost)
+
 // hashToken returns the sha256 (hex) of a session token. Sessions are stored by
 // this hash so the database never holds a usable token.
 func hashToken(tok string) string {
@@ -149,7 +154,11 @@ func login(users *store.UserRepo, sessions *store.SessionRepo, forceSecure bool)
 			serverError(w, r, err)
 			return
 		}
-		if errors.Is(err, store.ErrNotFound) || !verifyPassword(u.PasswordHash, password) {
+		hash := string(dummyPasswordHash)
+		if err == nil {
+			hash = u.PasswordHash
+		}
+		if !verifyPassword(hash, password) {
 			w.WriteHeader(http.StatusUnauthorized)
 			render(w, r, "login.html", loginData{Title: "Sign in", Next: next, Error: "invalid username or password"})
 			return
@@ -186,9 +195,10 @@ func logout(sessions *store.SessionRepo, forceSecure bool) http.HandlerFunc {
 }
 
 // safeNext returns raw only when it is a safe local path (single leading slash),
-// guarding against open-redirect via "//host" or absolute URLs.
+// guarding against open-redirect via "//host", absolute URLs, or a backslash /
+// control character that a browser may normalize into a protocol-relative URL.
 func safeNext(raw string) string {
-	if raw == "" || !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") {
+	if raw == "" || raw[0] != '/' || strings.HasPrefix(raw, "//") || strings.ContainsAny(raw, "\\\r\n") {
 		return "/"
 	}
 	return raw

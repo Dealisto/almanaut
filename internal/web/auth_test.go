@@ -78,6 +78,9 @@ func TestSafeNext(t *testing.T) {
 		"//evil.com":    "/",
 		"https://x.com": "/",
 		"javascript:1":  "/",
+		"/\\evil.com":   "/",
+		"/\\/evil.com":  "/",
+		"/ok/path":      "/ok/path",
 	}
 	for in, want := range cases {
 		if got := safeNext(in); got != want {
