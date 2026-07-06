@@ -1,6 +1,13 @@
 package web
 
-import "testing"
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/Dealisto/almanaut/internal/domain"
+)
 
 func TestHashAndVerifyPassword(t *testing.T) {
 	hash, err := hashPassword("correct horse battery staple")
@@ -32,5 +39,28 @@ func TestNewSessionTokenIsRandomAndHashable(t *testing.T) {
 	}
 	if hashToken(a) != hashToken(a) {
 		t.Fatal("hashToken not deterministic")
+	}
+}
+
+func TestUserContextRoundTrip(t *testing.T) {
+	ctx := withUser(context.Background(), domain.User{ID: 1, Username: "alice"})
+	u, ok := userFrom(ctx)
+	if !ok || u.Username != "alice" {
+		t.Fatalf("userFrom = %+v, %v", u, ok)
+	}
+	if _, ok := userFrom(context.Background()); ok {
+		t.Fatal("empty context must report no user")
+	}
+}
+
+func TestActorReturnsSessionUsername(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = req.WithContext(withUser(req.Context(), domain.User{Username: "bob"}))
+	if got := actor(req); got != "bob" {
+		t.Fatalf("actor = %q, want bob", got)
+	}
+	// No user in context → empty actor (unchanged legacy behaviour).
+	if got := actor(httptest.NewRequest(http.MethodGet, "/", nil)); got != "" {
+		t.Fatalf("actor without user = %q, want empty", got)
 	}
 }

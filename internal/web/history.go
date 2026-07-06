@@ -9,11 +9,13 @@ import (
 	"github.com/Dealisto/almanaut/internal/store"
 )
 
-// actor returns the Basic-auth username making the request, or "" when the app
-// is unauthenticated. The M2 API-token work will extend this.
+// actor returns the logged-in user's username, or "" when the request carries
+// no session (e.g. tests built with AuthEnabled off). Recorded in changelog rows.
 func actor(req *http.Request) string {
-	user, _, _ := req.BasicAuth()
-	return user
+	if u, ok := userFrom(req.Context()); ok {
+		return u.Username
+	}
+	return ""
 }
 
 // nowRFC3339 is the single timestamp format used across history rows.

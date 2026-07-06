@@ -1,11 +1,15 @@
 package web
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"net/http"
+	"time"
 
+	"github.com/Dealisto/almanaut/internal/domain"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -37,4 +41,52 @@ func newSessionToken() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// sessionCookieName is the cookie carrying the opaque session token.
+const sessionCookieName = "almanaut_session"
+
+// sessionDuration is how long a new session stays valid.
+const sessionDuration = 30 * 24 * time.Hour
+
+type userCtxKey struct{}
+
+// withUser returns a context carrying the authenticated user.
+func withUser(ctx context.Context, u domain.User) context.Context {
+	return context.WithValue(ctx, userCtxKey{}, u)
+}
+
+// userFrom returns the authenticated user placed in the context by sessionAuth,
+// and false when the request is unauthenticated.
+func userFrom(ctx context.Context) (domain.User, bool) {
+	u, ok := ctx.Value(userCtxKey{}).(domain.User)
+	return u, ok
+}
+
+// setSessionCookie writes the session cookie. Secure follows the same logic as
+// the CSRF cookie: on behind a TLS-terminating proxy (forceSecure) or a direct
+// TLS connection.
+func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, forceSecure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   forceSecure || r.TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(sessionDuration.Seconds()),
+	})
+}
+
+// clearSessionCookie expires the session cookie (logout).
+func clearSessionCookie(w http.ResponseWriter, r *http.Request, forceSecure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   forceSecure || r.TLS != nil,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
 }
