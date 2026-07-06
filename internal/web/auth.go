@@ -6,10 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/store"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -89,4 +93,103 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request, forceSecure bool
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
+}
+
+// sessionAuth resolves the session cookie to a user and puts it in the request
+// context. Unauthenticated requests get a 303 redirect to /login (pages) or a
+// 401 JSON error (/api/*). A genuine backend failure is a 500, never a silent
+// redirect.
+func sessionAuth(sessions *store.SessionRepo) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
+				u, err := sessions.UserByToken(hashToken(c.Value), nowRFC3339())
+				if err == nil {
+					next.ServeHTTP(w, r.WithContext(withUser(r.Context(), u)))
+					return
+				}
+				if !errors.Is(err, store.ErrNotFound) {
+					if strings.HasPrefix(r.URL.Path, "/api/") {
+						apiServerError(w, r, err)
+					} else {
+						serverError(w, r, err)
+					}
+					return
+				}
+			}
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+				return
+			}
+			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
+		})
+	}
+}
+
+type loginData struct {
+	Title string
+	Next  string
+	Error string
+}
+
+// loginForm renders the standalone login page.
+func loginForm(w http.ResponseWriter, r *http.Request) {
+	render(w, r, "login.html", loginData{Title: "Sign in", Next: safeNext(r.URL.Query().Get("next"))})
+}
+
+// login verifies credentials, creates a session, and sets the cookie.
+func login(users *store.UserRepo, sessions *store.SessionRepo, forceSecure bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		username := strings.TrimSpace(r.FormValue("username"))
+		password := r.FormValue("password")
+		next := safeNext(r.FormValue("next"))
+
+		u, err := users.GetByUsername(username)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			serverError(w, r, err)
+			return
+		}
+		if errors.Is(err, store.ErrNotFound) || !verifyPassword(u.PasswordHash, password) {
+			w.WriteHeader(http.StatusUnauthorized)
+			render(w, r, "login.html", loginData{Title: "Sign in", Next: next, Error: "invalid username or password"})
+			return
+		}
+
+		token, err := newSessionToken()
+		if err != nil {
+			serverError(w, r, err)
+			return
+		}
+		now := nowRFC3339()
+		expires := time.Now().UTC().Add(sessionDuration).Format(time.RFC3339)
+		if _, err := sessions.Create(store.Session{
+			TokenHash: hashToken(token), UserID: u.ID, CreatedAt: now, ExpiresAt: expires,
+		}); err != nil {
+			serverError(w, r, err)
+			return
+		}
+		_ = sessions.DeleteExpired(now) // opportunistic prune
+		setSessionCookie(w, r, token, forceSecure)
+		http.Redirect(w, r, next, http.StatusSeeOther)
+	}
+}
+
+// logout deletes the current session and clears the cookie.
+func logout(sessions *store.SessionRepo, forceSecure bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
+			_ = sessions.DeleteByToken(hashToken(c.Value))
+		}
+		clearSessionCookie(w, r, forceSecure)
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	}
+}
+
+// safeNext returns raw only when it is a safe local path (single leading slash),
+// guarding against open-redirect via "//host" or absolute URLs.
+func safeNext(raw string) string {
+	if raw == "" || !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") {
+		return "/"
+	}
+	return raw
 }

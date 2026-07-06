@@ -19,13 +19,25 @@ var pages = func() map[string]*template.Template {
 		m[page] = template.Must(
 			template.New("layout.html").
 				Funcs(template.FuncMap{
-					"csrfField": func() template.HTML { return "" },
-					"isActive":  func(string) bool { return false },
-					"theme":     func() string { return "system" },
+					"csrfField":   func() template.HTML { return "" },
+					"isActive":    func(string) bool { return false },
+					"theme":       func() string { return "system" },
+					"currentUser": func() string { return "" },
 				}).
 				ParseFS(templatesFS, "templates/layout.html", "templates/"+page),
 		)
 	}
+	// login.html is standalone (no app shell): it defines its own "layout".
+	m["login.html"] = template.Must(
+		template.New("login.html").
+			Funcs(template.FuncMap{
+				"csrfField":   func() template.HTML { return "" },
+				"isActive":    func(string) bool { return false },
+				"theme":       func() string { return "system" },
+				"currentUser": func() string { return "" },
+			}).
+			ParseFS(templatesFS, "templates/login.html"),
+	)
 	return m
 }()
 
@@ -52,6 +64,12 @@ func render(w http.ResponseWriter, r *http.Request, page string, data any) {
 		},
 		"isActive": func(base string) bool { return navIsActive(r.URL.Path, base) },
 		"theme":    func() string { return themeFromCookie(r) },
+		"currentUser": func() string {
+			if u, ok := userFrom(r.Context()); ok {
+				return u.Username
+			}
+			return ""
+		},
 	})
 	var buf bytes.Buffer
 	if err := clone.ExecuteTemplate(&buf, "layout", data); err != nil {
