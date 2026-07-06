@@ -88,6 +88,27 @@ func TestChangelogRecordsCreateUpdateDelete(t *testing.T) {
 	}
 }
 
+// TestChangelogRecordsSessionActor drives a create through the authenticated
+// UI and asserts the changelog attributes the write to the logged-in user
+// (admin), not just the entity.
+func TestChangelogRecordsSessionActor(t *testing.T) {
+	h, session := authTestServer(t)
+	// Create a host through the authenticated UI; the changelog row must be
+	// attributed to the logged-in user (admin).
+	rec := postAuthForm(t, h, session, "/hosts", map[string]string{"name": "web01", "type": "physical"})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create host code = %d (body %s)", rec.Code, rec.Body)
+	}
+	histRec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/history", nil)
+	req.AddCookie(session)
+	h.ServeHTTP(histRec, req)
+	body := histRec.Body.String()
+	if !strings.Contains(body, "web01") || !strings.Contains(body, "admin") {
+		t.Fatalf("history missing host or actor attribution: %s", body)
+	}
+}
+
 // getBody issues a GET and returns the response body, for tests that only
 // need to inspect rendered HTML (the package has no reusable GET helper yet).
 func getBody(t *testing.T, srv http.Handler, path string) string {

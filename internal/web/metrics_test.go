@@ -1,8 +1,6 @@
 package web
 
 import (
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -55,8 +53,8 @@ func TestMetricsEndpoint(t *testing.T) {
 }
 
 // TestMetricsBehindAuth verifies /metrics sits inside the same
-// basic-auth-protected route group as the rest of the UI when auth is
-// configured, unlike /healthz and /version which are intentionally
+// session-auth-protected route group as the rest of the UI when auth is
+// enabled, unlike /healthz and /version which are intentionally
 // unauthenticated.
 func TestMetricsBehindAuth(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
@@ -68,20 +66,12 @@ func TestMetricsBehindAuth(t *testing.T) {
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	h := New(Config{
-		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
-		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
-		Hardware: store.NewHardwareRepo(db), Subscriptions: store.NewSubscriptionRepo(db), Accounts: store.NewAccountRepo(db),
-		Relationships: store.NewRelationshipRepo(db), Tags: store.NewTagRepo(db), DB: db,
-		Logger: log.New(io.Discard, "", 0),
-		Docker: fakeScanner{}, NetScan: fakeNetworkScanner{}, NetOpts: NetDiscoveryOptions{}, Proxmox: fakeProxmoxScanner{}, PVEOpts: ProxmoxOptions{},
-		AuthUser: "u", AuthPass: "p",
-	})
+	h := newAuthedTestHandler(t, db)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("code = %d, want 401", rec.Code)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("code = %d, want 303 redirect to /login", rec.Code)
 	}
 }
 

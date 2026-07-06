@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 )
@@ -98,6 +99,28 @@ func TestMigrateCreatesHistoryTables(t *testing.T) {
 		).Scan(&name)
 		if err != nil {
 			t.Fatalf("table %q not created by migrations: %v", table, err)
+		}
+	}
+}
+
+func TestMigrateCreatesAuthTables(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	if err := Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	for _, tbl := range []string{"users", "sessions"} {
+		var name string
+		err := db.QueryRow(
+			`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, tbl,
+		).Scan(&name)
+		if err != nil {
+			t.Fatalf("table %q not created: %v", tbl, err)
 		}
 	}
 }

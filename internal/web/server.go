@@ -36,8 +36,7 @@ type Config struct {
 	NetOpts       NetDiscoveryOptions
 	Proxmox       proxmoxScanner
 	PVEOpts       ProxmoxOptions
-	AuthUser      string // when set with AuthPass, enables HTTP basic auth
-	AuthPass      string
+	AuthEnabled   bool   // require login (main.go always sets this true; tests leave it false)
 	SecureCookies bool   // force the Secure flag on cookies (TLS-terminating proxy)
 	Version       string // build version, surfaced at /version (defaults to "dev")
 }
@@ -273,6 +272,8 @@ func New(cfg Config) http.Handler {
 	}
 	changelog := store.NewChangelogRepo(db)
 	journal := store.NewJournalRepo(db)
+	users := store.NewUserRepo(db)
+	sessions := store.NewSessionRepo(db)
 	cat := entityCatalog{resources: resources}
 	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, db: db}
 	r := chi.NewRouter()
@@ -290,23 +291,45 @@ func New(cfg Config) http.Handler {
 	// group so a container HEALTHCHECK or probe can reach them without creds.
 	r.Get("/healthz", healthz(db))
 	r.Get("/version", versionInfo(cfg.Version))
+	// Static CSS is public so the unauthenticated login page can style itself.
+	r.Get("/static/app.css", staticCSS(cfg.Version))
+
+	// Login routes: CSRF-protected but not session-gated (you cannot have a
+	// session yet). Only present when auth is enabled.
+	if cfg.AuthEnabled {
+		r.Group(func(r chi.Router) {
+			r.Use(limitBody)
+			r.Use(csrfProtect(cfg.SecureCookies))
+			r.Get("/login", loginForm)
+			r.Post("/login", login(users, sessions, cfg.SecureCookies))
+		})
+	}
 
 	repos := entityRepos{
 		hosts: hosts, services: services, networks: networks,
 		domains: domains, certificates: certificates, backups: backups,
 		hardware: hardware, subscriptions: subscriptions, accounts: accounts,
 	}
-	// Everything else is the application UI: optionally behind basic auth and
+	// Everything else is the application UI: optionally behind session auth and
 	// always behind CSRF. Grouping scopes those middlewares to these routes
 	// while inheriting the request-id/logging/recovery stack above.
 	r.Group(func(r chi.Router) {
-		if cfg.AuthUser != "" && cfg.AuthPass != "" {
-			r.Use(basicAuth(cfg.AuthUser, cfg.AuthPass))
+		if cfg.AuthEnabled {
+			r.Use(sessionAuth(sessions))
 		}
 		// Bound the request body before csrfProtect reads the form of every
 		// unsafe request, so an oversize upload is rejected up front.
 		r.Use(limitBody)
 		r.Use(csrfProtect(cfg.SecureCookies))
+		if cfg.AuthEnabled {
+			r.Post("/logout", logout(sessions, cfg.SecureCookies))
+			r.Get("/users", listUsers(users))
+			r.Post("/users", createUser(users))
+			r.Post("/users/{id}/delete", deleteUser(users, db))
+			r.Post("/users/{id}/password", resetUserPassword(users))
+			r.Get("/account/password", changePasswordForm)
+			r.Post("/account/password", changePassword(users))
+		}
 		r.Get("/", dashboard(repos, relationships, cat, changelog))
 		for _, rs := range resources {
 			rs.mount(r, deps)
@@ -329,7 +352,6 @@ func New(cfg Config) http.Handler {
 		r.Get("/api/relationships", apiRelationships(relationships))
 		r.Get("/data", showData())
 		r.Post("/theme", setTheme(cfg.SecureCookies))
-		r.Get("/static/app.css", staticCSS(cfg.Version))
 		r.Get("/export", exportData(db))
 		r.Post("/import", importData(db))
 		r.Get("/discovery", discoveryLanding(netOpts, pveOpts))

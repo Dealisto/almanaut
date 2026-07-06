@@ -67,6 +67,21 @@ func newTestServerDB(t *testing.T) (http.Handler, *sql.DB) {
 	return srv, db
 }
 
+// newAuthedTestHandler builds a server with auth enabled against an already-
+// migrated db (used by the auth/session tests).
+func newAuthedTestHandler(t *testing.T, db *sql.DB) http.Handler {
+	t.Helper()
+	return New(Config{
+		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
+		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
+		Hardware: store.NewHardwareRepo(db), Subscriptions: store.NewSubscriptionRepo(db), Accounts: store.NewAccountRepo(db),
+		Relationships: store.NewRelationshipRepo(db), Tags: store.NewTagRepo(db), DB: db,
+		Logger: log.New(io.Discard, "", 0),
+		Docker: fakeScanner{}, NetScan: fakeNetworkScanner{}, NetOpts: NetDiscoveryOptions{}, Proxmox: fakeProxmoxScanner{}, PVEOpts: ProxmoxOptions{},
+		AuthEnabled: true,
+	})
+}
+
 func newTestServerWithScanner(t *testing.T, scanner dockerScanner) http.Handler {
 	return newTestServerFull(t, scanner, fakeNetworkScanner{}, NetDiscoveryOptions{})
 }

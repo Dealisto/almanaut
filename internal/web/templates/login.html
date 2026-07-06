@@ -1,0 +1,24 @@
+{{define "layout"}}<!doctype html>
+<html lang="en" data-theme="{{theme}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Almanaut</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="login-body">
+<main class="login-card">
+  <h1 class="brand">Almanaut</h1>
+  {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+  <form class="stack" method="post" action="/login">
+    {{ csrfField }}
+    <input type="hidden" name="next" value="{{.Next}}">
+    <label>Username<input name="username" autofocus required></label>
+    <label>Password<input name="password" type="password" required></label>
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Sign in</button>
+    </div>
+  </form>
+</main>
+</body>
+</html>{{end}}
