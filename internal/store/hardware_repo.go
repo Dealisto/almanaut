@@ -40,14 +40,14 @@ func (r *HardwareRepo) GetTx(tx *sql.Tx, id int64) (domain.Hardware, error) {
 	return r.WithTx(tx).Get(id)
 }
 
-const hardwareColumns = `id, name, kind, manufacturer, model, serial, location, purchase_date, warranty_end, status, notes`
+const hardwareColumns = `id, name, kind, manufacturer, model, serial, location, purchase_date, warranty_end, status, notes, rack_id, rack_position, u_height`
 
 // Create inserts h and returns its new ID.
 func (r *HardwareRepo) Create(h domain.Hardware) (int64, error) {
 	res, err := r.db.Exec(
-		`INSERT INTO hardware (name, kind, manufacturer, model, serial, location, purchase_date, warranty_end, status, notes)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.PurchaseDate, h.WarrantyEnd, h.Status, h.Notes,
+		`INSERT INTO hardware (name, kind, manufacturer, model, serial, location, purchase_date, warranty_end, status, notes, rack_id, rack_position, u_height)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.PurchaseDate, h.WarrantyEnd, h.Status, h.Notes, h.RackID, h.RackPosition, h.UHeight,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert hardware: %w", err)
@@ -82,8 +82,8 @@ func (r *HardwareRepo) List() ([]domain.Hardware, error) {
 // Update overwrites the hardware with h.ID with the values in h.
 func (r *HardwareRepo) Update(h domain.Hardware) error {
 	res, err := r.db.Exec(
-		`UPDATE hardware SET name=?, kind=?, manufacturer=?, model=?, serial=?, location=?, purchase_date=?, warranty_end=?, status=?, notes=? WHERE id=?`,
-		h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.PurchaseDate, h.WarrantyEnd, h.Status, h.Notes, h.ID,
+		`UPDATE hardware SET name=?, kind=?, manufacturer=?, model=?, serial=?, location=?, purchase_date=?, warranty_end=?, status=?, notes=?, rack_id=?, rack_position=?, u_height=? WHERE id=?`,
+		h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.PurchaseDate, h.WarrantyEnd, h.Status, h.Notes, h.RackID, h.RackPosition, h.UHeight, h.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update hardware: %w", err)
@@ -101,7 +101,7 @@ func (r *HardwareRepo) Delete(id int64) error {
 
 func scanHardware(s scanner) (domain.Hardware, error) {
 	var h domain.Hardware
-	if err := s.Scan(&h.ID, &h.Name, &h.Kind, &h.Manufacturer, &h.Model, &h.Serial, &h.Location, &h.PurchaseDate, &h.WarrantyEnd, &h.Status, &h.Notes); err != nil {
+	if err := s.Scan(&h.ID, &h.Name, &h.Kind, &h.Manufacturer, &h.Model, &h.Serial, &h.Location, &h.PurchaseDate, &h.WarrantyEnd, &h.Status, &h.Notes, &h.RackID, &h.RackPosition, &h.UHeight); err != nil {
 		return domain.Hardware{}, notFound(fmt.Errorf("scan hardware: %w", err))
 	}
 	return h, nil
