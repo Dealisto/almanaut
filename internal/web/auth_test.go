@@ -42,7 +42,7 @@ func TestNewSessionTokenIsRandomAndHashable(t *testing.T) {
 	if hashToken(a) == a || len(hashToken(a)) != 64 {
 		t.Fatalf("hashToken should be a 64-char sha256 hex, got %q", hashToken(a))
 	}
-	if hashToken(a) != hashToken(a) {
+	if h1, h2 := hashToken(a), hashToken(a); h1 != h2 {
 		t.Fatal("hashToken not deterministic")
 	}
 }
