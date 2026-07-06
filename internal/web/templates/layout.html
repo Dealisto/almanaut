@@ -34,6 +34,7 @@
         <a href="/history" class="{{if isActive "/history"}}active{{end}}">History</a>
         <a href="/discovery" class="{{if isActive "/discovery"}}active{{end}}">Discover</a>
         <a href="/data" class="{{if isActive "/data"}}active{{end}}">Data</a>
+        <a href="/users" class="{{if isActive "/users"}}active{{end}}">Users</a>
       </div>
     </nav>
     <form class="theme-switch" method="post" action="/theme">
@@ -42,6 +43,16 @@
       <button name="theme" value="light" class="{{if eq (theme) "light"}}active{{end}}">Light</button>
       <button name="theme" value="dark" class="{{if eq (theme) "dark"}}active{{end}}">Dark</button>
     </form>
+    {{if currentUser}}
+    <div class="nav-sep"></div>
+    <div class="nav-user">
+      <a href="/account/password" class="nav-user-name">{{currentUser}}</a>
+      <form method="post" action="/logout" class="inline">
+        {{ csrfField }}
+        <button class="btn btn-link" type="submit">Log out</button>
+      </form>
+    </div>
+    {{end}}
   </aside>
   <label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
   <div class="content">

@@ -1,0 +1,40 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Administration</span>
+    <h1>Users</h1>
+  </div>
+</div>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+<table class="list">
+  <thead><tr><th>Username</th><th>Created</th><th></th></tr></thead>
+  <tbody>
+  {{range .Users}}
+    <tr>
+      <td>{{.Username}}</td>
+      <td>{{.CreatedAt}}</td>
+      <td class="row-actions">
+        <form method="post" action="/users/{{.ID}}/password" class="inline">
+          {{ csrfField }}
+          <input name="password" type="password" placeholder="new password" required>
+          <button class="btn" type="submit">Reset</button>
+        </form>
+        <form method="post" action="/users/{{.ID}}/delete" class="inline">
+          {{ csrfField }}
+          <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+<h2>Add user</h2>
+<form class="stack" method="post" action="/users">
+  {{ csrfField }}
+  <label>Username<input name="username" required></label>
+  <label>Password<input name="password" type="password" required></label>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">Create</button>
+  </div>
+</form>
+{{end}}
