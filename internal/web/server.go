@@ -56,6 +56,7 @@ func New(cfg Config) http.Handler {
 			parse: parseHost,
 			label: func(h domain.Host) string { return h.Name },
 			id:    func(h domain.Host) int64 { return h.ID },
+			setID: func(h *domain.Host, id int64) { h.ID = id },
 			notes: func(h domain.Host) string { return h.Notes },
 			fields: func(h domain.Host) []fieldRow {
 				return []fieldRow{
@@ -76,6 +77,7 @@ func New(cfg Config) http.Handler {
 			parse: parseService,
 			label: func(s domain.Service) string { return s.Name },
 			id:    func(s domain.Service) int64 { return s.ID },
+			setID: func(s *domain.Service, id int64) { s.ID = id },
 			notes: func(s domain.Service) string { return s.Notes },
 			fields: func(s domain.Service) []fieldRow {
 				return []fieldRow{
@@ -98,6 +100,7 @@ func New(cfg Config) http.Handler {
 			parse: parseNetwork,
 			label: func(n domain.Network) string { return n.Name },
 			id:    func(n domain.Network) int64 { return n.ID },
+			setID: func(n *domain.Network, id int64) { n.ID = id },
 			notes: func(n domain.Network) string { return n.Notes },
 			fields: func(n domain.Network) []fieldRow {
 				return []fieldRow{
@@ -133,6 +136,7 @@ func New(cfg Config) http.Handler {
 			parse: parseDomain,
 			label: func(d domain.Domain) string { return d.FQDN },
 			id:    func(d domain.Domain) int64 { return d.ID },
+			setID: func(d *domain.Domain, id int64) { d.ID = id },
 			notes: func(d domain.Domain) string { return d.Notes },
 			fields: func(d domain.Domain) []fieldRow {
 				return []fieldRow{
@@ -151,6 +155,7 @@ func New(cfg Config) http.Handler {
 			parse: parseCertificate,
 			label: func(c domain.Certificate) string { return c.Subject },
 			id:    func(c domain.Certificate) int64 { return c.ID },
+			setID: func(c *domain.Certificate, id int64) { c.ID = id },
 			notes: func(c domain.Certificate) string { return c.Notes },
 			fields: func(c domain.Certificate) []fieldRow {
 				autoRenew := "no"
@@ -175,6 +180,7 @@ func New(cfg Config) http.Handler {
 			parse: parseBackup,
 			label: func(b domain.Backup) string { return b.Source },
 			id:    func(b domain.Backup) int64 { return b.ID },
+			setID: func(b *domain.Backup, id int64) { b.ID = id },
 			notes: func(b domain.Backup) string { return b.Notes },
 			fields: func(b domain.Backup) []fieldRow {
 				return []fieldRow{
@@ -195,6 +201,7 @@ func New(cfg Config) http.Handler {
 			parse: parseHardware,
 			label: func(h domain.Hardware) string { return h.Name },
 			id:    func(h domain.Hardware) int64 { return h.ID },
+			setID: func(h *domain.Hardware, id int64) { h.ID = id },
 			notes: func(h domain.Hardware) string { return h.Notes },
 			fields: func(h domain.Hardware) []fieldRow {
 				return []fieldRow{
@@ -220,6 +227,7 @@ func New(cfg Config) http.Handler {
 			parse: parseSubscription,
 			label: func(s domain.Subscription) string { return s.Name },
 			id:    func(s domain.Subscription) int64 { return s.ID },
+			setID: func(s *domain.Subscription, id int64) { s.ID = id },
 			notes: func(s domain.Subscription) string { return s.Notes },
 			fields: func(s domain.Subscription) []fieldRow {
 				price := s.Amount
@@ -252,6 +260,7 @@ func New(cfg Config) http.Handler {
 			parse: parseAccount,
 			label: func(a domain.Account) string { return a.Name },
 			id:    func(a domain.Account) int64 { return a.ID },
+			setID: func(a *domain.Account, id int64) { a.ID = id },
 			notes: func(a domain.Account) string { return a.Notes },
 			fields: func(a domain.Account) []fieldRow {
 				return []fieldRow{
@@ -274,6 +283,7 @@ func New(cfg Config) http.Handler {
 	journal := store.NewJournalRepo(db)
 	users := store.NewUserRepo(db)
 	sessions := store.NewSessionRepo(db)
+	tokens := store.NewTokenRepo(db)
 	cat := entityCatalog{resources: resources}
 	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, db: db}
 	r := chi.NewRouter()
@@ -329,11 +339,13 @@ func New(cfg Config) http.Handler {
 			r.Post("/users/{id}/password", resetUserPassword(users))
 			r.Get("/account/password", changePasswordForm)
 			r.Post("/account/password", changePassword(users))
+			r.Get("/account/tokens", listTokens(tokens))
+			r.Post("/account/tokens", createToken(tokens))
+			r.Post("/account/tokens/{id}/delete", deleteToken(tokens))
 		}
 		r.Get("/", dashboard(repos, relationships, cat, changelog))
 		for _, rs := range resources {
 			rs.mount(r, deps)
-			rs.mountAPI(r)
 		}
 		r.Post("/tags", addTag(tags, cat))
 		r.Post("/tags/delete", removeTag(tags, cat))
@@ -348,8 +360,6 @@ func New(cfg Config) http.Handler {
 		r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
 		r.Get("/metrics", metricsHandler(repos, relationships))
 		r.Get("/search", searchEntities(cat, tags))
-		r.Get("/api/search", apiSearch(cat))
-		r.Get("/api/relationships", apiRelationships(relationships))
 		r.Get("/data", showData())
 		r.Post("/theme", setTheme(cfg.SecureCookies))
 		r.Get("/export", exportData(db))
@@ -362,6 +372,22 @@ func New(cfg Config) http.Handler {
 		r.Post("/discovery/network/import", importNetwork(hosts, netOpts, db))
 		r.Get("/discovery/proxmox", scanProxmox(proxmox, hosts, pveOpts))
 		r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts, db))
+	})
+
+	// JSON API: authenticated by a bearer API token, or a session cookie for
+	// reads (see apiAuth). Deliberately outside the CSRF group — writes are
+	// bearer-only, which a browser never sends automatically, so there is no CSRF
+	// vector. limitBody still bounds the request body.
+	r.Group(func(r chi.Router) {
+		r.Use(limitBody)
+		if cfg.AuthEnabled {
+			r.Use(apiAuth(tokens, sessions))
+		}
+		for _, rs := range resources {
+			rs.mountAPI(r, deps)
+		}
+		r.Get("/api/search", apiSearch(cat))
+		r.Get("/api/relationships", apiRelationships(relationships))
 	})
 	return r
 }
