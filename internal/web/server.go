@@ -31,6 +31,7 @@ type Config struct {
 	Sites         *store.SiteRepo
 	Locations     *store.LocationRepo
 	Racks         *store.RackRepo
+	Contacts      *store.ContactRepo
 	Relationships *store.RelationshipRepo
 	Tags          *store.TagRepo
 	DB            *sql.DB
@@ -53,6 +54,7 @@ func New(cfg Config) http.Handler {
 	sites := cfg.Sites
 	locations := cfg.Locations
 	racks := cfg.Racks
+	contacts := cfg.Contacts
 	relationships, tags, db := cfg.Relationships, cfg.Tags, cfg.DB
 	docker, netscan, netOpts := cfg.Docker, cfg.NetScan, cfg.NetOpts
 	proxmox, pveOpts := cfg.Proxmox, cfg.PVEOpts
@@ -394,6 +396,28 @@ func New(cfg Config) http.Handler {
 			newItem:  domain.Rack{UHeight: 42},
 			listTmpl: "racks.html", formTmpl: "rack_form.html",
 		},
+		resource[domain.Contact]{
+			name: "contacts", sing: "contact", title: "Contacts", heading: "Contact",
+			repo:  contacts,
+			parse: parseContact,
+			label: func(c domain.Contact) string { return c.Name },
+			id:    func(c domain.Contact) int64 { return c.ID },
+			setID: func(c *domain.Contact, id int64) { c.ID = id },
+			notes: func(c domain.Contact) string { return c.Notes },
+			fields: func(c domain.Contact) []fieldRow {
+				return []fieldRow{
+					{"Email", c.Email},
+					{"Phone", c.Phone},
+					{"Role", c.Role},
+					{"Organization", c.Organization},
+				}
+			},
+			search: func(c domain.Contact) []string {
+				return []string{c.Name, c.Email, c.Phone, c.Role, c.Organization, c.Notes}
+			},
+			newItem:  domain.Contact{},
+			listTmpl: "contacts.html", formTmpl: "contact_form.html",
+		},
 	}
 	changelog := store.NewChangelogRepo(db)
 	journal := store.NewJournalRepo(db)
@@ -435,7 +459,8 @@ func New(cfg Config) http.Handler {
 		hosts: hosts, services: services, networks: networks,
 		domains: domains, certificates: certificates, backups: backups,
 		hardware: hardware, subscriptions: subscriptions, accounts: accounts,
-		sites: sites, locations: locations, racks: racks,
+		contacts: contacts,
+		sites:    sites, locations: locations, racks: racks,
 	}
 	// Everything else is the application UI: optionally behind session auth and
 	// always behind CSRF. Grouping scopes those middlewares to these routes

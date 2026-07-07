@@ -71,6 +71,7 @@ func main() {
 		Sites:         store.NewSiteRepo(db),
 		Locations:     store.NewLocationRepo(db),
 		Racks:         store.NewRackRepo(db),
+		Contacts:      store.NewContactRepo(db),
 		Relationships: store.NewRelationshipRepo(db),
 		Tags:          store.NewTagRepo(db),
 		DB:            db,

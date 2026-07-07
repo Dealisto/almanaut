@@ -1,0 +1,22 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Inventory</span>
+    <h1>{{.Heading}}</h1>
+  </div>
+</div>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+<form class="stack" method="post" action="{{.Action}}">
+{{ csrfField }}
+  <label>Name<input name="name" value="{{.Item.Name}}" required></label>
+  <label>Email<input name="email" value="{{.Item.Email}}" placeholder="ada@example.com"></label>
+  <label>Phone<input name="phone" value="{{.Item.Phone}}"></label>
+  <label>Role<input name="role" value="{{.Item.Role}}" placeholder="admin, owner, supplier…"></label>
+  <label>Organization<input name="organization" value="{{.Item.Organization}}"></label>
+  <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
+    <a class="btn" href="/contacts">Cancel</a>
+  </div>
+</form>
+{{end}}

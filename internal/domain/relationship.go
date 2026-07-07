@@ -3,10 +3,10 @@ package domain
 import "fmt"
 
 // EntityTypes is the closed set of entity types that can participate in a relationship.
-var EntityTypes = []string{"host", "service", "network", "domain", "certificate", "backup", "hardware", "subscription", "account", "site", "location", "rack"}
+var EntityTypes = []string{"host", "service", "network", "domain", "certificate", "backup", "hardware", "subscription", "account", "site", "location", "rack", "contact"}
 
 // RelationshipKinds is the closed set of relationship labels ("from <kind> to").
-var RelationshipKinds = []string{"runs on", "connected to", "exposed via", "secured by", "backed up by", "depends on"}
+var RelationshipKinds = []string{"runs on", "connected to", "exposed via", "secured by", "backed up by", "depends on", "administered by", "owned by"}
 
 // dependencyKinds are the kinds that mean "from needs to to function", used by
 // impact analysis. "backed up by" is intentionally excluded.

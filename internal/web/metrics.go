@@ -59,6 +59,11 @@ func metricsHandler(repos entityRepos, rels *store.RelationshipRepo) http.Handle
 			serverError(w, req, err)
 			return
 		}
+		contacts, err := repos.contacts.List()
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
 		sites, err := repos.sites.List()
 		if err != nil {
 			serverError(w, req, err)
@@ -101,6 +106,7 @@ func metricsHandler(repos entityRepos, rels *store.RelationshipRepo) http.Handle
 			{"hardware", len(hardware)},
 			{"subscription", len(subs)},
 			{"account", len(accounts)},
+			{"contact", len(contacts)},
 			{"site", len(sites)},
 			{"location", len(locations)},
 			{"rack", len(racks)},
