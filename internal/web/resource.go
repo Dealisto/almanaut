@@ -709,3 +709,15 @@ func parseRack(get func(string) string, id int64) domain.Rack {
 		Notes:      get("notes"),
 	}
 }
+
+func parseReservation(get func(string) string, id int64) domain.Reservation {
+	networkID, _ := strconv.ParseInt(get("network_id"), 10, 64)
+	return domain.Reservation{
+		ID:        id,
+		NetworkID: networkID,
+		Name:      strings.TrimSpace(get("name")),
+		StartIP:   strings.TrimSpace(get("start_ip")),
+		EndIP:     strings.TrimSpace(get("end_ip")),
+		Notes:     get("notes"),
+	}
+}

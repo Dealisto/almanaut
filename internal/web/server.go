@@ -35,6 +35,7 @@ type Config struct {
 	Relationships *store.RelationshipRepo
 	Tags          *store.TagRepo
 	VLANs         *store.VLANRepo
+	Reservations  *store.ReservationRepo
 	DB            *sql.DB
 	Logger        *log.Logger // nil → log.Default()
 	Docker        dockerScanner
@@ -58,6 +59,7 @@ func New(cfg Config) http.Handler {
 	contacts := cfg.Contacts
 	relationships, tags, db := cfg.Relationships, cfg.Tags, cfg.DB
 	vlans := cfg.VLANs
+	reservations := cfg.Reservations
 	docker, netscan, netOpts := cfg.Docker, cfg.NetScan, cfg.NetOpts
 	proxmox, pveOpts := cfg.Proxmox, cfg.PVEOpts
 	resources := []mountable{
@@ -142,7 +144,11 @@ func New(cfg Config) http.Handler {
 				if err != nil {
 					return nil
 				}
-				if u, ok := domain.BuildNetworkUsage(n.ID, nets, hostList, nil); ok {
+				resList, err := reservations.List()
+				if err != nil {
+					return nil
+				}
+				if u, ok := domain.BuildNetworkUsage(n.ID, nets, hostList, resList); ok {
 					s := buildIPAMSection(u)
 					return &s
 				}
@@ -440,6 +446,31 @@ func New(cfg Config) http.Handler {
 			},
 			newItem:  domain.VLAN{},
 			listTmpl: "vlans.html", formTmpl: "vlan_form.html",
+		},
+		resource[domain.Reservation]{
+			name: "reservations", sing: "reservation", title: "Reservations", heading: "Reservation",
+			repo:  reservations,
+			parse: parseReservation,
+			label: func(v domain.Reservation) string { return v.Name },
+			id:    func(v domain.Reservation) int64 { return v.ID },
+			setID: func(v *domain.Reservation, id int64) { v.ID = id },
+			notes: func(v domain.Reservation) string { return v.Notes },
+			fields: func(v domain.Reservation) []fieldRow {
+				return []fieldRow{
+					{"Network", reservationNetworkLabel(networks, v.NetworkID)},
+					{"Start IP", v.StartIP},
+					{"End IP", v.EndIP},
+				}
+			},
+			search: func(v domain.Reservation) []string {
+				return []string{v.Name, v.StartIP, v.EndIP, v.Notes}
+			},
+			extras: func() map[string]any {
+				list, _ := networks.List()
+				return map[string]any{"Networks": list}
+			},
+			newItem:  domain.Reservation{},
+			listTmpl: "reservations.html", formTmpl: "reservation_form.html",
 		},
 	}
 	changelog := store.NewChangelogRepo(db)
@@ -879,6 +910,18 @@ func vlanLabel(vlans *store.VLANRepo, id int64) string {
 		return "(unknown)"
 	}
 	return fmt.Sprintf("VLAN %d (%s)", v.VID, v.Name)
+}
+
+// reservationNetworkLabel resolves a Reservation's soft network_id to a name.
+func reservationNetworkLabel(networks *store.NetworkRepo, id int64) string {
+	if id == 0 {
+		return "—"
+	}
+	n, err := networks.Get(id)
+	if err != nil {
+		return "(unknown)"
+	}
+	return n.Name
 }
 
 // rackLabel resolves an occupant's soft rack_id to a display name.

@@ -70,13 +70,21 @@ type ipamRow struct {
 
 // ipamSection is the display-ready IP occupancy of the network being viewed.
 type ipamSection struct {
-	TotalUsable int
-	UsedCount   int
-	FreeCount   int
-	Unbounded   bool
-	NextFree    string
-	Gateway     string
-	Rows        []ipamRow
+	TotalUsable   int
+	UsedCount     int
+	FreeCount     int
+	Unbounded     bool
+	NextFree      string
+	Gateway       string
+	Rows          []ipamRow
+	ReservedCount int
+	Reserved      []reservedRangeView
+}
+
+// reservedRangeView is one reservation range shown in the IPAM section.
+type reservedRangeView struct {
+	Name  string
+	Range string
 }
 
 // buildIPAMSection converts a domain.NetworkUsage into the detail-page view.
@@ -97,7 +105,7 @@ func buildIPAMSection(u domain.NetworkUsage) ipamSection {
 			Conflict:  conflicting[a.IP],
 		})
 	}
-	return ipamSection{
+	sec := ipamSection{
 		TotalUsable: u.TotalUsable,
 		UsedCount:   u.UsedCount,
 		FreeCount:   u.FreeCount,
@@ -106,6 +114,11 @@ func buildIPAMSection(u domain.NetworkUsage) ipamSection {
 		Gateway:     u.Network.Gateway,
 		Rows:        rows,
 	}
+	sec.ReservedCount = u.ReservedCount
+	for _, r := range u.Reservations {
+		sec.Reserved = append(sec.Reserved, reservedRangeView{Name: r.Name, Range: r.StartIP + "–" + r.EndIP})
+	}
+	return sec
 }
 
 // renderDetailExtra assembles and renders the shared detail page for one entity:

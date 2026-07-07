@@ -57,7 +57,7 @@ func TestVersionEndpoint(t *testing.T) {
 		Hardware: store.NewHardwareRepo(db), Subscriptions: store.NewSubscriptionRepo(db), Accounts: store.NewAccountRepo(db),
 		Sites: store.NewSiteRepo(db), Locations: store.NewLocationRepo(db), Racks: store.NewRackRepo(db),
 		Contacts:      store.NewContactRepo(db),
-		Relationships: store.NewRelationshipRepo(db), Tags: store.NewTagRepo(db), VLANs: store.NewVLANRepo(db), DB: db,
+		Relationships: store.NewRelationshipRepo(db), Tags: store.NewTagRepo(db), VLANs: store.NewVLANRepo(db), Reservations: store.NewReservationRepo(db), DB: db,
 		Logger: log.New(io.Discard, "", 0),
 		Docker: fakeScanner{}, NetScan: fakeNetworkScanner{}, Proxmox: fakeProxmoxScanner{},
 		Version: "v9.9.9",
