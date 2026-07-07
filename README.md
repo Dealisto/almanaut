@@ -60,6 +60,14 @@ in U) from their edit form. The rack's detail page then renders a **U elevation*
 linking to its detail page. Occupants that extend past the rack or overlap
 another are highlighted; placement is advisory, not enforced at save time.
 
+### Contacts
+
+**Contacts** record the people and vendors responsible for infrastructure
+(name, email, phone, role, organization). Link a contact to any entity through
+the relationship catalog with the **administered by** or **owned by** kinds; the
+link shows on both detail pages and in the neighbourhood graph. Contacts support
+search, tags, history, the JSON API, and CSV import like every other entity.
+
 On top of the inventory you get:
 
 - **Relationships & a neighbourhood graph** on each detail page (e.g. a service

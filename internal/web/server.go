@@ -459,7 +459,8 @@ func New(cfg Config) http.Handler {
 		hosts: hosts, services: services, networks: networks,
 		domains: domains, certificates: certificates, backups: backups,
 		hardware: hardware, subscriptions: subscriptions, accounts: accounts,
-		sites: sites, locations: locations, racks: racks,
+		contacts: contacts,
+		sites:    sites, locations: locations, racks: racks,
 	}
 	// Everything else is the application UI: optionally behind session auth and
 	// always behind CSRF. Grouping scopes those middlewares to these routes

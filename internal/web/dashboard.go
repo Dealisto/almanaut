@@ -107,6 +107,11 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalo
 			fail(err)
 			return
 		}
+		contactCount, err := repos.contacts.Count()
+		if err != nil {
+			fail(err)
+			return
+		}
 		siteCount, err := repos.sites.Count()
 		if err != nil {
 			fail(err)
@@ -133,6 +138,7 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalo
 			{"Hardware", len(hardware), "/hardware"},
 			{"Subscriptions", len(subscriptions), "/subscriptions"},
 			{"Accounts", accountCount, "/accounts"},
+			{"Contacts", contactCount, "/contacts"},
 			{"Sites", siteCount, "/sites"},
 			{"Locations", locationCount, "/locations"},
 			{"Racks", rackCount, "/racks"},

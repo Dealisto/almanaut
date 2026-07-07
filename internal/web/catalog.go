@@ -21,6 +21,7 @@ type entityRepos struct {
 	hardware      *store.HardwareRepo
 	subscriptions *store.SubscriptionRepo
 	accounts      *store.AccountRepo
+	contacts      *store.ContactRepo
 	sites         *store.SiteRepo
 	locations     *store.LocationRepo
 	racks         *store.RackRepo

@@ -336,3 +336,25 @@ func TestExportImportRoundTripsRackOccupancy(t *testing.T) {
 		t.Fatalf("hardware occupancy not restored: %+v", hw)
 	}
 }
+
+func TestExportImportRoundTripsContacts(t *testing.T) {
+	db := newTestDB(t)
+	if _, err := NewContactRepo(db).Create(domain.Contact{Name: "Ada", Email: "ada@x.io", Role: "admin"}); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := Export(db)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if len(snap.Contacts) != 1 {
+		t.Fatalf("snapshot missing contact: %+v", snap.Contacts)
+	}
+	db2 := newTestDB(t)
+	if err := Import(db2, snap); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	got, _ := NewContactRepo(db2).List()
+	if len(got) != 1 || got[0].Name != "Ada" || got[0].Role != "admin" {
+		t.Fatalf("contact not restored: %+v", got)
+	}
+}
