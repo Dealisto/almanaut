@@ -262,11 +262,15 @@ func reservedAddrs(ipn *net.IPNet, reservations []Reservation) map[string]bool {
 		if start == nil || end == nil {
 			continue
 		}
-		cur := make(net.IP, len(start.To16()))
+		cur := make(net.IP, 16)
 		copy(cur, start.To16())
+		base := ipn.IP.Mask(ipn.Mask).To16()
+		if bytes.Compare(cur, base) < 0 {
+			copy(cur, base)
+		}
 		endB := end.To16()
 		if bytes.Compare(cur, endB) > 0 {
-			continue // reversed range
+			continue // range ends below the network (or reversed)
 		}
 		for i := 0; i <= limit; i++ {
 			if ipn.Contains(cur) {

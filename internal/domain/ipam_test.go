@@ -282,3 +282,18 @@ func TestBuildIPAMReservationOnlyForItsNetwork(t *testing.T) {
 		t.Fatalf("network 2 should have 9 reserved, got %d", report.Networks[1].ReservedCount)
 	}
 }
+
+func TestBuildIPAMReservationStartingBelowNetwork(t *testing.T) {
+	networks := []Network{{ID: 1, Name: "lan", CIDR: "10.0.0.0/24"}} // limit = 256 addresses
+	// StartIP is 65536 addresses below the network base — far more than the /24's
+	// walk bound of 256 — but the range still overlaps into 10.0.0.0/24 up to .5.
+	res := []Reservation{{ID: 1, NetworkID: 1, Name: "r", StartIP: "9.255.0.0", EndIP: "10.0.0.5"}}
+	u := BuildIPAM(networks, nil, res).Networks[0]
+	// The walk is clamped to start at the network base (10.0.0.0), so the in-network
+	// portion 10.0.0.0..10.0.0.5 (6 addresses) is reserved. Before the fix, the bounded
+	// walk (limit = 256 increments) starting at 9.255.0.0 never got within 256 addresses
+	// of 10.0.0.0, so it never reached the network at all and ReservedCount was 0.
+	if u.ReservedCount != 6 {
+		t.Fatalf("ReservedCount = %d, want 6 (in-network part of a reservation starting below the base)", u.ReservedCount)
+	}
+}
