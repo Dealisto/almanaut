@@ -29,8 +29,9 @@ type childrenSection struct {
 // detailExtras bundles the optional, entity-specific detail-page sections so
 // renderDetailExtra keeps a fixed parameter list as more are added.
 type detailExtras struct {
-	ipam     *ipamSection
-	children *childrenSection
+	ipam      *ipamSection
+	children  *childrenSection
+	elevation *elevationSection
 }
 
 type relatedItem struct {
@@ -51,6 +52,7 @@ type detailData struct {
 	GraphSVG   template.HTML
 	IPAM       *ipamSection
 	Children   *childrenSection
+	Elevation  *elevationSection
 
 	JournalEntries []journalView
 	JournalKinds   []string
@@ -190,6 +192,7 @@ func renderDetailExtra(
 		GraphSVG:   buildNeighborhoodSVG(heading, neighbors),
 		IPAM:       extras.ipam,
 		Children:   extras.children,
+		Elevation:  extras.elevation,
 
 		JournalEntries: views,
 		JournalKinds:   domain.JournalKinds,

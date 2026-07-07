@@ -380,6 +380,17 @@ func New(cfg Config) http.Handler {
 				list, _ := locations.List()
 				return map[string]any{"Locations": list}
 			},
+			elevation: func(k domain.Rack, cat entityCatalog) (*elevationSection, error) {
+				hs, err := hosts.List()
+				if err != nil {
+					return nil, err
+				}
+				hw, err := hardware.List()
+				if err != nil {
+					return nil, err
+				}
+				return buildElevationSection(k, hs, hw, cat), nil
+			},
 			newItem:  domain.Rack{UHeight: 42},
 			listTmpl: "racks.html", formTmpl: "rack_form.html",
 		},
