@@ -656,6 +656,18 @@ func parseAccount(get func(string) string, id int64) domain.Account {
 	}
 }
 
+func parseContact(get func(string) string, id int64) domain.Contact {
+	return domain.Contact{
+		ID:           id,
+		Name:         strings.TrimSpace(get("name")),
+		Email:        strings.TrimSpace(get("email")),
+		Phone:        strings.TrimSpace(get("phone")),
+		Role:         strings.TrimSpace(get("role")),
+		Organization: strings.TrimSpace(get("organization")),
+		Notes:        get("notes"),
+	}
+}
+
 func parseSite(get func(string) string, id int64) domain.Site {
 	return domain.Site{
 		ID:      id,
