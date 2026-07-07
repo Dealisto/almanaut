@@ -22,6 +22,7 @@ type Snapshot struct {
 	Subscriptions  []domain.Subscription `yaml:"subscriptions"`
 	Accounts       []domain.Account      `yaml:"accounts"`
 	VLANs          []domain.VLAN         `yaml:"vlans"`
+	Reservations   []domain.Reservation  `yaml:"reservations"`
 	Contacts       []domain.Contact      `yaml:"contacts"`
 	Sites          []domain.Site         `yaml:"sites"`
 	Locations      []domain.Location     `yaml:"locations"`
@@ -61,6 +62,7 @@ func Export(db *sql.DB) (Snapshot, error) {
 		Subscriptions:  exportList(&listErr, NewSubscriptionRepo(db).WithTx(tx).List),
 		Accounts:       exportList(&listErr, NewAccountRepo(db).WithTx(tx).List),
 		VLANs:          exportList(&listErr, NewVLANRepo(db).WithTx(tx).List),
+		Reservations:   exportList(&listErr, NewReservationRepo(db).WithTx(tx).List),
 		Contacts:       exportList(&listErr, NewContactRepo(db).WithTx(tx).List),
 		Sites:          exportList(&listErr, NewSiteRepo(db).WithTx(tx).List),
 		Locations:      exportList(&listErr, NewLocationRepo(db).WithTx(tx).List),
@@ -104,6 +106,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 		validateAll("subscription", snap.Subscriptions, func(s domain.Subscription) int64 { return s.ID }),
 		validateAll("account", snap.Accounts, func(a domain.Account) int64 { return a.ID }),
 		validateAll("vlan", snap.VLANs, func(v domain.VLAN) int64 { return v.ID }),
+		validateAll("reservation", snap.Reservations, func(v domain.Reservation) int64 { return v.ID }),
 		validateAll("contact", snap.Contacts, func(c domain.Contact) int64 { return c.ID }),
 		validateAll("site", snap.Sites, func(s domain.Site) int64 { return s.ID }),
 		validateAll("location", snap.Locations, func(l domain.Location) int64 { return l.ID }),
@@ -123,7 +126,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 		}
 		n := len(snap.Hosts) + len(snap.Services) + len(snap.Networks) + len(snap.Domains) +
 			len(snap.Certificates) + len(snap.Backups) + len(snap.Hardware) +
-			len(snap.Subscriptions) + len(snap.Accounts) + len(snap.VLANs) + len(snap.Contacts) +
+			len(snap.Subscriptions) + len(snap.Accounts) + len(snap.VLANs) + len(snap.Reservations) + len(snap.Contacts) +
 			len(snap.Sites) + len(snap.Locations) + len(snap.Racks) +
 			len(snap.Relationships) + len(snap.Tags) + len(snap.JournalEntries)
 		return NewChangelogRepo(db).WithTx(tx).Create(ChangeEvent{
@@ -138,7 +141,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 // inside WithTx, which owns begin/commit/rollback and is panic-safe, so any
 // failure rolls the whole replacement back.
 func replaceInventory(tx *sql.Tx, snap Snapshot) error {
-	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "contacts", "sites", "locations", "racks", "relationships", "tags", "journal_entries"} {
+	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "relationships", "tags", "journal_entries"} {
 		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 			return fmt.Errorf("clear %s: %w", table, err)
 		}
@@ -188,6 +191,14 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 			`INSERT INTO networks (id, name, cidr, vlan_id, gateway, notes)
 			 VALUES (?, ?, ?, ?, ?, ?)`,
 			n.ID, n.Name, n.CIDR, n.VLANID, n.Gateway, n.Notes); err != nil {
+			return err
+		}
+	}
+	for _, v := range snap.Reservations {
+		if err := insert("reservation", v.ID,
+			`INSERT INTO ip_reservations (id, network_id, name, start_ip, end_ip, notes)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			v.ID, v.NetworkID, v.Name, v.StartIP, v.EndIP, v.Notes); err != nil {
 			return err
 		}
 	}

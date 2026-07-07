@@ -385,3 +385,25 @@ func TestExportImportRoundTripsContacts(t *testing.T) {
 		t.Fatalf("contact not restored: %+v", got)
 	}
 }
+
+func TestExportImportRoundTripsReservations(t *testing.T) {
+	db := newTestDB(t)
+	if _, err := NewReservationRepo(db).Create(domain.Reservation{NetworkID: 2, Name: "dhcp", StartIP: "10.0.0.10", EndIP: "10.0.0.50"}); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := Export(db)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if len(snap.Reservations) != 1 {
+		t.Fatalf("snapshot missing reservation: %+v", snap.Reservations)
+	}
+	db2 := newTestDB(t)
+	if err := Import(db2, snap); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	got, _ := NewReservationRepo(db2).List()
+	if len(got) != 1 || got[0].NetworkID != 2 || got[0].StartIP != "10.0.0.10" || got[0].EndIP != "10.0.0.50" {
+		t.Fatalf("reservation not restored: %+v", got)
+	}
+}

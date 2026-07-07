@@ -75,6 +75,13 @@ a VLAN from its edit form, and the network's detail page shows the resolved
 `VLAN <id> (<name>)`. Like every entity they support search, tags, relationships,
 history, the JSON API, and CSV import.
 
+### IP reservations
+
+Reserve a named IP range within a network (e.g. a DHCP pool or a block kept for
+switches). Reserved addresses show on the network's IPAM view, are skipped by
+the "next free" suggestion, and are subtracted from the free-address count.
+Reservations are ordinary entities — searchable, taggable, exported, imported.
+
 On top of the inventory you get:
 
 - **Relationships & a neighbourhood graph** on each detail page (e.g. a service
