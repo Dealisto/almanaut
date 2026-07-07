@@ -21,6 +21,7 @@ type Snapshot struct {
 	Hardware       []domain.Hardware     `yaml:"hardware"`
 	Subscriptions  []domain.Subscription `yaml:"subscriptions"`
 	Accounts       []domain.Account      `yaml:"accounts"`
+	VLANs          []domain.VLAN         `yaml:"vlans"`
 	Contacts       []domain.Contact      `yaml:"contacts"`
 	Sites          []domain.Site         `yaml:"sites"`
 	Locations      []domain.Location     `yaml:"locations"`
@@ -34,7 +35,7 @@ type Snapshot struct {
 // per-repo List() read paths. The first List error (in field order) is
 // returned; later lists short-circuit once err is set.
 //
-// All fifteen lists run inside a single read transaction so the snapshot is
+// Every list runs inside a single read transaction so the snapshot is
 // internally consistent: without it a concurrent write between two lists could
 // produce a YAML dump with, say, a relationship pointing at a host that the
 // hosts list no longer contains — a corruption only discovered at re-import.
@@ -59,6 +60,7 @@ func Export(db *sql.DB) (Snapshot, error) {
 		Hardware:       exportList(&listErr, NewHardwareRepo(db).WithTx(tx).List),
 		Subscriptions:  exportList(&listErr, NewSubscriptionRepo(db).WithTx(tx).List),
 		Accounts:       exportList(&listErr, NewAccountRepo(db).WithTx(tx).List),
+		VLANs:          exportList(&listErr, NewVLANRepo(db).WithTx(tx).List),
 		Contacts:       exportList(&listErr, NewContactRepo(db).WithTx(tx).List),
 		Sites:          exportList(&listErr, NewSiteRepo(db).WithTx(tx).List),
 		Locations:      exportList(&listErr, NewLocationRepo(db).WithTx(tx).List),
@@ -101,6 +103,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 		validateAll("hardware", snap.Hardware, func(h domain.Hardware) int64 { return h.ID }),
 		validateAll("subscription", snap.Subscriptions, func(s domain.Subscription) int64 { return s.ID }),
 		validateAll("account", snap.Accounts, func(a domain.Account) int64 { return a.ID }),
+		validateAll("vlan", snap.VLANs, func(v domain.VLAN) int64 { return v.ID }),
 		validateAll("contact", snap.Contacts, func(c domain.Contact) int64 { return c.ID }),
 		validateAll("site", snap.Sites, func(s domain.Site) int64 { return s.ID }),
 		validateAll("location", snap.Locations, func(l domain.Location) int64 { return l.ID }),
@@ -120,7 +123,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 		}
 		n := len(snap.Hosts) + len(snap.Services) + len(snap.Networks) + len(snap.Domains) +
 			len(snap.Certificates) + len(snap.Backups) + len(snap.Hardware) +
-			len(snap.Subscriptions) + len(snap.Accounts) + len(snap.Contacts) +
+			len(snap.Subscriptions) + len(snap.Accounts) + len(snap.VLANs) + len(snap.Contacts) +
 			len(snap.Sites) + len(snap.Locations) + len(snap.Racks) +
 			len(snap.Relationships) + len(snap.Tags) + len(snap.JournalEntries)
 		return NewChangelogRepo(db).WithTx(tx).Create(ChangeEvent{
@@ -135,7 +138,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 // inside WithTx, which owns begin/commit/rollback and is panic-safe, so any
 // failure rolls the whole replacement back.
 func replaceInventory(tx *sql.Tx, snap Snapshot) error {
-	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "contacts", "sites", "locations", "racks", "relationships", "tags", "journal_entries"} {
+	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "contacts", "sites", "locations", "racks", "relationships", "tags", "journal_entries"} {
 		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 			return fmt.Errorf("clear %s: %w", table, err)
 		}
@@ -173,11 +176,18 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 			return err
 		}
 	}
+	for _, v := range snap.VLANs {
+		if err := insert("vlan", v.ID,
+			`INSERT INTO vlans (id, name, vid, notes) VALUES (?, ?, ?, ?)`,
+			v.ID, v.Name, v.VID, v.Notes); err != nil {
+			return err
+		}
+	}
 	for _, n := range snap.Networks {
 		if err := insert("network", n.ID,
-			`INSERT INTO networks (id, name, cidr, vlan, gateway, notes)
+			`INSERT INTO networks (id, name, cidr, vlan_id, gateway, notes)
 			 VALUES (?, ?, ?, ?, ?, ?)`,
-			n.ID, n.Name, n.CIDR, n.VLAN, n.Gateway, n.Notes); err != nil {
+			n.ID, n.Name, n.CIDR, n.VLANID, n.Gateway, n.Notes); err != nil {
 			return err
 		}
 	}

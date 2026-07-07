@@ -127,6 +127,11 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalo
 			fail(err)
 			return
 		}
+		vlanCount, err := repos.vlans.Count()
+		if err != nil {
+			fail(err)
+			return
+		}
 
 		counts := []countCard{
 			{"Hosts", len(hosts), "/hosts"},
@@ -142,6 +147,7 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalo
 			{"Sites", siteCount, "/sites"},
 			{"Locations", locationCount, "/locations"},
 			{"Racks", rackCount, "/racks"},
+			{"VLANs", vlanCount, "/vlans"},
 		}
 
 		expiring := domain.ExpiringSoon(certs, time.Now(), 30)

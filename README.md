@@ -68,6 +68,13 @@ the relationship catalog with the **administered by** or **owned by** kinds; the
 link shows on both detail pages and in the neighbourhood graph. Contacts support
 search, tags, history, the JSON API, and CSV import like every other entity.
 
+### VLANs
+
+**VLANs** are first-class entities (name + 802.1Q VLAN ID). A network references
+a VLAN from its edit form, and the network's detail page shows the resolved
+`VLAN <id> (<name>)`. Like every entity they support search, tags, relationships,
+history, the JSON API, and CSV import.
+
 On top of the inventory you get:
 
 - **Relationships & a neighbourhood graph** on each detail page (e.g. a service

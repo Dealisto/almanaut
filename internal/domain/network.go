@@ -11,7 +11,7 @@ type Network struct {
 	ID      int64  `yaml:"id" json:"id"`
 	Name    string `yaml:"name" json:"name"`
 	CIDR    string `yaml:"cidr" json:"cidr"`
-	VLAN    string `yaml:"vlan" json:"vlan"` // free text (may be blank)
+	VLANID  int64  `yaml:"vlan_id" json:"vlan_id"` // soft FK to a VLAN (0 = none)
 	Gateway string `yaml:"gateway" json:"gateway"`
 	Notes   string `yaml:"notes" json:"notes"`
 }

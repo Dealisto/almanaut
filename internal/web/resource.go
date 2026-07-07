@@ -562,13 +562,24 @@ func parseService(get func(string) string, id int64) domain.Service {
 }
 
 func parseNetwork(get func(string) string, id int64) domain.Network {
+	vlanID, _ := strconv.ParseInt(get("vlan_id"), 10, 64)
 	return domain.Network{
 		ID:      id,
 		Name:    strings.TrimSpace(get("name")),
 		CIDR:    strings.TrimSpace(get("cidr")),
-		VLAN:    get("vlan"),
+		VLANID:  vlanID,
 		Gateway: strings.TrimSpace(get("gateway")),
 		Notes:   get("notes"),
+	}
+}
+
+func parseVLAN(get func(string) string, id int64) domain.VLAN {
+	vid, _ := strconv.Atoi(strings.TrimSpace(get("vid")))
+	return domain.VLAN{
+		ID:    id,
+		Name:  strings.TrimSpace(get("name")),
+		VID:   vid,
+		Notes: get("notes"),
 	}
 }
 

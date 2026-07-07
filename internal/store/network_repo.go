@@ -52,8 +52,8 @@ func (r *NetworkRepo) Count() (int, error) {
 // Create inserts n and returns its new ID.
 func (r *NetworkRepo) Create(n domain.Network) (int64, error) {
 	res, err := r.db.Exec(
-		`INSERT INTO networks (name, cidr, vlan, gateway, notes) VALUES (?, ?, ?, ?, ?)`,
-		n.Name, n.CIDR, n.VLAN, n.Gateway, n.Notes,
+		`INSERT INTO networks (name, cidr, vlan_id, gateway, notes) VALUES (?, ?, ?, ?, ?)`,
+		n.Name, n.CIDR, n.VLANID, n.Gateway, n.Notes,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert network: %w", err)
@@ -64,7 +64,7 @@ func (r *NetworkRepo) Create(n domain.Network) (int64, error) {
 // Get returns the network with the given id.
 func (r *NetworkRepo) Get(id int64) (domain.Network, error) {
 	row := r.db.QueryRow(
-		`SELECT id, name, cidr, vlan, gateway, notes FROM networks WHERE id = ?`, id,
+		`SELECT id, name, cidr, vlan_id, gateway, notes FROM networks WHERE id = ?`, id,
 	)
 	return scanNetwork(row)
 }
@@ -72,7 +72,7 @@ func (r *NetworkRepo) Get(id int64) (domain.Network, error) {
 // List returns all networks ordered by name.
 func (r *NetworkRepo) List() ([]domain.Network, error) {
 	rows, err := r.db.Query(
-		`SELECT id, name, cidr, vlan, gateway, notes FROM networks ORDER BY name`,
+		`SELECT id, name, cidr, vlan_id, gateway, notes FROM networks ORDER BY name`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query networks: %w", err)
@@ -92,8 +92,8 @@ func (r *NetworkRepo) List() ([]domain.Network, error) {
 // Update overwrites the network with n.ID with the values in n.
 func (r *NetworkRepo) Update(n domain.Network) error {
 	res, err := r.db.Exec(
-		`UPDATE networks SET name=?, cidr=?, vlan=?, gateway=?, notes=? WHERE id=?`,
-		n.Name, n.CIDR, n.VLAN, n.Gateway, n.Notes, n.ID,
+		`UPDATE networks SET name=?, cidr=?, vlan_id=?, gateway=?, notes=? WHERE id=?`,
+		n.Name, n.CIDR, n.VLANID, n.Gateway, n.Notes, n.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update network: %w", err)
@@ -111,7 +111,7 @@ func (r *NetworkRepo) Delete(id int64) error {
 
 func scanNetwork(s scanner) (domain.Network, error) {
 	var n domain.Network
-	if err := s.Scan(&n.ID, &n.Name, &n.CIDR, &n.VLAN, &n.Gateway, &n.Notes); err != nil {
+	if err := s.Scan(&n.ID, &n.Name, &n.CIDR, &n.VLANID, &n.Gateway, &n.Notes); err != nil {
 		return domain.Network{}, notFound(fmt.Errorf("scan network: %w", err))
 	}
 	return n, nil

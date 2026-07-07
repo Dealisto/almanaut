@@ -25,6 +25,33 @@ func newTestDB(t *testing.T) *sql.DB {
 	return db
 }
 
+func TestExportImportRoundTripsVLANs(t *testing.T) {
+	db := newTestDB(t)
+	vid, _ := NewVLANRepo(db).Create(domain.VLAN{Name: "mgmt", VID: 10})
+	if _, err := NewNetworkRepo(db).Create(domain.Network{Name: "lan", CIDR: "10.0.0.0/24", VLANID: vid}); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := Export(db)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if len(snap.VLANs) != 1 {
+		t.Fatalf("snapshot missing vlan: %+v", snap.VLANs)
+	}
+	db2 := newTestDB(t)
+	if err := Import(db2, snap); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	nets, _ := NewNetworkRepo(db2).List()
+	if len(nets) != 1 || nets[0].VLANID != vid {
+		t.Fatalf("network vlan_id not restored: %+v", nets)
+	}
+	vlans, _ := NewVLANRepo(db2).List()
+	if len(vlans) != 1 || vlans[0].VID != 10 {
+		t.Fatalf("vlan not restored: %+v", vlans)
+	}
+}
+
 func TestExportEmptyMarshalsEmptyLists(t *testing.T) {
 	db := newTestDB(t)
 	snap, err := Export(db)
