@@ -8,7 +8,7 @@ func TestBuildIPAMOccupancy(t *testing.T) {
 		{ID: 10, Name: "nas", IPs: []string{"192.168.1.5"}},
 		{ID: 11, Name: "pi", IPs: []string{"192.168.1.10", "10.0.0.2"}},
 	}
-	report := BuildIPAM(networks, hosts)
+	report := BuildIPAM(networks, hosts, nil)
 	if len(report.Networks) != 1 {
 		t.Fatalf("Networks = %d, want 1", len(report.Networks))
 	}
@@ -39,7 +39,7 @@ func TestBuildIPAMLongestPrefixWins(t *testing.T) {
 		{ID: 2, Name: "small", CIDR: "10.1.2.0/24"},
 	}
 	hosts := []Host{{ID: 1, Name: "h", IPs: []string{"10.1.2.3"}}}
-	report := BuildIPAM(networks, hosts)
+	report := BuildIPAM(networks, hosts, nil)
 	for _, u := range report.Networks {
 		switch u.Network.ID {
 		case 1:
@@ -63,7 +63,7 @@ func TestBuildIPAMConflicts(t *testing.T) {
 		{ID: 1, Name: "a", IPs: []string{"192.168.1.5"}},
 		{ID: 2, Name: "b", IPs: []string{"192.168.1.5"}},
 	}
-	u := BuildIPAM(networks, hosts).Networks[0]
+	u := BuildIPAM(networks, hosts, nil).Networks[0]
 	if u.UsedCount != 1 {
 		t.Errorf("UsedCount = %d, want 1 (distinct IPs)", u.UsedCount)
 	}
@@ -75,7 +75,7 @@ func TestBuildIPAMConflicts(t *testing.T) {
 func TestBuildIPAMNextFree(t *testing.T) {
 	networks := []Network{{ID: 1, CIDR: "192.168.1.0/30"}} // usable .1 .2
 	hosts := []Host{{ID: 1, Name: "a", IPs: []string{"192.168.1.1"}}}
-	u := BuildIPAM(networks, hosts).Networks[0]
+	u := BuildIPAM(networks, hosts, nil).Networks[0]
 	if u.TotalUsable != 2 {
 		t.Errorf("TotalUsable = %d, want 2", u.TotalUsable)
 	}
@@ -90,7 +90,7 @@ func TestBuildIPAMNextFreeFull(t *testing.T) {
 		{ID: 1, IPs: []string{"192.168.1.1"}},
 		{ID: 2, IPs: []string{"192.168.1.2"}},
 	}
-	u := BuildIPAM(networks, hosts).Networks[0]
+	u := BuildIPAM(networks, hosts, nil).Networks[0]
 	if u.FreeCount != 0 {
 		t.Errorf("FreeCount = %d, want 0", u.FreeCount)
 	}
@@ -102,7 +102,7 @@ func TestBuildIPAMNextFreeFull(t *testing.T) {
 func TestBuildIPAMIPv6Unbounded(t *testing.T) {
 	networks := []Network{{ID: 1, CIDR: "2001:db8::/64"}}
 	hosts := []Host{{ID: 1, Name: "h", IPs: []string{"2001:db8::1"}}}
-	u := BuildIPAM(networks, hosts).Networks[0]
+	u := BuildIPAM(networks, hosts, nil).Networks[0]
 	if !u.Unbounded {
 		t.Errorf("Unbounded = false, want true for /64")
 	}
@@ -118,7 +118,7 @@ func TestBuildIPAMInvalidCIDR(t *testing.T) {
 	// Validate() rejects this on write, but BuildIPAM must not panic if it occurs.
 	networks := []Network{{ID: 1, CIDR: "not-a-cidr"}}
 	hosts := []Host{{ID: 1, Name: "h", IPs: []string{"192.168.1.5"}}}
-	report := BuildIPAM(networks, hosts)
+	report := BuildIPAM(networks, hosts, nil)
 	if len(report.Networks) != 1 || report.Networks[0].UsedCount != 0 {
 		t.Errorf("invalid-CIDR network should have zero usage")
 	}
@@ -131,7 +131,7 @@ func TestBuildIPAMSlash31(t *testing.T) {
 	// /31 point-to-point: both addresses are usable (no network/broadcast).
 	networks := []Network{{ID: 1, CIDR: "192.168.1.0/31"}}
 	hosts := []Host{{ID: 1, Name: "a", IPs: []string{"192.168.1.0"}}}
-	u := BuildIPAM(networks, hosts).Networks[0]
+	u := BuildIPAM(networks, hosts, nil).Networks[0]
 	if u.TotalUsable != 2 {
 		t.Errorf("TotalUsable = %d, want 2", u.TotalUsable)
 	}
@@ -143,7 +143,7 @@ func TestBuildIPAMSlash31(t *testing.T) {
 func TestBuildIPAMSlash32(t *testing.T) {
 	// /32 host route: exactly one usable address.
 	networks := []Network{{ID: 1, CIDR: "192.168.1.5/32"}}
-	u := BuildIPAM(networks, nil).Networks[0]
+	u := BuildIPAM(networks, nil, nil).Networks[0]
 	if u.TotalUsable != 1 {
 		t.Errorf("TotalUsable = %d, want 1", u.TotalUsable)
 	}
@@ -161,7 +161,7 @@ func TestBuildIPAMLargeSubnetCountedNotEnumerated(t *testing.T) {
 	// the subnet is small enough to enumerate). It is not marked Unbounded.
 	networks := []Network{{ID: 1, CIDR: "10.0.0.0/8"}}
 	hosts := []Host{{ID: 1, Name: "a", IPs: []string{"10.1.1.1"}}}
-	u := BuildIPAM(networks, hosts).Networks[0]
+	u := BuildIPAM(networks, hosts, nil).Networks[0]
 	if u.Unbounded {
 		t.Errorf("Unbounded = true, want false for IPv4 /8")
 	}
@@ -190,9 +190,9 @@ func TestBuildNetworkUsageMatchesBuildIPAM(t *testing.T) {
 		{ID: 11, Name: "b", IPs: []string{"10.9.9.9"}}, // only in big
 		{ID: 12, Name: "c", IPs: []string{"192.168.1.5"}},
 	}
-	report := BuildIPAM(networks, hosts)
+	report := BuildIPAM(networks, hosts, nil)
 	for _, want := range report.Networks {
-		got, ok := BuildNetworkUsage(want.Network.ID, networks, hosts)
+		got, ok := BuildNetworkUsage(want.Network.ID, networks, hosts, nil)
 		if !ok {
 			t.Fatalf("BuildNetworkUsage(%d) ok=false, want true", want.Network.ID)
 		}
@@ -209,7 +209,7 @@ func TestBuildNetworkUsageMatchesBuildIPAM(t *testing.T) {
 
 func TestBuildNetworkUsageUnknownTarget(t *testing.T) {
 	networks := []Network{{ID: 1, CIDR: "192.168.1.0/24"}}
-	if _, ok := BuildNetworkUsage(99, networks, nil); ok {
+	if _, ok := BuildNetworkUsage(99, networks, nil, nil); ok {
 		t.Error("BuildNetworkUsage for unknown id returned ok=true, want false")
 	}
 }
@@ -218,7 +218,7 @@ func TestBuildIPAMNextFreeSkipsGateway(t *testing.T) {
 	// The gateway is reserved: NextFree must not suggest it.
 	networks := []Network{{ID: 1, CIDR: "192.168.1.0/24", Gateway: "192.168.1.1"}}
 	hosts := []Host{{ID: 1, Name: "a", IPs: []string{"192.168.1.5"}}}
-	u := BuildIPAM(networks, hosts).Networks[0]
+	u := BuildIPAM(networks, hosts, nil).Networks[0]
 	if u.NextFree != "192.168.1.2" {
 		t.Errorf("NextFree = %q, want 192.168.1.2 (gateway .1 skipped)", u.NextFree)
 	}
@@ -230,11 +230,55 @@ func TestBuildIPAMNextFreeSkipsGateway(t *testing.T) {
 func TestBuildIPAMNextFreeLargerSubnet(t *testing.T) {
 	networks := []Network{{ID: 1, CIDR: "10.0.0.0/22", Gateway: "10.0.0.1"}}
 	hosts := []Host{{ID: 1, Name: "a", IPs: []string{"10.0.0.2"}}}
-	u := BuildIPAM(networks, hosts).Networks[0]
+	u := BuildIPAM(networks, hosts, nil).Networks[0]
 	if u.TotalUsable != 1022 { // 1024 - network - broadcast
 		t.Errorf("TotalUsable = %d, want 1022", u.TotalUsable)
 	}
 	if u.NextFree != "10.0.0.3" {
 		t.Errorf("NextFree = %q, want 10.0.0.3", u.NextFree)
+	}
+}
+
+func TestBuildIPAMReservationSkippedByNextFree(t *testing.T) {
+	networks := []Network{{ID: 1, Name: "lan", CIDR: "10.0.0.0/24"}}
+	hosts := []Host{} // empty: first usable is .1
+	res := []Reservation{{ID: 1, NetworkID: 1, Name: "r", StartIP: "10.0.0.1", EndIP: "10.0.0.3"}}
+	u := BuildIPAM(networks, hosts, res).Networks[0]
+	if u.NextFree != "10.0.0.4" {
+		t.Fatalf("NextFree = %q, want 10.0.0.4 (skipping the reserved .1-.3)", u.NextFree)
+	}
+	if u.ReservedCount != 3 {
+		t.Fatalf("ReservedCount = %d, want 3", u.ReservedCount)
+	}
+	// /24 has 254 usable; 0 used, 3 reserved -> 251 free.
+	if u.FreeCount != 251 {
+		t.Fatalf("FreeCount = %d, want 251", u.FreeCount)
+	}
+}
+
+func TestBuildIPAMReservationOverlappingHostNotDoubleCounted(t *testing.T) {
+	networks := []Network{{ID: 1, Name: "lan", CIDR: "10.0.0.0/24"}}
+	hosts := []Host{{ID: 1, Name: "h", IPs: []string{"10.0.0.10"}}}
+	res := []Reservation{{ID: 1, NetworkID: 1, Name: "r", StartIP: "10.0.0.10", EndIP: "10.0.0.11"}}
+	u := BuildIPAM(networks, hosts, res).Networks[0]
+	// .10 is both used and reserved; reserved-not-used is just .11 -> ReservedCount 1.
+	if u.ReservedCount != 1 {
+		t.Fatalf("ReservedCount = %d, want 1 (the .10 overlap is not double-counted)", u.ReservedCount)
+	}
+	// 254 usable - 1 used - 1 reserved-not-used = 252 free.
+	if u.FreeCount != 252 {
+		t.Fatalf("FreeCount = %d, want 252", u.FreeCount)
+	}
+}
+
+func TestBuildIPAMReservationOnlyForItsNetwork(t *testing.T) {
+	networks := []Network{{ID: 1, Name: "a", CIDR: "10.0.0.0/24"}, {ID: 2, Name: "b", CIDR: "10.0.1.0/24"}}
+	res := []Reservation{{ID: 1, NetworkID: 2, Name: "r", StartIP: "10.0.1.1", EndIP: "10.0.1.9"}}
+	report := BuildIPAM(networks, nil, res)
+	if report.Networks[0].ReservedCount != 0 {
+		t.Fatalf("network 1 should have 0 reserved, got %d", report.Networks[0].ReservedCount)
+	}
+	if report.Networks[1].ReservedCount != 9 {
+		t.Fatalf("network 2 should have 9 reserved, got %d", report.Networks[1].ReservedCount)
 	}
 }

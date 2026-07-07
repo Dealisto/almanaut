@@ -26,6 +26,9 @@ type NetworkUsage struct {
 	FreeCount   int            // TotalUsable - UsedCount, clamped at 0 (0 when Unbounded)
 	Unbounded   bool           // subnet too large to count/enumerate (e.g. IPv6 /64)
 	NextFree    string         // lowest usable address not in use ("" if none or Unbounded)
+
+	ReservedCount int           // reserved addresses not already host-used (0 when Unbounded)
+	Reservations  []Reservation // reservations for this network (for display)
 }
 
 // IPAMReport is the IP occupancy across all networks.
@@ -38,11 +41,11 @@ type IPAMReport struct {
 // pure projection of its inputs and does not touch the database. Each host IP is
 // attributed to the network whose CIDR contains it with the longest prefix
 // (most specific), mirroring routing; IPs in no known network are unassigned.
-func BuildIPAM(networks []Network, hosts []Host) IPAMReport {
+func BuildIPAM(networks []Network, hosts []Host, reservations []Reservation) IPAMReport {
 	used, unassigned := attribute(networks, hosts, -1)
 	report := IPAMReport{Unassigned: sortAllocs(unassigned)}
 	for i, n := range networks {
-		report.Networks = append(report.Networks, buildUsage(n, sortAllocs(used[i])))
+		report.Networks = append(report.Networks, buildUsage(n, sortAllocs(used[i]), reservationsFor(n.ID, reservations)))
 	}
 	return report
 }
@@ -53,7 +56,7 @@ func BuildIPAM(networks []Network, hosts []Host) IPAMReport {
 // each). Attribution still runs across all networks so the longest-prefix rule
 // matches BuildIPAM exactly: an IP that belongs to a more-specific subnet is
 // not counted here. ok is false if no network with targetID exists.
-func BuildNetworkUsage(targetID int64, networks []Network, hosts []Host) (NetworkUsage, bool) {
+func BuildNetworkUsage(targetID int64, networks []Network, hosts []Host, reservations []Reservation) (NetworkUsage, bool) {
 	targetIdx := -1
 	for i, n := range networks {
 		if n.ID == targetID {
@@ -68,7 +71,7 @@ func BuildNetworkUsage(targetID int64, networks []Network, hosts []Host) (Networ
 	// only the target's allocations are collected — no slices are built for the
 	// networks we are about to discard.
 	used, _ := attribute(networks, hosts, targetIdx)
-	return buildUsage(networks[targetIdx], sortAllocs(used[targetIdx])), true
+	return buildUsage(networks[targetIdx], sortAllocs(used[targetIdx]), reservationsFor(targetID, reservations)), true
 }
 
 // attribute assigns each host IP to the index of the network containing it with
@@ -125,10 +128,21 @@ func attribute(networks []Network, hosts []Host, onlyIdx int) (map[int][]Allocat
 	return used, unassigned
 }
 
+// reservationsFor returns the reservations that belong to network id.
+func reservationsFor(id int64, reservations []Reservation) []Reservation {
+	var out []Reservation
+	for _, r := range reservations {
+		if r.NetworkID == id {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // buildUsage computes the derived stats for one network from its (already
 // IP-sorted) allocations.
-func buildUsage(n Network, used []Allocation) NetworkUsage {
-	u := NetworkUsage{Network: n, Used: used}
+func buildUsage(n Network, used []Allocation, reservations []Reservation) NetworkUsage {
+	u := NetworkUsage{Network: n, Used: used, Reservations: reservations}
 
 	byIP := map[string][]Allocation{}
 	var order []string
@@ -160,9 +174,6 @@ func buildUsage(n Network, used []Allocation) NetworkUsage {
 		u.TotalUsable = 1 << hostBits // /31, /32, and small IPv6 subnets
 	}
 	if !u.Unbounded {
-		if u.FreeCount = u.TotalUsable - u.UsedCount; u.FreeCount < 0 {
-			u.FreeCount = 0
-		}
 		taken := make(map[string]bool, len(byIP)+1)
 		for ip := range byIP {
 			taken[ip] = true
@@ -170,6 +181,17 @@ func buildUsage(n Network, used []Allocation) NetworkUsage {
 		// The gateway is a reserved address: never suggest it as free.
 		if gw := net.ParseIP(n.Gateway); gw != nil && ipn.Contains(gw) {
 			taken[gw.String()] = true
+		}
+		// Reserved ranges are skipped by next-free and subtracted from free.
+		reserved := reservedAddrs(ipn, reservations)
+		for ip := range reserved {
+			taken[ip] = true
+			if _, isUsed := byIP[ip]; !isUsed {
+				u.ReservedCount++
+			}
+		}
+		if u.FreeCount = u.TotalUsable - u.UsedCount - u.ReservedCount; u.FreeCount < 0 {
+			u.FreeCount = 0
 		}
 		u.NextFree = nextFree(ipn, taken)
 	}
@@ -219,6 +241,44 @@ func nextFree(ipn *net.IPNet, taken map[string]bool) string {
 		incIP(cur)
 	}
 	return ""
+}
+
+// reservedAddrs enumerates the addresses covered by reservations that fall
+// within ipn, as a set. It is bounded by the same enumerable-size cap as
+// nextFree: a network too large to enumerate yields an empty set (its
+// reservations are still listed, just not counted). Each reservation's range is
+// walked from start to end inclusive; out-of-network and reversed ranges are
+// ignored.
+func reservedAddrs(ipn *net.IPNet, reservations []Reservation) map[string]bool {
+	ones, bits := ipn.Mask.Size()
+	if bits-ones > maxEnumerableHostBits {
+		return nil
+	}
+	limit := 1 << uint(bits-ones) // network size caps any single range walk
+	set := map[string]bool{}
+	for _, r := range reservations {
+		start := net.ParseIP(r.StartIP)
+		end := net.ParseIP(r.EndIP)
+		if start == nil || end == nil {
+			continue
+		}
+		cur := make(net.IP, len(start.To16()))
+		copy(cur, start.To16())
+		endB := end.To16()
+		if bytes.Compare(cur, endB) > 0 {
+			continue // reversed range
+		}
+		for i := 0; i <= limit; i++ {
+			if ipn.Contains(cur) {
+				set[cur.String()] = true
+			}
+			if bytes.Compare(cur, endB) >= 0 {
+				break
+			}
+			incIP(cur)
+		}
+	}
+	return set
 }
 
 // incIP increments an IP address in place (big-endian).

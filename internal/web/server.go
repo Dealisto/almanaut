@@ -142,7 +142,7 @@ func New(cfg Config) http.Handler {
 				if err != nil {
 					return nil
 				}
-				if u, ok := domain.BuildNetworkUsage(n.ID, nets, hostList); ok {
+				if u, ok := domain.BuildNetworkUsage(n.ID, nets, hostList, nil); ok {
 					s := buildIPAMSection(u)
 					return &s
 				}
