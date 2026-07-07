@@ -482,6 +482,7 @@ func New(cfg Config) http.Handler {
 		hosts: hosts, services: services, networks: networks,
 		domains: domains, certificates: certificates, backups: backups,
 		hardware: hardware, subscriptions: subscriptions, accounts: accounts,
+		vlans:    vlans,
 		contacts: contacts,
 		sites:    sites, locations: locations, racks: racks,
 	}

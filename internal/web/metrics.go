@@ -79,6 +79,11 @@ func metricsHandler(repos entityRepos, rels *store.RelationshipRepo) http.Handle
 			serverError(w, req, err)
 			return
 		}
+		vlans, err := repos.vlans.List()
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
 		relList, err := rels.List()
 		if err != nil {
 			serverError(w, req, err)
@@ -110,6 +115,7 @@ func metricsHandler(repos entityRepos, rels *store.RelationshipRepo) http.Handle
 			{"site", len(sites)},
 			{"location", len(locations)},
 			{"rack", len(racks)},
+			{"vlan", len(vlans)},
 		}
 		for _, c := range counts {
 			fmt.Fprintf(&b, "almanaut_entities_total{type=%q} %d\n", c.typ, c.n)
