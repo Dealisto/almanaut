@@ -43,3 +43,25 @@ func TestRackRejectsBadUHeight(t *testing.T) {
 		t.Fatalf("bad u_height should re-render form with error; got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestAssignHostToRack(t *testing.T) {
+	srv, _ := newTestServerDB(t)
+	// Need a rack (id 1) first.
+	if rec := postForm(t, srv, "/racks", url.Values{"name": {"R1"}, "u_height": {"42"}}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("create rack = %d", rec.Code)
+	}
+	// Create a host assigned to rack 1 at U10, 2U tall.
+	rec := postForm(t, srv, "/hosts", url.Values{
+		"name": {"srv"}, "type": {"physical"}, "rack_id": {"1"}, "rack_position": {"10"}, "u_height": {"2"},
+	})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create placed host = %d, want 303; body=%s", rec.Code, rec.Body.String())
+	}
+	// Host detail shows its rack.
+	req := httptest.NewRequest(http.MethodGet, "/hosts/1", nil)
+	hrec := httptest.NewRecorder()
+	srv.ServeHTTP(hrec, req)
+	if hrec.Code != http.StatusOK || !strings.Contains(hrec.Body.String(), "R1") {
+		t.Fatalf("host detail should show rack R1; got %d", hrec.Code)
+	}
+}

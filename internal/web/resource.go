@@ -59,24 +59,25 @@ type handlerDeps struct {
 // resource describes one entity. Only the genuinely entity-specific behavior
 // lives here; all plumbing is in the generic methods below.
 type resource[T validatable] struct {
-	name     string // route base, e.g. "hosts"
-	sing     string // singular type key, e.g. "host" (relationships, tags, headings)
-	title    string // list page title, e.g. "Hosts"
-	heading  string // singular heading prefix, e.g. "Host" → "Host: name"
-	repo     crud[T]
-	parse    func(get func(string) string, id int64) T // field getter → T; id==0 for create
-	label    func(T) string                            // name shown in catalog/detail heading
-	id       func(T) int64
-	setID    func(item *T, id int64) // writes the id back onto a decoded/parsed T (JSON writes)
-	notes    func(T) string
-	fields   func(T) []fieldRow                               // detail-page rows
-	search   func(T) []string                                 // free-text fields matched by global search
-	ipam     func(T) *ipamSection                             // optional; nil for all but network
-	children func(T, entityCatalog) (*childrenSection, error) // optional; nil for all but Site/Location
-	newItem  T                                                // zero value with form defaults
-	listTmpl string                                           // "hosts.html"
-	formTmpl string                                           // "host_form.html"
-	extras   func() map[string]any                            // form selects (Types, Kinds…); may be nil
+	name      string // route base, e.g. "hosts"
+	sing      string // singular type key, e.g. "host" (relationships, tags, headings)
+	title     string // list page title, e.g. "Hosts"
+	heading   string // singular heading prefix, e.g. "Host" → "Host: name"
+	repo      crud[T]
+	parse     func(get func(string) string, id int64) T // field getter → T; id==0 for create
+	label     func(T) string                            // name shown in catalog/detail heading
+	id        func(T) int64
+	setID     func(item *T, id int64) // writes the id back onto a decoded/parsed T (JSON writes)
+	notes     func(T) string
+	fields    func(T) []fieldRow                                // detail-page rows
+	search    func(T) []string                                  // free-text fields matched by global search
+	ipam      func(T) *ipamSection                              // optional; nil for all but network
+	children  func(T, entityCatalog) (*childrenSection, error)  // optional; nil for all but Site/Location
+	elevation func(T, entityCatalog) (*elevationSection, error) // optional; only Rack
+	newItem   T                                                 // zero value with form defaults
+	listTmpl  string                                            // "hosts.html"
+	formTmpl  string                                            // "host_form.html"
+	extras    func() map[string]any                             // form selects (Types, Kinds…); may be nil
 }
 
 func (rs resource[T]) singular() string { return rs.sing }
@@ -349,10 +350,18 @@ func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
 				return
 			}
 		}
+		var elevation *elevationSection
+		if rs.elevation != nil {
+			elevation, err = rs.elevation(item, d.cat)
+			if err != nil {
+				serverError(w, req, err)
+				return
+			}
+		}
 		renderDetailExtra(w, req, d.cat, d.tags, d.rels, d.journal, d.changelog, rs.sing, id,
 			rs.heading+": "+rs.label(item), rs.notes(item),
 			fmt.Sprintf("%s/%d/edit", rs.basePath(), id), rs.basePath(), rs.fields(item),
-			detailExtras{ipam: ipam, children: children})
+			detailExtras{ipam: ipam, children: children, elevation: elevation})
 	}
 }
 
@@ -519,6 +528,9 @@ func parseFormBool(v string) bool {
 }
 
 func parseHost(get func(string) string, id int64) domain.Host {
+	rackID, _ := strconv.ParseInt(get("rack_id"), 10, 64)
+	rackPos, _ := strconv.Atoi(strings.TrimSpace(get("rack_position")))
+	uHeight, _ := strconv.Atoi(strings.TrimSpace(get("u_height")))
 	return domain.Host{
 		ID:     id,
 		Name:   strings.TrimSpace(get("name")),
@@ -530,6 +542,10 @@ func parseHost(get func(string) string, id int64) domain.Host {
 		Status: get("status"),
 		Notes:  get("notes"),
 		IPs:    parseIPs(get("ips")),
+
+		RackID:       rackID,
+		RackPosition: rackPos,
+		UHeight:      uHeight,
 	}
 }
 
@@ -588,6 +604,9 @@ func parseBackup(get func(string) string, id int64) domain.Backup {
 }
 
 func parseHardware(get func(string) string, id int64) domain.Hardware {
+	rackID, _ := strconv.ParseInt(get("rack_id"), 10, 64)
+	rackPos, _ := strconv.Atoi(strings.TrimSpace(get("rack_position")))
+	uHeight, _ := strconv.Atoi(strings.TrimSpace(get("u_height")))
 	return domain.Hardware{
 		ID:           id,
 		Name:         strings.TrimSpace(get("name")),
@@ -600,6 +619,10 @@ func parseHardware(get func(string) string, id int64) domain.Hardware {
 		WarrantyEnd:  strings.TrimSpace(get("warranty_end")),
 		Status:       strings.TrimSpace(get("status")),
 		Notes:        get("notes"),
+
+		RackID:       rackID,
+		RackPosition: rackPos,
+		UHeight:      uHeight,
 	}
 }
 

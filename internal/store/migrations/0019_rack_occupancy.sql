@@ -1,0 +1,7 @@
+-- Rack occupancy: hosts and hardware can sit at a U position within a rack.
+ALTER TABLE hosts ADD COLUMN rack_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE hosts ADD COLUMN rack_position INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE hosts ADD COLUMN u_height INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE hardware ADD COLUMN rack_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE hardware ADD COLUMN rack_position INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE hardware ADD COLUMN u_height INTEGER NOT NULL DEFAULT 1;

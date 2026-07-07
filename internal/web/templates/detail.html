@@ -81,6 +81,20 @@
 </section>
 {{end}}
 
+{{with .Elevation}}
+<section class="panel">
+  <h2>Rack elevation</h2>
+  <div class="rack-elev" style="grid-template-rows: repeat({{.UHeight}}, 1.4rem);">
+    {{range .Units}}<div class="rack-elev-u" style="grid-row: {{.Row}};">{{.U}}</div>{{end}}
+    {{range .Occupants}}
+    <div class="rack-elev-occ{{if .OutOfBounds}} oob{{end}}{{if .Overlap}} overlap{{end}}" style="grid-row: {{.GridRowStart}} / span {{.Span}};">
+      <a href="{{.Path}}">{{.Label}}</a>&nbsp;<span class="rack-elev-meta">U{{.Position}}·{{.UHeight}}U{{if .OutOfBounds}} ⚠{{end}}{{if .Overlap}} ⚠{{end}}</span>
+    </div>
+    {{end}}
+  </div>
+</section>
+{{end}}
+
 <section class="panel">
   <h2>Relationships</h2>
   {{if .Related}}

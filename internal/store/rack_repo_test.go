@@ -49,5 +49,31 @@ func TestRackRepoPersistsUHeight(t *testing.T) {
 	}
 }
 
+func TestHostRepoPersistsRackPlacement(t *testing.T) {
+	db := newTestDB(t)
+	repo := NewHostRepo(db)
+	id, err := repo.Create(domain.Host{Name: "srv", Type: "physical", RackID: 4, RackPosition: 10, UHeight: 2})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, _ := repo.Get(id)
+	if got.RackID != 4 || got.RackPosition != 10 || got.UHeight != 2 {
+		t.Fatalf("host rack placement not persisted: %+v", got)
+	}
+}
+
+func TestHardwareRepoPersistsRackPlacement(t *testing.T) {
+	db := newTestDB(t)
+	repo := NewHardwareRepo(db)
+	id, err := repo.Create(domain.Hardware{Name: "sw", RackID: 4, RackPosition: 5, UHeight: 2})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, _ := repo.Get(id)
+	if got.RackID != 4 || got.RackPosition != 5 || got.UHeight != 2 {
+		t.Fatalf("hardware rack placement not persisted: %+v", got)
+	}
+}
+
 func domainSiteFixture() domain.Site { return domain.Site{Name: "hq", Address: "1 St"} }
 func rackFixture() domain.Rack       { return domain.Rack{Name: "r1", LocationID: 7, UHeight: 24} }

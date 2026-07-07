@@ -18,6 +18,14 @@
   <label>Warranty end<input type="date" name="warranty_end" value="{{.Item.WarrantyEnd}}"></label>
   <label>Status<input name="status" value="{{.Item.Status}}" placeholder="active, spare, retired"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  <label>Rack
+    <select name="rack_id">
+      <option value="0">— none —</option>
+      {{range .Extras.Racks}}<option value="{{.ID}}"{{if eq .ID $.Item.RackID}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+  </label>
+  <label>Rack position (U)<input type="number" name="rack_position" min="0" value="{{.Item.RackPosition}}"></label>
+  <label>Height (U)<input type="number" name="u_height" min="1" value="{{.Item.UHeight}}"></label>
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
     <a class="btn" href="/hardware">Cancel</a>

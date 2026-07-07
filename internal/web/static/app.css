@@ -230,3 +230,14 @@ form.search-page input{flex:1;padding:8px 10px;border:1px solid var(--border);bo
 .cl-delete{color:var(--crit);border-color:var(--crit)}
 .cl-actor{color:var(--muted);font-size:.85em}
 .cl-fields{list-style:none;margin:6px 0 0;padding-left:18px;color:var(--text);font-size:.9rem}
+
+.rack-elev{display:grid;grid-template-columns:3ch 1fr;gap:0 8px;margin-top:8px;align-items:stretch}
+.rack-elev-u{grid-column:1;font-family:var(--mono);font-size:.7rem;color:var(--text);opacity:.55;
+  text-align:right;border-top:1px dashed var(--border);line-height:1.4rem}
+.rack-elev-occ{grid-column:2;display:flex;align-items:center;gap:4px;overflow:hidden;
+  padding:0 8px;border-radius:4px;font-size:.82rem;
+  background:rgba(52,152,219,.14);border:1px solid var(--border)}
+.rack-elev-occ a{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rack-elev-meta{font-family:var(--mono);font-size:.7rem;opacity:.7}
+.rack-elev-occ.oob,.rack-elev-occ.overlap{border-color:var(--danger);background:rgba(192,57,43,.12)}
+.rack-elev-occ.overlap{border-style:dashed}

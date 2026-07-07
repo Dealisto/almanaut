@@ -54,8 +54,11 @@ lists its locations, and a location's lists its racks, so you can navigate the
 hierarchy top-down. Like every entity, they support search, tags, relationships,
 change history, the JSON API, and CSV import.
 
-Assigning hardware and hosts to a rack position — and the rack elevation view —
-land in a follow-up.
+Hosts and hardware can be **assigned to a rack and a U position** (with a height
+in U) from their edit form. The rack's detail page then renders a **U elevation**
+— a top-to-bottom diagram of the rack with each occupant drawn at its position,
+linking to its detail page. Occupants that extend past the rack or overlap
+another are highlighted; placement is advisory, not enforced at save time.
 
 On top of the inventory you get:
 

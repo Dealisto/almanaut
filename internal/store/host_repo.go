@@ -47,9 +47,9 @@ func (r *HostRepo) Create(h domain.Host) (int64, error) {
 		return 0, fmt.Errorf("marshal ips: %w", err)
 	}
 	res, err := r.db.Exec(
-		`INSERT INTO hosts (name, type, os, cpu, ram, disk, status, ips, notes)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(ips), h.Notes,
+		`INSERT INTO hosts (name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(ips), h.Notes, h.RackID, h.RackPosition, h.UHeight,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert host: %w", err)
@@ -67,9 +67,9 @@ func (r *HostRepo) Update(h domain.Host) error {
 		return fmt.Errorf("marshal ips: %w", err)
 	}
 	res, err := r.db.Exec(
-		`UPDATE hosts SET name=?, type=?, os=?, cpu=?, ram=?, disk=?, status=?, ips=?, notes=?
+		`UPDATE hosts SET name=?, type=?, os=?, cpu=?, ram=?, disk=?, status=?, ips=?, notes=?, rack_id=?, rack_position=?, u_height=?
 		 WHERE id=?`,
-		h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(ips), h.Notes, h.ID,
+		h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(ips), h.Notes, h.RackID, h.RackPosition, h.UHeight, h.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update host: %w", err)
@@ -80,7 +80,7 @@ func (r *HostRepo) Update(h domain.Host) error {
 // Get returns the host with the given id.
 func (r *HostRepo) Get(id int64) (domain.Host, error) {
 	row := r.db.QueryRow(
-		`SELECT id, name, type, os, cpu, ram, disk, status, ips, notes
+		`SELECT id, name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height
 		 FROM hosts WHERE id = ?`, id,
 	)
 	return scanHost(row)
@@ -89,7 +89,7 @@ func (r *HostRepo) Get(id int64) (domain.Host, error) {
 // List returns all hosts ordered by name.
 func (r *HostRepo) List() ([]domain.Host, error) {
 	rows, err := r.db.Query(
-		`SELECT id, name, type, os, cpu, ram, disk, status, ips, notes
+		`SELECT id, name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height
 		 FROM hosts ORDER BY name`,
 	)
 	if err != nil {
@@ -121,6 +121,7 @@ func scanHost(s scanner) (domain.Host, error) {
 	var ipsJSON string
 	if err := s.Scan(
 		&h.ID, &h.Name, &h.Type, &h.OS, &h.CPU, &h.RAM, &h.Disk, &h.Status, &ipsJSON, &h.Notes,
+		&h.RackID, &h.RackPosition, &h.UHeight,
 	); err != nil {
 		return domain.Host{}, notFound(fmt.Errorf("scan host: %w", err))
 	}

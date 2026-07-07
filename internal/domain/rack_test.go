@@ -34,3 +34,31 @@ func TestRackValidate(t *testing.T) {
 		t.Error("blank rack name should be rejected")
 	}
 }
+
+func TestHostRackPlacement(t *testing.T) {
+	// Unassigned: position/height ignored.
+	if err := (Host{Name: "h", Type: "vm"}).Validate(); err != nil {
+		t.Errorf("unassigned host rejected: %v", err)
+	}
+	// Assigned but position 0 -> rejected.
+	if err := (Host{Name: "h", Type: "vm", RackID: 1, RackPosition: 0, UHeight: 1}).Validate(); err == nil {
+		t.Error("assigned host with position 0 should be rejected")
+	}
+	// Assigned, valid.
+	if err := (Host{Name: "h", Type: "vm", RackID: 1, RackPosition: 3, UHeight: 2}).Validate(); err != nil {
+		t.Errorf("valid placed host rejected: %v", err)
+	}
+}
+
+func TestHardwareRackPlacement(t *testing.T) {
+	// Unassigned: position/height ignored.
+	if err := (Hardware{Name: "hw"}).Validate(); err != nil {
+		t.Errorf("unassigned hardware rejected: %v", err)
+	}
+	if err := (Hardware{Name: "hw", RackID: 2, RackPosition: 1, UHeight: 0}).Validate(); err == nil {
+		t.Error("assigned hardware with u_height 0 should be rejected")
+	}
+	if err := (Hardware{Name: "hw", RackID: 2, RackPosition: 5, UHeight: 1}).Validate(); err != nil {
+		t.Errorf("valid placed hardware rejected: %v", err)
+	}
+}

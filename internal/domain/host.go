@@ -22,6 +22,10 @@ type Host struct {
 	Status string   `yaml:"status" json:"status"`
 	IPs    []string `yaml:"ips" json:"ips"`
 	Notes  string   `yaml:"notes" json:"notes"`
+
+	RackID       int64 `yaml:"rack_id" json:"rack_id"`
+	RackPosition int   `yaml:"rack_position" json:"rack_position"`
+	UHeight      int   `yaml:"u_height" json:"u_height"`
 }
 
 // Validate checks required fields and value formats.
@@ -37,7 +41,7 @@ func (h Host) Validate() error {
 			return fmt.Errorf("invalid IP address: %q", ip)
 		}
 	}
-	return nil
+	return validateRackPlacement(h.RackID, h.RackPosition, h.UHeight)
 }
 
 func contains(list []string, v string) bool {

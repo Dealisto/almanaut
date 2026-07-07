@@ -310,3 +310,29 @@ func TestPortabilityHardwareRoundTrip(t *testing.T) {
 		t.Fatalf("after import: %+v", list)
 	}
 }
+
+func TestExportImportRoundTripsRackOccupancy(t *testing.T) {
+	db := newTestDB(t)
+	if _, err := NewHostRepo(db).Create(domain.Host{Name: "srv", Type: "physical", RackID: 2, RackPosition: 8, UHeight: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewHardwareRepo(db).Create(domain.Hardware{Name: "sw", RackID: 2, RackPosition: 1, UHeight: 1}); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := Export(db)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	db2 := newTestDB(t)
+	if err := Import(db2, snap); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	hosts, _ := NewHostRepo(db2).List()
+	if len(hosts) != 1 || hosts[0].RackID != 2 || hosts[0].RackPosition != 8 || hosts[0].UHeight != 2 {
+		t.Fatalf("host occupancy not restored: %+v", hosts)
+	}
+	hw, _ := NewHardwareRepo(db2).List()
+	if len(hw) != 1 || hw[0].RackID != 2 || hw[0].RackPosition != 1 {
+		t.Fatalf("hardware occupancy not restored: %+v", hw)
+	}
+}
