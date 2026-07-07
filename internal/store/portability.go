@@ -156,9 +156,9 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 			return fmt.Errorf("marshal ips for host %d: %w", h.ID, err)
 		}
 		if err := insert("host", h.ID,
-			`INSERT INTO hosts (id, name, type, os, cpu, ram, disk, status, ips, notes)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			h.ID, h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(raw), h.Notes); err != nil {
+			`INSERT INTO hosts (id, name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			h.ID, h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(raw), h.Notes, h.RackID, h.RackPosition, h.UHeight); err != nil {
 			return err
 		}
 	}
@@ -203,9 +203,9 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 	}
 	for _, h := range snap.Hardware {
 		if err := insert("hardware", h.ID,
-			`INSERT INTO hardware (id, name, kind, manufacturer, model, serial, location, purchase_date, warranty_end, status, notes)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			h.ID, h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.PurchaseDate, h.WarrantyEnd, h.Status, h.Notes); err != nil {
+			`INSERT INTO hardware (id, name, kind, manufacturer, model, serial, location, purchase_date, warranty_end, status, notes, rack_id, rack_position, u_height)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			h.ID, h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.PurchaseDate, h.WarrantyEnd, h.Status, h.Notes, h.RackID, h.RackPosition, h.UHeight); err != nil {
 			return err
 		}
 	}
