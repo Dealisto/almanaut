@@ -34,6 +34,7 @@ type Config struct {
 	Contacts      *store.ContactRepo
 	Relationships *store.RelationshipRepo
 	Tags          *store.TagRepo
+	VLANs         *store.VLANRepo
 	DB            *sql.DB
 	Logger        *log.Logger // nil → log.Default()
 	Docker        dockerScanner
@@ -56,6 +57,7 @@ func New(cfg Config) http.Handler {
 	racks := cfg.Racks
 	contacts := cfg.Contacts
 	relationships, tags, db := cfg.Relationships, cfg.Tags, cfg.DB
+	vlans := cfg.VLANs
 	docker, netscan, netOpts := cfg.Docker, cfg.NetScan, cfg.NetOpts
 	proxmox, pveOpts := cfg.Proxmox, cfg.PVEOpts
 	resources := []mountable{
@@ -118,12 +120,16 @@ func New(cfg Config) http.Handler {
 			fields: func(n domain.Network) []fieldRow {
 				return []fieldRow{
 					{"CIDR", n.CIDR},
-					{"VLAN", n.VLAN},
+					{"VLAN", vlanLabel(vlans, n.VLANID)},
 					{"Gateway", n.Gateway},
 				}
 			},
 			search: func(n domain.Network) []string {
-				return []string{n.Name, n.CIDR, n.VLAN, n.Gateway, n.Notes}
+				return []string{n.Name, n.CIDR, n.Gateway, n.Notes}
+			},
+			extras: func() map[string]any {
+				list, _ := vlans.List()
+				return map[string]any{"VLANs": list}
 			},
 			newItem:  domain.Network{},
 			listTmpl: "networks.html", formTmpl: "network_form.html",
@@ -417,6 +423,23 @@ func New(cfg Config) http.Handler {
 			},
 			newItem:  domain.Contact{},
 			listTmpl: "contacts.html", formTmpl: "contact_form.html",
+		},
+		resource[domain.VLAN]{
+			name: "vlans", sing: "vlan", title: "VLANs", heading: "VLAN",
+			repo:  vlans,
+			parse: parseVLAN,
+			label: func(v domain.VLAN) string { return v.Name },
+			id:    func(v domain.VLAN) int64 { return v.ID },
+			setID: func(v *domain.VLAN, id int64) { v.ID = id },
+			notes: func(v domain.VLAN) string { return v.Notes },
+			fields: func(v domain.VLAN) []fieldRow {
+				return []fieldRow{{"VLAN ID", strconv.Itoa(v.VID)}}
+			},
+			search: func(v domain.VLAN) []string {
+				return []string{v.Name, strconv.Itoa(v.VID), v.Notes}
+			},
+			newItem:  domain.VLAN{},
+			listTmpl: "vlans.html", formTmpl: "vlan_form.html",
 		},
 	}
 	changelog := store.NewChangelogRepo(db)
@@ -843,6 +866,18 @@ func locationLabel(locations *store.LocationRepo, id int64) string {
 		return "(unknown)"
 	}
 	return l.Name
+}
+
+// vlanLabel resolves a Network's soft vlan_id to a display name.
+func vlanLabel(vlans *store.VLANRepo, id int64) string {
+	if id == 0 {
+		return "—"
+	}
+	v, err := vlans.Get(id)
+	if err != nil {
+		return "(unknown)"
+	}
+	return fmt.Sprintf("VLAN %d (%s)", v.VID, v.Name)
 }
 
 // rackLabel resolves an occupant's soft rack_id to a display name.

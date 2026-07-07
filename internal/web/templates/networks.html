@@ -11,13 +11,12 @@
 {{if .Items}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Name</th><th>CIDR</th><th>VLAN</th><th>Gateway</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>CIDR</th><th>Gateway</th><th></th></tr></thead>
   <tbody>
   {{range .Items}}
     <tr>
       <td><a href="/networks/{{.ID}}">{{.Name}}</a></td>
       <td>{{.CIDR}}</td>
-      <td>{{.VLAN}}</td>
       <td>{{.Gateway}}</td>
       <td>
         <a class="btn" href="/networks/{{.ID}}/edit">Edit</a>

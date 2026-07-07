@@ -10,7 +10,12 @@
 {{ csrfField }}
   <label>Name<input name="name" value="{{.Item.Name}}" required></label>
   <label>CIDR<input name="cidr" value="{{.Item.CIDR}}" placeholder="10.0.0.0/24" required></label>
-  <label>VLAN<input name="vlan" value="{{.Item.VLAN}}"></label>
+  <label>VLAN
+    <select name="vlan_id">
+      <option value="0">— none —</option>
+      {{range .Extras.VLANs}}<option value="{{.ID}}"{{if eq .ID $.Item.VLANID}} selected{{end}}>VLAN {{.VID}} ({{.Name}})</option>{{end}}
+    </select>
+  </label>
   <label>Gateway<input name="gateway" value="{{.Item.Gateway}}"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
   <div class="actions">
