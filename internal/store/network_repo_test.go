@@ -36,12 +36,12 @@ func TestNetworkRepoCRUD(t *testing.T) {
 		t.Errorf("Get returned %+v", got)
 	}
 
-	if err := repo.Update(domain.Network{ID: id, Name: "lan", CIDR: "10.0.0.0/24", VLAN: "10"}); err != nil {
+	if err := repo.Update(domain.Network{ID: id, Name: "lan", CIDR: "10.0.0.0/24", VLANID: 10}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 	got, _ = repo.Get(id)
-	if got.VLAN != "10" {
-		t.Errorf("Update not applied: vlan = %q", got.VLAN)
+	if got.VLANID != 10 {
+		t.Errorf("Update not applied: vlan_id = %d", got.VLANID)
 	}
 
 	list, err := repo.List()

@@ -175,9 +175,9 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 	}
 	for _, n := range snap.Networks {
 		if err := insert("network", n.ID,
-			`INSERT INTO networks (id, name, cidr, vlan, gateway, notes)
+			`INSERT INTO networks (id, name, cidr, vlan_id, gateway, notes)
 			 VALUES (?, ?, ?, ?, ?, ?)`,
-			n.ID, n.Name, n.CIDR, n.VLAN, n.Gateway, n.Notes); err != nil {
+			n.ID, n.Name, n.CIDR, n.VLANID, n.Gateway, n.Notes); err != nil {
 			return err
 		}
 	}
