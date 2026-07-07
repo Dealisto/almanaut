@@ -65,12 +65,12 @@ func TestHostRepoPersistsRackPlacement(t *testing.T) {
 func TestHardwareRepoPersistsRackPlacement(t *testing.T) {
 	db := newTestDB(t)
 	repo := NewHardwareRepo(db)
-	id, err := repo.Create(domain.Hardware{Name: "sw", RackID: 4, RackPosition: 1, UHeight: 1})
+	id, err := repo.Create(domain.Hardware{Name: "sw", RackID: 4, RackPosition: 5, UHeight: 2})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	got, _ := repo.Get(id)
-	if got.RackID != 4 || got.RackPosition != 1 || got.UHeight != 1 {
+	if got.RackID != 4 || got.RackPosition != 5 || got.UHeight != 2 {
 		t.Fatalf("hardware rack placement not persisted: %+v", got)
 	}
 }

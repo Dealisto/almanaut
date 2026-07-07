@@ -51,6 +51,10 @@ func TestHostRackPlacement(t *testing.T) {
 }
 
 func TestHardwareRackPlacement(t *testing.T) {
+	// Unassigned: position/height ignored.
+	if err := (Hardware{Name: "hw"}).Validate(); err != nil {
+		t.Errorf("unassigned hardware rejected: %v", err)
+	}
 	if err := (Hardware{Name: "hw", RackID: 2, RackPosition: 1, UHeight: 0}).Validate(); err == nil {
 		t.Error("assigned hardware with u_height 0 should be rejected")
 	}
