@@ -50,6 +50,10 @@
     {{.UsedCount}} used{{if not .Unbounded}} / {{.TotalUsable}} usable ({{.FreeCount}} free){{end}}.
     {{if .NextFree}}Next free: <code>{{.NextFree}}</code>.{{end}}
   </p>
+  {{if .Reserved}}
+  <p class="ipam-stats">{{.ReservedCount}} reserved.</p>
+  <ul class="related">{{range .Reserved}}<li>{{.Name}}: <code>{{.Range}}</code></li>{{end}}</ul>
+  {{end}}
   {{if .Rows}}
   <div class="table-wrap">
   <table>

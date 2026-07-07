@@ -22,6 +22,7 @@ type entityRepos struct {
 	subscriptions *store.SubscriptionRepo
 	accounts      *store.AccountRepo
 	vlans         *store.VLANRepo
+	reservations  *store.ReservationRepo
 	contacts      *store.ContactRepo
 	sites         *store.SiteRepo
 	locations     *store.LocationRepo

@@ -75,6 +75,7 @@ func main() {
 		Relationships: store.NewRelationshipRepo(db),
 		Tags:          store.NewTagRepo(db),
 		VLANs:         store.NewVLANRepo(db),
+		Reservations:  store.NewReservationRepo(db),
 		DB:            db,
 		Docker:        discovery.NewSocketClient(cfg.DockerSocket),
 		NetScan:       discovery.NewNetworkScanner(),
