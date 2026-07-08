@@ -14,6 +14,7 @@
   <label>Role<input name="role" value="{{.Item.Role}}" placeholder="admin, owner, supplier…"></label>
   <label>Organization<input name="organization" value="{{.Item.Organization}}"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
     <a class="btn" href="/contacts">Cancel</a>

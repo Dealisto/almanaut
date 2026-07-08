@@ -11,6 +11,7 @@
   <label>FQDN<input name="fqdn" value="{{.Item.FQDN}}" placeholder="jellyfin.example.com" required></label>
   <label>DNS provider<input name="provider" value="{{.Item.Provider}}"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
     <a class="btn" href="/domains">Cancel</a>

@@ -18,6 +18,7 @@
   <label>Ports<input name="ports" value="{{.Item.Ports}}"></label>
   <label>Category<input name="category" value="{{.Item.Category}}"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
     <a class="btn" href="/services">Cancel</a>
