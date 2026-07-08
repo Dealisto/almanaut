@@ -105,7 +105,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 .topbar .search{margin-left:auto}
 .topbar .search input{padding:7px 12px;border:1px solid var(--border);border-radius:9px;
   background:var(--bg);color:var(--text);font:inherit;font-size:.86rem;width:230px}
-main{width:100%;max-width:1120px;margin:0 auto;padding:28px 24px}
+main{width:100%;max-width:1120px;margin:0 auto;padding:34px 28px}
 h1{margin:0 0 16px;font-size:1.6rem;letter-spacing:-.02em}
 
 /* ---- buttons ---- */
@@ -190,14 +190,14 @@ form.search-page input{flex:1;padding:10px 12px;border:1px solid var(--border);b
 
 /* ---- panels ---- */
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
-  padding:20px 22px;margin-bottom:20px;box-shadow:var(--shadow)}
+  padding:22px 24px;margin-bottom:28px;box-shadow:var(--shadow)}
 .panel h2{font-size:1.02rem;margin:0 0 16px;font-weight:650;display:flex;align-items:center;gap:9px}
 .panel .table-wrap{border:0;box-shadow:none;border-radius:0}
 .panel form.stack{border:0;box-shadow:none;background:none;padding:0;max-width:none}
 
 /* ---- page header ---- */
 .page-header{display:flex;align-items:flex-end;justify-content:space-between;
-  gap:16px;flex-wrap:wrap;margin:0 0 22px}
+  gap:16px;flex-wrap:wrap;margin:0 0 28px}
 .page-header .ph-titles{min-width:0}
 .page-header .ph-eyebrow{display:block;font-family:var(--mono);font-size:.68rem;
   text-transform:uppercase;letter-spacing:.11em;color:var(--muted);margin-bottom:5px}
@@ -205,7 +205,8 @@ form.search-page input{flex:1;padding:10px 12px;border:1px solid var(--border);b
 .page-header .ph-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
 /* ---- detail page layout ---- */
-.detail-top{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:20px;align-items:start}
+.detail-top{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:20px;align-items:start;margin-bottom:28px}
+.detail-top .panel{margin-bottom:0}
 .def-grid{display:grid;grid-template-columns:auto 1fr;gap:13px 22px;margin:0}
 .def-grid dt{font-family:var(--mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;
   color:var(--muted);align-self:start;padding-top:1px}
@@ -223,7 +224,7 @@ form.search-page input{flex:1;padding:10px 12px;border:1px solid var(--border);b
 @media (max-width:720px){.rel-form{grid-template-columns:1fr}}
 
 /* ---- dashboard: KPI stat tiles (restyle of count-strip/count-chip) ---- */
-.count-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.count-strip{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:28px}
 .count-chip{display:flex;flex-direction:column;gap:8px;padding:15px 16px;border:1px solid var(--border);
   border-radius:var(--r-sm);background:var(--surface);box-shadow:var(--shadow);
   font-family:var(--mono);font-size:.64rem;text-transform:uppercase;letter-spacing:.09em;
