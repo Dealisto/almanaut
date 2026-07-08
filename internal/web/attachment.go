@@ -19,7 +19,10 @@ func (rs resource[T]) addAttachment(d handlerDeps) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		// maxMemory for in-memory parts; limitBody already caps the whole request.
+		// The csrfProtect middleware has already parsed the multipart form (via
+		// FormValue) using net/http's default 32 MiB maxMemory, so this call is
+		// effectively an idempotent safety net; limitBody caps the whole request
+		// at 32 MiB and the per-file cap is enforced on the read below.
 		if err := req.ParseMultipartForm(domain.MaxAttachmentBytes); err != nil {
 			http.Error(w, "could not parse upload", http.StatusBadRequest)
 			return
