@@ -9,8 +9,7 @@ import (
 // Login throttling policy: after loginFailureThreshold failed logins for a
 // username, further attempts are refused for loginLockoutDuration. The state is
 // per-username and in-memory (reset on process restart), which is sufficient
-// for a single-binary homelab deployment — see
-// docs/superpowers/specs/2026-07-08-login-throttling-design.md.
+// for a single-binary homelab deployment.
 const (
 	loginFailureThreshold = 5
 	loginLockoutDuration  = 15 * time.Minute
