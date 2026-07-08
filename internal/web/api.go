@@ -38,7 +38,7 @@ func apiServerError(w http.ResponseWriter, r *http.Request, err error) {
 
 // apiSearch returns a flat JSON array of entities whose searchable fields match
 // q (case-insensitive). An empty q returns an empty array.
-func apiSearch(cat entityCatalog) http.HandlerFunc {
+func apiSearch(cat entityCatalog, cf *store.CustomFieldRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		q := strings.TrimSpace(req.URL.Query().Get("q"))
 		results := []searchEntry{}
@@ -47,7 +47,7 @@ func apiSearch(cat entityCatalog) http.HandlerFunc {
 			return
 		}
 		for _, rs := range cat.resources {
-			entries, err := rs.searchEntries()
+			entries, err := rs.searchEntries(cf)
 			if err != nil {
 				apiServerError(w, req, err)
 				return

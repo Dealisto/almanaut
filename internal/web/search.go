@@ -55,7 +55,7 @@ func matchesQuery(fields []string, q string) bool {
 // tag, grouped by type and linked to their detail pages. It drives every type
 // off the resource catalog, so adding an entity needs no change here — only a
 // search field list on its resource definition.
-func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
+func searchEntities(cat entityCatalog, tags *store.TagRepo, cf *store.CustomFieldRepo) http.HandlerFunc {
 	key := func(typ string, id int64) string { return fmt.Sprintf("%s:%d", typ, id) }
 	return func(w http.ResponseWriter, req *http.Request) {
 		q := strings.TrimSpace(req.URL.Query().Get("q"))
@@ -83,7 +83,7 @@ func searchEntities(cat entityCatalog, tags *store.TagRepo) http.HandlerFunc {
 		}
 
 		for _, rs := range cat.resources {
-			entries, err := rs.searchEntries()
+			entries, err := rs.searchEntries(cf)
 			if err != nil {
 				serverError(w, req, err)
 				return

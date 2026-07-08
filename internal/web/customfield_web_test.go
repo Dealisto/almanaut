@@ -87,3 +87,33 @@ func TestCustomFieldsPageCRUD(t *testing.T) {
 		t.Errorf("GET /custom-fields body still contains %q after delete:\n%s", "Asset tag", body)
 	}
 }
+
+// TestCustomFieldSearch verifies a custom field VALUE is matched by global search.
+func TestCustomFieldSearch(t *testing.T) {
+	srv := newTestServer(t)
+	// define a host field and create a host carrying a distinctive value
+	if rec := postForm(t, srv, "/custom-fields", url.Values{
+		"entity_type": {"host"}, "label": {"Asset tag"}, "kind": {"text"},
+	}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("create def = %d", rec.Code)
+	}
+	if rec := postForm(t, srv, "/hosts", url.Values{
+		"name": {"nas"}, "type": {"physical"}, "cf_asset_tag": {"ZZZ-9000"},
+	}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("create host = %d", rec.Code)
+	}
+	// web search page finds the host by its custom field value
+	req := httptest.NewRequest(http.MethodGet, "/search?q=ZZZ-9000", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if body := rec.Body.String(); !strings.Contains(body, "nas") {
+		t.Errorf("search body missing host 'nas' matched by cf value:\n%s", body)
+	}
+	// /api/search finds it too
+	req = httptest.NewRequest(http.MethodGet, "/api/search?q=ZZZ-9000", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if body := rec.Body.String(); !strings.Contains(body, `"nas"`) {
+		t.Errorf("api search body missing host matched by cf value:\n%s", body)
+	}
+}

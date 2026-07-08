@@ -110,9 +110,18 @@ func (rs resource[T]) basePath() string { return "/" + rs.name }
 func (rs resource[T]) searchHeading() string { return rs.title }
 
 // searchEntries projects every entity into the form the global search handler
-// needs: its label, detail-page path, and the free-text fields to match against.
-func (rs resource[T]) searchEntries() ([]searchEntry, error) {
+// needs. Custom field values are folded into Fields (bulk-loaded to avoid N+1)
+// so search matches them too.
+func (rs resource[T]) searchEntries(cf *store.CustomFieldRepo) ([]searchEntry, error) {
 	items, err := rs.repo.List()
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int64, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, rs.id(it))
+	}
+	cfValues, err := cf.ValuesForEntities(rs.sing, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -122,6 +131,9 @@ func (rs resource[T]) searchEntries() ([]searchEntry, error) {
 		var fields []string
 		if rs.search != nil {
 			fields = rs.search(it)
+		}
+		for _, v := range cfValues[id] {
+			fields = append(fields, v.Value)
 		}
 		out = append(out, searchEntry{
 			Type:   rs.sing,
@@ -577,7 +589,7 @@ type mountable interface {
 	singular() string
 	basePath() string
 	searchHeading() string
-	searchEntries() ([]searchEntry, error)
+	searchEntries(cf *store.CustomFieldRepo) ([]searchEntry, error)
 	importCSV(d handlerDeps, r io.Reader, actor string) (int, int, []string, error)
 }
 
