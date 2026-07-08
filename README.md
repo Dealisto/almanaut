@@ -463,6 +463,13 @@ latest changes across every entity; delete events remain visible there even
 after the entity is gone. Journal entries are included in the YAML export;
 the change log is not.
 
+The change log is append-only and cannot be edited or deleted from the UI, so
+it **retains prior values of edited fields** — including account fields such as
+`username`, `password_manager`, and `secret_ref`. This is consistent with the
+trusted-LAN model (`/export` already exposes those fields, and `secret_ref` is a
+pointer, not a stored secret), but be aware that a value you later change is not
+scrubbed from the history.
+
 ## Health & version
 
 Two unauthenticated endpoints are always available (they bypass the login so

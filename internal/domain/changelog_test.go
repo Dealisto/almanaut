@@ -48,6 +48,38 @@ func TestDiffRendersSlices(t *testing.T) {
 	}
 }
 
+func TestDiffRendersLargeIntegerWithoutScientificNotation(t *testing.T) {
+	// Numeric fields round-trip through JSON as float64; a large integer must
+	// render as a plain integer, not "1.5e+06" (regression from fmt "%v").
+	changes, err := Diff(Host{ID: 1}, Host{ID: 1, RackPosition: 1500000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(changes) != 1 || changes[0].Field != "rack_position" {
+		t.Fatalf("want one rack_position change, got %+v", changes)
+	}
+	if changes[0].Old != "0" || changes[0].New != "1500000" {
+		t.Errorf("large integer rendered wrong: %+v", changes[0])
+	}
+}
+
+func TestRenderValueFormatsNumbers(t *testing.T) {
+	cases := []struct {
+		in   any
+		want string
+	}{
+		{float64(1500000), "1500000"},                      // no scientific notation
+		{float64(0), "0"},                                  // whole number, no trailing ".0"
+		{float64(2.5), "2.5"},                              // fractional preserved
+		{[]any{float64(1000000), "eth0"}, "1000000, eth0"}, // slice elements too
+	}
+	for _, c := range cases {
+		if got := renderValue(c.in); got != c.want {
+			t.Errorf("renderValue(%v) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestDiffCreateFromZero(t *testing.T) {
 	changes, err := Diff(Host{}, Host{ID: 1, Name: "nas", Status: "running"})
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -80,12 +81,23 @@ func renderValue(v any) string {
 	case []any:
 		parts := make([]string, len(t))
 		for i, e := range t {
-			parts[i] = fmt.Sprintf("%v", e)
+			parts[i] = formatScalar(e)
 		}
 		return strings.Join(parts, ", ")
 	case string:
 		return t
 	default:
-		return fmt.Sprintf("%v", t)
+		return formatScalar(t)
 	}
+}
+
+// formatScalar formats a single JSON-decoded scalar. JSON numbers decode to
+// float64, so a large integer field (e.g. a rack position) would otherwise
+// render in scientific notation ("1.5e+06") via fmt's "%v"; FormatFloat with
+// 'f' keeps whole numbers whole and fractional values natural.
+func formatScalar(v any) string {
+	if f, ok := v.(float64); ok {
+		return strconv.FormatFloat(f, 'f', -1, 64)
+	}
+	return fmt.Sprintf("%v", v)
 }
