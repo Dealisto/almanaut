@@ -224,11 +224,11 @@ func (r *CustomFieldRepo) ListAllValues() ([]domain.CustomFieldValueRow, error) 
 	defer rows.Close()
 	out := []domain.CustomFieldValueRow{}
 	for rows.Next() {
-		var r domain.CustomFieldValueRow
-		if err := rows.Scan(&r.ID, &r.EntityType, &r.EntityID, &r.DefID, &r.Value); err != nil {
+		var row domain.CustomFieldValueRow
+		if err := rows.Scan(&row.ID, &row.EntityType, &row.EntityID, &row.DefID, &row.Value); err != nil {
 			return nil, fmt.Errorf("scan custom field value row: %w", err)
 		}
-		out = append(out, r)
+		out = append(out, row)
 	}
 	return out, rows.Err()
 }

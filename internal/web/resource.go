@@ -569,6 +569,7 @@ func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
 
 // updateJSON decodes a JSON entity and full-replaces the row at {id}. The URL id
 // is authoritative (any id in the body is overwritten). 404 if the row is absent.
+// Custom fields are only modified when a custom_fields object is present in the body; an omitted or empty custom_fields leaves existing values unchanged.
 func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
