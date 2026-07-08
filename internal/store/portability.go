@@ -30,6 +30,9 @@ type Snapshot struct {
 	Relationships  []domain.Relationship `yaml:"relationships"`
 	Tags           []domain.Tag          `yaml:"tags"`
 	JournalEntries []domain.JournalEntry `yaml:"journal_entries"`
+
+	CustomFieldDefs   []domain.CustomFieldDef      `yaml:"custom_field_defs"`
+	CustomFieldValues []domain.CustomFieldValueRow `yaml:"custom_field_values"`
 }
 
 // Export gathers the entire inventory into a Snapshot, reusing the existing
@@ -51,25 +54,27 @@ func Export(db *sql.DB) (Snapshot, error) {
 
 	var listErr error
 	snap := Snapshot{
-		Version:        1,
-		Hosts:          exportList(&listErr, NewHostRepo(db).WithTx(tx).List),
-		Services:       exportList(&listErr, NewServiceRepo(db).WithTx(tx).List),
-		Networks:       exportList(&listErr, NewNetworkRepo(db).WithTx(tx).List),
-		Domains:        exportList(&listErr, NewDomainRepo(db).WithTx(tx).List),
-		Certificates:   exportList(&listErr, NewCertificateRepo(db).WithTx(tx).List),
-		Backups:        exportList(&listErr, NewBackupRepo(db).WithTx(tx).List),
-		Hardware:       exportList(&listErr, NewHardwareRepo(db).WithTx(tx).List),
-		Subscriptions:  exportList(&listErr, NewSubscriptionRepo(db).WithTx(tx).List),
-		Accounts:       exportList(&listErr, NewAccountRepo(db).WithTx(tx).List),
-		VLANs:          exportList(&listErr, NewVLANRepo(db).WithTx(tx).List),
-		Reservations:   exportList(&listErr, NewReservationRepo(db).WithTx(tx).List),
-		Contacts:       exportList(&listErr, NewContactRepo(db).WithTx(tx).List),
-		Sites:          exportList(&listErr, NewSiteRepo(db).WithTx(tx).List),
-		Locations:      exportList(&listErr, NewLocationRepo(db).WithTx(tx).List),
-		Racks:          exportList(&listErr, NewRackRepo(db).WithTx(tx).List),
-		Relationships:  exportList(&listErr, NewRelationshipRepo(db).WithTx(tx).List),
-		Tags:           exportList(&listErr, NewTagRepo(db).WithTx(tx).List),
-		JournalEntries: exportList(&listErr, NewJournalRepo(db).WithTx(tx).List),
+		Version:           1,
+		Hosts:             exportList(&listErr, NewHostRepo(db).WithTx(tx).List),
+		Services:          exportList(&listErr, NewServiceRepo(db).WithTx(tx).List),
+		Networks:          exportList(&listErr, NewNetworkRepo(db).WithTx(tx).List),
+		Domains:           exportList(&listErr, NewDomainRepo(db).WithTx(tx).List),
+		Certificates:      exportList(&listErr, NewCertificateRepo(db).WithTx(tx).List),
+		Backups:           exportList(&listErr, NewBackupRepo(db).WithTx(tx).List),
+		Hardware:          exportList(&listErr, NewHardwareRepo(db).WithTx(tx).List),
+		Subscriptions:     exportList(&listErr, NewSubscriptionRepo(db).WithTx(tx).List),
+		Accounts:          exportList(&listErr, NewAccountRepo(db).WithTx(tx).List),
+		VLANs:             exportList(&listErr, NewVLANRepo(db).WithTx(tx).List),
+		Reservations:      exportList(&listErr, NewReservationRepo(db).WithTx(tx).List),
+		Contacts:          exportList(&listErr, NewContactRepo(db).WithTx(tx).List),
+		Sites:             exportList(&listErr, NewSiteRepo(db).WithTx(tx).List),
+		Locations:         exportList(&listErr, NewLocationRepo(db).WithTx(tx).List),
+		Racks:             exportList(&listErr, NewRackRepo(db).WithTx(tx).List),
+		Relationships:     exportList(&listErr, NewRelationshipRepo(db).WithTx(tx).List),
+		Tags:              exportList(&listErr, NewTagRepo(db).WithTx(tx).List),
+		JournalEntries:    exportList(&listErr, NewJournalRepo(db).WithTx(tx).List),
+		CustomFieldDefs:   exportList(&listErr, NewCustomFieldRepo(db).WithTx(tx).ListAllDefs),
+		CustomFieldValues: exportList(&listErr, NewCustomFieldRepo(db).WithTx(tx).ListAllValues),
 	}
 	if listErr != nil {
 		return Snapshot{}, listErr
@@ -114,6 +119,8 @@ func Import(db *sql.DB, snap Snapshot) error {
 		validateAll("relationship", snap.Relationships, func(r domain.Relationship) int64 { return r.ID }),
 		validateAll("tag", snap.Tags, func(t domain.Tag) int64 { return t.ID }),
 		validateAll("journal_entry", snap.JournalEntries, func(e domain.JournalEntry) int64 { return e.ID }),
+		validateAll("custom_field_def", snap.CustomFieldDefs, func(d domain.CustomFieldDef) int64 { return d.ID }),
+		validateAll("custom_field_value", snap.CustomFieldValues, func(v domain.CustomFieldValueRow) int64 { return v.ID }),
 	} {
 		if err != nil {
 			return err
@@ -128,7 +135,8 @@ func Import(db *sql.DB, snap Snapshot) error {
 			len(snap.Certificates) + len(snap.Backups) + len(snap.Hardware) +
 			len(snap.Subscriptions) + len(snap.Accounts) + len(snap.VLANs) + len(snap.Reservations) + len(snap.Contacts) +
 			len(snap.Sites) + len(snap.Locations) + len(snap.Racks) +
-			len(snap.Relationships) + len(snap.Tags) + len(snap.JournalEntries)
+			len(snap.Relationships) + len(snap.Tags) + len(snap.JournalEntries) +
+			len(snap.CustomFieldDefs) + len(snap.CustomFieldValues)
 		return NewChangelogRepo(db).WithTx(tx).Create(ChangeEvent{
 			EntityType: "", EntityID: 0, Label: "inventory", Action: domain.ActionImport,
 			Changes:   []domain.FieldChange{{Field: "records", New: fmt.Sprintf("%d", n)}},
@@ -141,7 +149,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 // inside WithTx, which owns begin/commit/rollback and is panic-safe, so any
 // failure rolls the whole replacement back.
 func replaceInventory(tx *sql.Tx, snap Snapshot) error {
-	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "relationships", "tags", "journal_entries"} {
+	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"} {
 		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 			return fmt.Errorf("clear %s: %w", table, err)
 		}
@@ -298,6 +306,22 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 			`INSERT INTO journal_entries (id, entity_type, entity_id, kind, body, created_at)
 			 VALUES (?, ?, ?, ?, ?, ?)`,
 			e.ID, e.EntityType, e.EntityID, e.Kind, e.Body, e.CreatedAt); err != nil {
+			return err
+		}
+	}
+	for _, d := range snap.CustomFieldDefs {
+		if err := insert("custom_field_def", d.ID,
+			`INSERT INTO custom_field_definitions (id, entity_type, name, label, kind, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			d.ID, d.EntityType, d.Name, d.Label, string(d.Kind), d.CreatedAt); err != nil {
+			return err
+		}
+	}
+	for _, v := range snap.CustomFieldValues {
+		if err := insert("custom_field_value", v.ID,
+			`INSERT INTO custom_field_values (id, entity_type, entity_id, def_id, value)
+			 VALUES (?, ?, ?, ?, ?)`,
+			v.ID, v.EntityType, v.EntityID, v.DefID, v.Value); err != nil {
 			return err
 		}
 	}
