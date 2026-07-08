@@ -58,21 +58,24 @@ func TestDiffRendersLargeIntegerWithoutScientificNotation(t *testing.T) {
 	if len(changes) != 1 || changes[0].Field != "rack_position" {
 		t.Fatalf("want one rack_position change, got %+v", changes)
 	}
-	if changes[0].New != "1500000" {
-		t.Errorf("large integer rendered wrong: got %q, want %q", changes[0].New, "1500000")
+	if changes[0].Old != "0" || changes[0].New != "1500000" {
+		t.Errorf("large integer rendered wrong: %+v", changes[0])
 	}
 }
 
 func TestRenderValueFormatsNumbers(t *testing.T) {
-	cases := map[any]string{
-		float64(1500000):                "1500000", // no scientific notation
-		float64(0):                      "0",
-		float64(2.5):                    "2.5", // fractional preserved
-		[]any{float64(1000000), "eth0"}: "1000000, eth0",
+	cases := []struct {
+		in   any
+		want string
+	}{
+		{float64(1500000), "1500000"},                      // no scientific notation
+		{float64(0), "0"},                                  // whole number, no trailing ".0"
+		{float64(2.5), "2.5"},                              // fractional preserved
+		{[]any{float64(1000000), "eth0"}, "1000000, eth0"}, // slice elements too
 	}
-	for in, want := range cases {
-		if got := renderValue(in); got != want {
-			t.Errorf("renderValue(%v) = %q, want %q", in, got, want)
+	for _, c := range cases {
+		if got := renderValue(c.in); got != c.want {
+			t.Errorf("renderValue(%v) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
