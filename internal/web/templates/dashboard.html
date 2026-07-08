@@ -1,7 +1,6 @@
 {{define "content"}}
 <div class="page-header">
   <div class="ph-titles">
-    <span class="ph-eyebrow">Overview</span>
     <h1>Dashboard</h1>
   </div>
 </div>
@@ -10,6 +9,7 @@
   <input type="search" name="q" placeholder="Search hosts, services, IPs…" aria-label="Search">
 </form>
 
+<span class="section-eyebrow">Inventory</span>
 <div class="count-strip">
   {{range .Counts}}<a class="count-chip" href="{{.URL}}">{{.Label}} <b>{{.Count}}</b></a>{{end}}
 </div>
