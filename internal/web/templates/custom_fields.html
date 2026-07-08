@@ -40,7 +40,7 @@
         <td>
           <form class="form-inline" method="post" action="/custom-fields/{{.ID}}">
             {{ csrfField }}
-            <input name="label" value="{{.Label}}">
+            <input name="label" value="{{.Label}}" required>
             <button class="btn" type="submit">Save</button>
           </form>
         </td>

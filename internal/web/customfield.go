@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
@@ -63,6 +64,9 @@ func (d handlerDeps) customFieldFormRows(entityType string, entityID int64, get 
 		value := stored[def.Name]
 		if get != nil {
 			value = get("cf_" + def.Name)
+			if def.Kind == domain.KindBool {
+				value, _ = domain.ValidateCustomFieldValue(def.Kind, value)
+			}
 		}
 		rows = append(rows, customFieldFormRow{
 			Name: def.Name, Label: def.Label, Kind: string(def.Kind), Value: value,
@@ -126,7 +130,10 @@ func createCustomField(repo *store.CustomFieldRepo) http.HandlerFunc {
 			return
 		}
 		if _, err := repo.CreateDef(def); err != nil {
-			// UNIQUE(entity_type, name) violation → treat as a user error.
+			// UNIQUE(entity_type, name) violation is the common case, but log
+			// the real error too so a genuine backend failure isn't silently
+			// mislabeled with no server-side trace.
+			loggerFrom(req.Context()).Printf("create custom field def: %v", err)
 			renderCustomFieldsError(w, req, repo, fmt.Errorf("a field named %q already exists for %s", def.Name, def.EntityType))
 			return
 		}
@@ -169,7 +176,12 @@ func updateCustomFieldLabel(repo *store.CustomFieldRepo) http.HandlerFunc {
 			http.Error(w, "invalid id", http.StatusBadRequest)
 			return
 		}
-		if err := repo.UpdateDefLabel(id, req.FormValue("label")); err != nil {
+		label := req.FormValue("label")
+		if strings.TrimSpace(label) == "" {
+			renderCustomFieldsError(w, req, repo, fmt.Errorf("label is required"))
+			return
+		}
+		if err := repo.UpdateDefLabel(id, label); err != nil {
 			notFoundOrServerError(w, req, "custom field", err)
 			return
 		}
