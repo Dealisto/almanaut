@@ -210,3 +210,56 @@ func TestBearerToken(t *testing.T) {
 		t.Fatalf("case-insensitive scheme: got %q, %v", got, ok)
 	}
 }
+
+func TestLoginThrottleLocksOutAfterRepeatedFailures(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := store.Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	users := store.NewUserRepo(db)
+	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+		t.Fatalf("BootstrapAdmin: %v", err)
+	}
+	h := newAuthedTestHandler(t, db)
+
+	// One CSRF token, reused across POSTs (stateless double-submit cookie).
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/login", nil))
+	csrf := csrfCookie(rec.Result().Cookies())
+
+	post := func(password string) *httptest.ResponseRecorder {
+		form := strings.NewReader("username=admin&password=" + password + "&" + csrfFieldName + "=" + csrf.Value)
+		req := httptest.NewRequest(http.MethodPost, "/login", form)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(csrf)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		return w
+	}
+
+	// loginFailureThreshold wrong-password attempts are each rejected with 401.
+	for i := 0; i < loginFailureThreshold; i++ {
+		if w := post("wrong"); w.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: code = %d, want 401", i+1, w.Code)
+		}
+	}
+	// The next attempt is locked out — even with the CORRECT password, which
+	// proves the throttle gates before password verification.
+	w := post("password123")
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("locked attempt code = %d, want 429", w.Code)
+	}
+	if w.Header().Get("Retry-After") == "" {
+		t.Error("locked response missing Retry-After header")
+	}
+	for _, c := range w.Result().Cookies() {
+		if c.Name == sessionCookieName && c.Value != "" {
+			t.Error("locked login must not set a session cookie")
+		}
+	}
+}
