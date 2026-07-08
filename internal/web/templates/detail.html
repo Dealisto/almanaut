@@ -99,6 +99,15 @@
 </section>
 {{end}}
 
+{{with .CustomFields}}
+<section class="panel">
+  <h2>Custom fields</h2>
+  <dl class="def-grid">
+    {{range .}}<dt>{{.Label}}</dt><dd>{{.Value}}</dd>{{end}}
+  </dl>
+</section>
+{{end}}
+
 <section class="panel">
   <h2>Relationships</h2>
   {{if .Related}}

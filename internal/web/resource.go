@@ -416,10 +416,15 @@ func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
 				return
 			}
 		}
+		cfValues, err := d.customFields.ListForEntity(rs.sing, id)
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
 		renderDetailExtra(w, req, d.cat, d.tags, d.rels, d.journal, d.changelog, rs.sing, id,
 			rs.heading+": "+rs.label(item), rs.notes(item),
 			fmt.Sprintf("%s/%d/edit", rs.basePath(), id), rs.basePath(), rs.fields(item),
-			detailExtras{ipam: ipam, children: children, elevation: elevation})
+			detailExtras{ipam: ipam, children: children, elevation: elevation, customFields: cfValues})
 	}
 }
 

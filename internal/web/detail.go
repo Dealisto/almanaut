@@ -29,9 +29,10 @@ type childrenSection struct {
 // detailExtras bundles the optional, entity-specific detail-page sections so
 // renderDetailExtra keeps a fixed parameter list as more are added.
 type detailExtras struct {
-	ipam      *ipamSection
-	children  *childrenSection
-	elevation *elevationSection
+	ipam         *ipamSection
+	children     *childrenSection
+	elevation    *elevationSection
+	customFields []domain.CustomFieldValue
 }
 
 type relatedItem struct {
@@ -39,20 +40,21 @@ type relatedItem struct {
 }
 
 type detailData struct {
-	Title      string
-	Heading    string
-	EntityType string
-	EntityID   int64
-	EditURL    string
-	ListURL    string
-	Fields     []fieldRow
-	NotesHTML  template.HTML
-	Tags       []domain.Tag
-	Related    []relatedItem
-	GraphSVG   template.HTML
-	IPAM       *ipamSection
-	Children   *childrenSection
-	Elevation  *elevationSection
+	Title        string
+	Heading      string
+	EntityType   string
+	EntityID     int64
+	EditURL      string
+	ListURL      string
+	Fields       []fieldRow
+	NotesHTML    template.HTML
+	Tags         []domain.Tag
+	Related      []relatedItem
+	GraphSVG     template.HTML
+	IPAM         *ipamSection
+	Children     *childrenSection
+	Elevation    *elevationSection
+	CustomFields []domain.CustomFieldValue
 
 	JournalEntries []journalView
 	JournalKinds   []string
@@ -192,20 +194,21 @@ func renderDetailExtra(
 	}
 
 	render(w, r, "detail.html", detailData{
-		Title:      heading,
-		Heading:    heading,
-		EntityType: entityType,
-		EntityID:   entityID,
-		EditURL:    editURL,
-		ListURL:    listURL,
-		Fields:     fields,
-		NotesHTML:  renderMarkdown(notes),
-		Tags:       tagList,
-		Related:    related,
-		GraphSVG:   buildNeighborhoodSVG(heading, neighbors),
-		IPAM:       extras.ipam,
-		Children:   extras.children,
-		Elevation:  extras.elevation,
+		Title:        heading,
+		Heading:      heading,
+		EntityType:   entityType,
+		EntityID:     entityID,
+		EditURL:      editURL,
+		ListURL:      listURL,
+		Fields:       fields,
+		NotesHTML:    renderMarkdown(notes),
+		Tags:         tagList,
+		Related:      related,
+		GraphSVG:     buildNeighborhoodSVG(heading, neighbors),
+		IPAM:         extras.ipam,
+		Children:     extras.children,
+		Elevation:    extras.elevation,
+		CustomFields: extras.customFields,
 
 		JournalEntries: views,
 		JournalKinds:   domain.JournalKinds,
