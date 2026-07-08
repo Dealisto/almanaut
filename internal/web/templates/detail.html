@@ -109,6 +109,30 @@
 {{end}}
 
 <section class="panel">
+  <h2>Attachments</h2>
+  <form class="journal-add" method="post" action="{{.ListURL}}/{{.EntityID}}/attachments" enctype="multipart/form-data">
+    {{ csrfField }}
+    <input type="file" name="file" required>
+    <button class="btn btn-primary" type="submit">Upload</button>
+  </form>
+  {{if .Attachments}}
+  <ul class="related">
+    {{range .Attachments}}
+    <li>
+      <a href="/attachments/{{.ID}}">{{.Filename}}</a>
+      <span class="muted">{{.Size}} · {{.UploadedAt}}</span>
+      <form class="form-inline" method="post" action="/attachments/{{.ID}}/delete"
+            onsubmit="return confirm('Delete this attachment?');">
+        {{ csrfField }}
+        <button class="tag-x" type="submit" title="delete">&times;</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}<p class="muted"><em>No attachments.</em></p>{{end}}
+</section>
+
+<section class="panel">
   <h2>Relationships</h2>
   {{if .Related}}
   {{with .GraphSVG}}<div class="depgraph-wrap">{{.}}</div>{{end}}

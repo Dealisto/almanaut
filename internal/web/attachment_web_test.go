@@ -46,10 +46,9 @@ func uploadAttachment(t *testing.T, srv http.Handler, path, filename string, con
 	return rec
 }
 
-// TestAttachmentUploadDownloadDelete drives the full HTTP path for Task 4:
-// upload -> download (forced, with the anti-XSS headers) -> delete -> the
-// attachment is gone. The detail page does not render the filename yet (that
-// panel is added in Task 5), so this test doesn't assert on it.
+// TestAttachmentUploadDownloadDelete drives the full HTTP path for Tasks 4-5:
+// upload -> the filename appears on the entity detail page -> download
+// (forced, with the anti-XSS headers) -> delete -> the attachment is gone.
 func TestAttachmentUploadDownloadDelete(t *testing.T) {
 	srv, db := newTestServerDB(t)
 
@@ -77,8 +76,14 @@ func TestAttachmentUploadDownloadDelete(t *testing.T) {
 		t.Errorf("redirect Location = %q, want /hosts/%s", loc, hostID)
 	}
 
-	// Look up the new attachment's id directly through the repo: the detail
-	// page doesn't surface a download link until Task 5.
+	// The detail page's Attachments panel should now show the uploaded file.
+	detailReq := httptest.NewRequest(http.MethodGet, "/hosts/"+hostID, nil)
+	detailRec := httptest.NewRecorder()
+	srv.ServeHTTP(detailRec, detailReq)
+	if !strings.Contains(detailRec.Body.String(), "notes.txt") {
+		t.Fatalf("GET /hosts/%s body does not contain uploaded filename %q:\n%s", hostID, "notes.txt", detailRec.Body.String())
+	}
+
 	hid, _ := strconv.ParseInt(hostID, 10, 64)
 	atts, err := store.NewAttachmentRepo(db).ListForEntity("host", hid)
 	if err != nil {

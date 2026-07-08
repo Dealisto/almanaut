@@ -33,6 +33,15 @@ type detailExtras struct {
 	children     *childrenSection
 	elevation    *elevationSection
 	customFields []domain.CustomFieldValue
+	attachments  []attachmentView
+}
+
+// attachmentView is one attachment row on a detail page.
+type attachmentView struct {
+	ID         int64
+	Filename   string
+	Size       string
+	UploadedAt string
 }
 
 type relatedItem struct {
@@ -55,6 +64,7 @@ type detailData struct {
 	Children     *childrenSection
 	Elevation    *elevationSection
 	CustomFields []domain.CustomFieldValue
+	Attachments  []attachmentView
 
 	JournalEntries []journalView
 	JournalKinds   []string
@@ -209,6 +219,7 @@ func renderDetailExtra(
 		Children:     extras.children,
 		Elevation:    extras.elevation,
 		CustomFields: extras.customFields,
+		Attachments:  extras.attachments,
 
 		JournalEntries: views,
 		JournalKinds:   domain.JournalKinds,

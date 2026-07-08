@@ -437,10 +437,21 @@ func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
 			serverError(w, req, err)
 			return
 		}
+		atts, err := d.attachments.ListForEntity(rs.sing, id)
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
+		attViews := make([]attachmentView, 0, len(atts))
+		for _, a := range atts {
+			attViews = append(attViews, attachmentView{
+				ID: a.ID, Filename: a.Filename, Size: humanizeBytes(a.Size), UploadedAt: a.UploadedAt,
+			})
+		}
 		renderDetailExtra(w, req, d.cat, d.tags, d.rels, d.journal, d.changelog, rs.sing, id,
 			rs.heading+": "+rs.label(item), rs.notes(item),
 			fmt.Sprintf("%s/%d/edit", rs.basePath(), id), rs.basePath(), rs.fields(item),
-			detailExtras{ipam: ipam, children: children, elevation: elevation, customFields: cfValues})
+			detailExtras{ipam: ipam, children: children, elevation: elevation, customFields: cfValues, attachments: attViews})
 	}
 }
 
