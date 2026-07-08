@@ -179,6 +179,10 @@ func login(users *store.UserRepo, sessions *store.SessionRepo, throttle *loginTh
 		}
 		if !verifyPassword(hash, password) {
 			throttle.recordFailure(username, now)
+			// Prune stale buckets on the failure path too, so a spray across many
+			// distinct usernames cannot grow the map unbounded when no successful
+			// login ever occurs to trigger a prune.
+			throttle.cleanup(now)
 			w.WriteHeader(http.StatusUnauthorized)
 			render(w, r, "login.html", loginData{Title: "Sign in", Next: next, Error: "invalid username or password"})
 			return
