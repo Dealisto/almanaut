@@ -7,8 +7,11 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -142,12 +145,28 @@ func loginForm(w http.ResponseWriter, r *http.Request) {
 	render(w, r, "login.html", loginData{Title: "Sign in", Next: safeNext(r.URL.Query().Get("next"))})
 }
 
-// login verifies credentials, creates a session, and sets the cookie.
-func login(users *store.UserRepo, sessions *store.SessionRepo, forceSecure bool) http.HandlerFunc {
+// login verifies credentials, creates a session, and sets the cookie. Repeated
+// failed attempts for a username are throttled (see loginThrottle): once a
+// username is locked out the request is refused with 429 before any password
+// verification, so an attacker cannot spend the server's bcrypt budget guessing.
+func login(users *store.UserRepo, sessions *store.SessionRepo, throttle *loginThrottle, forceSecure bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := strings.TrimSpace(r.FormValue("username"))
 		password := r.FormValue("password")
 		next := safeNext(r.FormValue("next"))
+		now := time.Now().UTC()
+
+		if ok, retryAfter := throttle.allowed(username, now); !ok {
+			secs := int(math.Ceil(retryAfter.Seconds()))
+			mins := (secs + 59) / 60
+			w.Header().Set("Retry-After", strconv.Itoa(secs))
+			w.WriteHeader(http.StatusTooManyRequests)
+			render(w, r, "login.html", loginData{
+				Title: "Sign in", Next: next,
+				Error: fmt.Sprintf("too many attempts — try again in %d minute(s)", mins),
+			})
+			return
+		}
 
 		u, err := users.GetByUsername(username)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -159,6 +178,11 @@ func login(users *store.UserRepo, sessions *store.SessionRepo, forceSecure bool)
 			hash = u.PasswordHash
 		}
 		if !verifyPassword(hash, password) {
+			throttle.recordFailure(username, now)
+			// Prune stale buckets on the failure path too, so a spray across many
+			// distinct usernames cannot grow the map unbounded when no successful
+			// login ever occurs to trigger a prune.
+			throttle.cleanup(now)
 			w.WriteHeader(http.StatusUnauthorized)
 			render(w, r, "login.html", loginData{Title: "Sign in", Next: next, Error: "invalid username or password"})
 			return
@@ -169,15 +193,17 @@ func login(users *store.UserRepo, sessions *store.SessionRepo, forceSecure bool)
 			serverError(w, r, err)
 			return
 		}
-		now := nowRFC3339()
-		expires := time.Now().UTC().Add(sessionDuration).Format(time.RFC3339)
+		nowStr := now.Format(time.RFC3339)
+		expires := now.Add(sessionDuration).Format(time.RFC3339)
 		if _, err := sessions.Create(store.Session{
-			TokenHash: hashToken(token), UserID: u.ID, CreatedAt: now, ExpiresAt: expires,
+			TokenHash: hashToken(token), UserID: u.ID, CreatedAt: nowStr, ExpiresAt: expires,
 		}); err != nil {
 			serverError(w, r, err)
 			return
 		}
-		_ = sessions.DeleteExpired(now) // opportunistic prune
+		throttle.recordSuccess(username)
+		_ = sessions.DeleteExpired(nowStr) // opportunistic prune
+		throttle.cleanup(now)              // opportunistic prune of throttle state
 		setSessionCookie(w, r, token, forceSecure)
 		http.Redirect(w, r, next, http.StatusSeeOther)
 	}

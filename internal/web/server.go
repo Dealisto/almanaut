@@ -503,11 +503,12 @@ func New(cfg Config) http.Handler {
 	// Login routes: CSRF-protected but not session-gated (you cannot have a
 	// session yet). Only present when auth is enabled.
 	if cfg.AuthEnabled {
+		throttle := newLoginThrottle()
 		r.Group(func(r chi.Router) {
 			r.Use(limitBody)
 			r.Use(csrfProtect(cfg.SecureCookies))
 			r.Get("/login", loginForm)
-			r.Post("/login", login(users, sessions, cfg.SecureCookies))
+			r.Post("/login", login(users, sessions, throttle, cfg.SecureCookies))
 		})
 	}
 
