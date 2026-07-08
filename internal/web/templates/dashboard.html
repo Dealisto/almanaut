@@ -1,17 +1,24 @@
 {{define "content"}}
 <div class="page-header">
-  <div class="ph-titles"><h1>Dashboard</h1></div>
+  <div class="ph-titles">
+    <h1>Dashboard</h1>
+  </div>
 </div>
 
 <form class="home-search" method="get" action="/search" role="search">
   <input type="search" name="q" placeholder="Search hosts, services, IPs…" aria-label="Search">
 </form>
 
+<span class="section-eyebrow">Inventory</span>
+<div class="count-strip">
+  {{range .Counts}}<a class="count-chip" href="{{.URL}}">{{.Label}} <b>{{.Count}}</b></a>{{end}}
+</div>
+
 <section class="panel">
   <h2>Needs attention</h2>
   {{if .AnyAttention}}
     {{range .Groups}}{{if .Items}}
-    <div class="attn-group">
+    <div class="attn-group attn-{{.Severity}}">
       <p class="attn-title"><span class="sev sev-{{.Severity}}"></span>{{if .MoreURL}}<a href="{{.MoreURL}}">{{.Title}}</a>{{else}}{{.Title}}{{end}}<span class="attn-count">{{len .Items}}</span></p>
       <ul class="attn-list">{{range .Items}}<li><a href="{{.URL}}">{{.Label}}</a></li>{{end}}</ul>
     </div>
@@ -20,6 +27,15 @@
     <p class="healthy"><span class="sev sev-ok"></span>Everything looks healthy.</p>
   {{end}}
 </section>
+
+{{if .Services}}
+<section class="panel">
+  <h2>Services</h2>
+  <div class="svc-tiles">
+    {{range .Services}}{{$cat := .Category}}{{range .Services}}<a class="svc-tile" href="{{.Href}}"{{if .External}} target="_blank" rel="noopener noreferrer"{{end}}><span class="svc-name">{{.Name}}{{if .External}} <span class="svc-ext">↗</span>{{end}}</span><span class="svc-cat-tag">{{$cat}}</span></a>{{end}}{{end}}
+  </div>
+</section>
+{{end}}
 
 <section class="panel">
   <h2>Recent activity</h2>
@@ -35,21 +51,5 @@
   </ul>
   <p><a href="/history">All history →</a></p>
   {{else}}<p class="muted"><em>No activity yet.</em></p>{{end}}
-</section>
-
-{{if .Services}}
-<section class="panel">
-  <h2>Services</h2>
-  <div class="svc-tiles">
-    {{range .Services}}{{$cat := .Category}}{{range .Services}}<a class="svc-tile" href="{{.Href}}"{{if .External}} target="_blank" rel="noopener noreferrer"{{end}}><span class="svc-name">{{.Name}}{{if .External}} <span class="svc-ext">↗</span>{{end}}</span><span class="svc-cat-tag">{{$cat}}</span></a>{{end}}{{end}}
-  </div>
-</section>
-{{end}}
-
-<section class="panel">
-  <h2>Inventory</h2>
-  <div class="count-strip">
-    {{range .Counts}}<a class="count-chip" href="{{.URL}}">{{.Label}} <b>{{.Count}}</b></a>{{end}}
-  </div>
 </section>
 {{end}}
