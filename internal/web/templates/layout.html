@@ -13,50 +13,50 @@
     <a class="brand" href="/">Almanaut</a>
     <nav>
       <a href="/" class="nav-top {{if isActive "/"}}active{{end}}">Dashboard</a>
-      <div class="nav-group">
-        <span class="nav-label">Compute</span>
+      <details class="nav-group"{{if or (isActive "/") (isActive "/hosts") (isActive "/services") (isActive "/hardware") (isActive "/backups")}} open{{end}}>
+        <summary class="nav-label">Compute</summary>
         <a href="/hosts" class="{{if isActive "/hosts"}}active{{end}}">Hosts</a>
         <a href="/services" class="{{if isActive "/services"}}active{{end}}">Services</a>
         <a href="/hardware" class="{{if isActive "/hardware"}}active{{end}}">Hardware</a>
         <a href="/backups" class="{{if isActive "/backups"}}active{{end}}">Backups</a>
-      </div>
-      <div class="nav-group">
-        <span class="nav-label">Network</span>
+      </details>
+      <details class="nav-group"{{if or (isActive "/networks") (isActive "/vlans") (isActive "/reservations") (isActive "/domains") (isActive "/certificates")}} open{{end}}>
+        <summary class="nav-label">Network</summary>
         <a href="/networks" class="{{if isActive "/networks"}}active{{end}}">Networks</a>
         <a href="/vlans" class="{{if isActive "/vlans"}}active{{end}}">VLANs</a>
         <a href="/reservations" class="{{if isActive "/reservations"}}active{{end}}">Reservations</a>
         <a href="/domains" class="{{if isActive "/domains"}}active{{end}}">Domains</a>
         <a href="/certificates" class="{{if isActive "/certificates"}}active{{end}}">Certificates</a>
-      </div>
-      <div class="nav-group">
-        <span class="nav-label">Facilities</span>
+      </details>
+      <details class="nav-group"{{if or (isActive "/sites") (isActive "/locations") (isActive "/racks")}} open{{end}}>
+        <summary class="nav-label">Facilities</summary>
         <a href="/sites" class="{{if isActive "/sites"}}active{{end}}">Sites</a>
         <a href="/locations" class="{{if isActive "/locations"}}active{{end}}">Locations</a>
         <a href="/racks" class="{{if isActive "/racks"}}active{{end}}">Racks</a>
-      </div>
-      <div class="nav-group">
-        <span class="nav-label">Business</span>
+      </details>
+      <details class="nav-group"{{if or (isActive "/subscriptions") (isActive "/accounts") (isActive "/contacts")}} open{{end}}>
+        <summary class="nav-label">Business</summary>
         <a href="/subscriptions" class="{{if isActive "/subscriptions"}}active{{end}}">Subscriptions</a>
         <a href="/accounts" class="{{if isActive "/accounts"}}active{{end}}">Accounts</a>
         <a href="/contacts" class="{{if isActive "/contacts"}}active{{end}}">Contacts</a>
-      </div>
+      </details>
       <div class="nav-sep"></div>
-      <div class="nav-group nav-tools">
-        <span class="nav-label">Views</span>
+      <details class="nav-group nav-tools"{{if or (isActive "/relationships") (isActive "/impact") (isActive "/checks") (isActive "/tags") (isActive "/history")}} open{{end}}>
+        <summary class="nav-label">Views</summary>
         <a href="/relationships" class="{{if isActive "/relationships"}}active{{end}}">Relationships</a>
         <a href="/impact" class="{{if isActive "/impact"}}active{{end}}">Impact</a>
         <a href="/checks" class="{{if isActive "/checks"}}active{{end}}">Checks</a>
         <a href="/tags" class="{{if isActive "/tags"}}active{{end}}">Tags</a>
         <a href="/history" class="{{if isActive "/history"}}active{{end}}">History</a>
-      </div>
-      <div class="nav-group nav-tools">
-        <span class="nav-label">Admin</span>
+      </details>
+      <details class="nav-group nav-tools"{{if or (isActive "/custom-fields") (isActive "/discovery") (isActive "/data") (isActive "/users") (isActive "/account/tokens")}} open{{end}}>
+        <summary class="nav-label">Admin</summary>
         <a href="/custom-fields" class="{{if isActive "/custom-fields"}}active{{end}}">Custom fields</a>
         <a href="/discovery" class="{{if isActive "/discovery"}}active{{end}}">Discover</a>
         <a href="/data" class="{{if isActive "/data"}}active{{end}}">Data</a>
         <a href="/users" class="{{if isActive "/users"}}active{{end}}">Users</a>
         <a href="/account/tokens" class="{{if isActive "/account/tokens"}}active{{end}}">API tokens</a>
-      </div>
+      </details>
     </nav>
     <form class="theme-switch" method="post" action="/theme">
       {{ csrfField }}
