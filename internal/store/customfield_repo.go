@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 )
@@ -168,4 +169,66 @@ func (r *CustomFieldRepo) DeleteByEntity(entityType string, id int64) error {
 		return fmt.Errorf("delete custom field values for entity: %w", err)
 	}
 	return nil
+}
+
+// ValuesForEntities bulk-loads the set values for the given entity ids of one
+// type, joined to their definitions, keyed by entity id. Avoids the N+1 that a
+// per-entity ListForEntity loop would cause in search/list. Empty ids returns an
+// empty map without querying.
+func (r *CustomFieldRepo) ValuesForEntities(entityType string, ids []int64) (map[int64][]domain.CustomFieldValue, error) {
+	out := map[int64][]domain.CustomFieldValue{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, entityType)
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	rows, err := r.db.Query(
+		`SELECT v.entity_id, d.id, d.name, d.label, d.kind, v.value
+		 FROM custom_field_values v
+		 JOIN custom_field_definitions d ON d.id = v.def_id
+		 WHERE v.entity_type = ? AND v.entity_id IN (`+strings.Join(placeholders, ",")+`)
+		 ORDER BY v.entity_id, d.id`,
+		args...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("bulk query custom field values: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var entityID int64
+		var v domain.CustomFieldValue
+		var kind string
+		if err := rows.Scan(&entityID, &v.DefID, &v.Name, &v.Label, &kind, &v.Value); err != nil {
+			return nil, fmt.Errorf("scan custom field value: %w", err)
+		}
+		v.Kind = domain.CustomFieldKind(kind)
+		out[entityID] = append(out[entityID], v)
+	}
+	return out, rows.Err()
+}
+
+// ListAllValues returns every raw value row, ordered by id (for export).
+func (r *CustomFieldRepo) ListAllValues() ([]domain.CustomFieldValueRow, error) {
+	rows, err := r.db.Query(
+		`SELECT id, entity_type, entity_id, def_id, value
+		 FROM custom_field_values ORDER BY id`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query custom field value rows: %w", err)
+	}
+	defer rows.Close()
+	out := []domain.CustomFieldValueRow{}
+	for rows.Next() {
+		var r domain.CustomFieldValueRow
+		if err := rows.Scan(&r.ID, &r.EntityType, &r.EntityID, &r.DefID, &r.Value); err != nil {
+			return nil, fmt.Errorf("scan custom field value row: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
