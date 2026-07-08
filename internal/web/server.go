@@ -479,8 +479,9 @@ func New(cfg Config) http.Handler {
 	sessions := store.NewSessionRepo(db)
 	tokens := store.NewTokenRepo(db)
 	customFields := store.NewCustomFieldRepo(db)
+	attachments := store.NewAttachmentRepo(db)
 	cat := entityCatalog{resources: resources}
-	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, customFields: customFields, db: db}
+	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, customFields: customFields, attachments: attachments, db: db}
 	r := chi.NewRouter()
 	logger := cfg.Logger
 	if logger == nil {
@@ -559,6 +560,8 @@ func New(cfg Config) http.Handler {
 		r.Post("/relationships", createRelationship(relationships, cat))
 		r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
 		r.Post("/journal/{id}/delete", deleteJournal(cat, deps))
+		r.Get("/attachments/{id}", downloadAttachment(deps))
+		r.Post("/attachments/{id}/delete", deleteAttachment(cat, deps))
 		r.Get("/impact", impactView(relationships, cat))
 		r.Get("/history", history(cat, changelog))
 		r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))

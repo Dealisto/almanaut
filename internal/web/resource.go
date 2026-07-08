@@ -54,6 +54,7 @@ type handlerDeps struct {
 	changelog    *store.ChangelogRepo
 	journal      *store.JournalRepo
 	customFields *store.CustomFieldRepo
+	attachments  *store.AttachmentRepo
 	db           *sql.DB
 }
 
@@ -315,6 +316,9 @@ func (rs resource[T]) deleteEntity(d handlerDeps, id int64, actor string) error 
 		if err := d.customFields.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
 			return err
 		}
+		if err := d.attachments.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
+			return err
+		}
 		return d.changelog.WithTx(tx).Create(store.ChangeEvent{
 			EntityType: rs.sing, EntityID: id, Label: label,
 			Action: domain.ActionDelete, Actor: actor,
@@ -433,10 +437,21 @@ func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
 			serverError(w, req, err)
 			return
 		}
+		atts, err := d.attachments.ListForEntity(rs.sing, id)
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
+		attViews := make([]attachmentView, 0, len(atts))
+		for _, a := range atts {
+			attViews = append(attViews, attachmentView{
+				ID: a.ID, Filename: a.Filename, Size: humanizeBytes(a.Size), UploadedAt: a.UploadedAt,
+			})
+		}
 		renderDetailExtra(w, req, d.cat, d.tags, d.rels, d.journal, d.changelog, rs.sing, id,
 			rs.heading+": "+rs.label(item), rs.notes(item),
 			fmt.Sprintf("%s/%d/edit", rs.basePath(), id), rs.basePath(), rs.fields(item),
-			detailExtras{ipam: ipam, children: children, elevation: elevation, customFields: cfValues})
+			detailExtras{ipam: ipam, children: children, elevation: elevation, customFields: cfValues, attachments: attViews})
 	}
 }
 
@@ -464,6 +479,7 @@ func (rs resource[T]) mount(r chi.Router, d handlerDeps) {
 	r.Post(rs.basePath()+"/{id}", rs.update(d))
 	r.Post(rs.basePath()+"/{id}/delete", rs.del(d))
 	r.Post(rs.basePath()+"/{id}/journal", rs.addJournal(d))
+	r.Post(rs.basePath()+"/{id}/attachments", rs.addAttachment(d))
 }
 
 // listJSON writes all entities of this type as a JSON array, each merged with
