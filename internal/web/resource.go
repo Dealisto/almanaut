@@ -48,12 +48,13 @@ type formData[T any] struct {
 // handlerDeps bundles the cross-entity dependencies the show/delete handlers need,
 // replacing the long parameter lists on the old per-entity handlers.
 type handlerDeps struct {
-	cat       entityCatalog
-	tags      *store.TagRepo
-	rels      *store.RelationshipRepo
-	changelog *store.ChangelogRepo
-	journal   *store.JournalRepo
-	db        *sql.DB
+	cat          entityCatalog
+	tags         *store.TagRepo
+	rels         *store.RelationshipRepo
+	changelog    *store.ChangelogRepo
+	journal      *store.JournalRepo
+	customFields *store.CustomFieldRepo
+	db           *sql.DB
 }
 
 // resource describes one entity. Only the genuinely entity-specific behavior
@@ -162,22 +163,57 @@ func (rs resource[T]) list(w http.ResponseWriter, req *http.Request) {
 	render(w, req, rs.listTmpl, listData[T]{Title: rs.title, Items: items})
 }
 
-func (rs resource[T]) newForm(w http.ResponseWriter, req *http.Request) {
-	render(w, req, rs.formTmpl, formData[T]{
-		Title:       "New " + rs.sing,
-		Heading:     "New " + rs.sing,
-		Action:      rs.basePath(),
-		SubmitLabel: "Create",
-		Item:        rs.newItem,
-		Extras:      rs.extraData(),
-	})
+func (rs resource[T]) newForm(d handlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		rows, err := d.customFieldFormRows(rs.sing, 0, nil)
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
+		render(w, req, rs.formTmpl, formData[T]{
+			Title:       "New " + rs.sing,
+			Heading:     "New " + rs.sing,
+			Action:      rs.basePath(),
+			SubmitLabel: "Create",
+			Item:        rs.newItem,
+			Extras:      withCustomFields(rs.extraData(), rows),
+		})
+	}
 }
 
-// createEntityTx inserts item and records a create in the changelog on the given
-// transaction. item's id is expected to be zero; the new id is returned.
-func (rs resource[T]) createEntityTx(tx *sql.Tx, d handlerDeps, item T, actor string) (int64, error) {
+func (rs resource[T]) editForm(d handlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, ok := rs.idParam(w, req)
+		if !ok {
+			return
+		}
+		item, err := rs.repo.Get(id)
+		if err != nil {
+			notFoundOrServerError(w, req, rs.sing, err)
+			return
+		}
+		rows, err := d.customFieldFormRows(rs.sing, id, nil)
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
+		render(w, req, rs.formTmpl, formData[T]{
+			Title: "Edit " + rs.sing, Heading: "Edit " + rs.sing,
+			Action: fmt.Sprintf("%s/%d", rs.basePath(), id), SubmitLabel: "Save",
+			Item: item, Extras: withCustomFields(rs.extraData(), rows),
+		})
+	}
+}
+
+// createEntityTx inserts item, sets its custom field values, and records a
+// create in the changelog on the given transaction. item's id is expected to be
+// zero; the new id is returned. cf may be nil (no custom field values to set).
+func (rs resource[T]) createEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[int64]string, actor string) (int64, error) {
 	id, err := rs.repo.CreateTx(tx, item)
 	if err != nil {
+		return 0, err
+	}
+	if err := d.customFields.WithTx(tx).SetForEntity(rs.sing, id, cf); err != nil {
 		return 0, err
 	}
 	var zero T
@@ -193,23 +229,24 @@ func (rs resource[T]) createEntityTx(tx *sql.Tx, d handlerDeps, item T, actor st
 	return id, err
 }
 
-// createEntity inserts item and records a create in the changelog, atomically.
-// The caller supplies actor (username) so both the HTML and JSON paths attribute
-// correctly. item's id is expected to be zero; the new id is returned.
-func (rs resource[T]) createEntity(d handlerDeps, item T, actor string) (int64, error) {
+// createEntity inserts item, sets its custom field values, and records a create
+// in the changelog, atomically. cf may be nil.
+func (rs resource[T]) createEntity(d handlerDeps, item T, cf map[int64]string, actor string) (int64, error) {
 	var id int64
 	err := store.WithTx(d.db, func(tx *sql.Tx) error {
 		var err error
-		id, err = rs.createEntityTx(tx, d, item, actor)
+		id, err = rs.createEntityTx(tx, d, item, cf, actor)
 		return err
 	})
 	return id, err
 }
 
-// updateEntityTx overwrites the row identified by rs.id(item) and records the
-// diff in the changelog on the given transaction. A no-op edit (empty diff)
-// records nothing.
-func (rs resource[T]) updateEntityTx(tx *sql.Tx, d handlerDeps, item T, actor string) error {
+// updateEntityTx overwrites the row identified by rs.id(item), sets its custom
+// field values, and records the typed-field diff in the changelog on the given
+// transaction. Custom field values are always applied (even when the typed
+// fields are unchanged); a no-op typed diff records no changelog entry. cf may
+// be nil.
+func (rs resource[T]) updateEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[int64]string, actor string) error {
 	old, err := rs.repo.GetTx(tx, rs.id(item))
 	if err != nil {
 		return err
@@ -217,12 +254,15 @@ func (rs resource[T]) updateEntityTx(tx *sql.Tx, d handlerDeps, item T, actor st
 	if err := rs.repo.UpdateTx(tx, item); err != nil {
 		return err
 	}
+	if err := d.customFields.WithTx(tx).SetForEntity(rs.sing, rs.id(item), cf); err != nil {
+		return err
+	}
 	changes, err := domain.Diff(old, item)
 	if err != nil {
 		return err
 	}
 	if len(changes) == 0 {
-		return nil // no-op save: nothing worth logging
+		return nil // no-op typed save: nothing worth logging
 	}
 	return d.changelog.WithTx(tx).Create(store.ChangeEvent{
 		EntityType: rs.sing, EntityID: rs.id(item), Label: rs.label(item),
@@ -231,16 +271,16 @@ func (rs resource[T]) updateEntityTx(tx *sql.Tx, d handlerDeps, item T, actor st
 	})
 }
 
-// updateEntity overwrites the row identified by rs.id(item) and records the diff
-// in the changelog, atomically. A no-op edit (empty diff) records nothing.
-func (rs resource[T]) updateEntity(d handlerDeps, item T, actor string) error {
+// updateEntity overwrites the row identified by rs.id(item), sets its custom
+// field values, and records the typed-field diff, atomically. cf may be nil.
+func (rs resource[T]) updateEntity(d handlerDeps, item T, cf map[int64]string, actor string) error {
 	return store.WithTx(d.db, func(tx *sql.Tx) error {
-		return rs.updateEntityTx(tx, d, item, actor)
+		return rs.updateEntityTx(tx, d, item, cf, actor)
 	})
 }
 
-// deleteEntity removes the entity and its relationship/tag/journal edges and
-// records a delete in the changelog, atomically.
+// deleteEntity removes the entity and its relationship/tag/journal/custom-field
+// edges and records a delete in the changelog, atomically.
 func (rs resource[T]) deleteEntity(d handlerDeps, id int64, actor string) error {
 	return store.WithTx(d.db, func(tx *sql.Tx) error {
 		item, err := rs.repo.GetTx(tx, id)
@@ -260,6 +300,9 @@ func (rs resource[T]) deleteEntity(d handlerDeps, id int64, actor string) error 
 		if err := d.journal.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
 			return err
 		}
+		if err := d.customFields.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
+			return err
+		}
 		return d.changelog.WithTx(tx).Create(store.ChangeEvent{
 			EntityType: rs.sing, EntityID: id, Label: label,
 			Action: domain.ActionDelete, Actor: actor,
@@ -272,14 +315,15 @@ func (rs resource[T]) create(d handlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		item := rs.parse(req.FormValue, 0)
 		if err := item.Validate(); err != nil {
-			render(w, req, rs.formTmpl, formData[T]{
-				Title: "New " + rs.sing, Heading: "New " + rs.sing,
-				Action: rs.basePath(), SubmitLabel: "Create",
-				Item: item, Extras: rs.extraData(), Error: err.Error(),
-			})
+			rs.renderCreateError(w, req, d, item, err)
 			return
 		}
-		if _, err := rs.createEntity(d, item, actor(req)); err != nil {
+		cf, err := d.parseCustomFields(rs.sing, req.FormValue)
+		if err != nil {
+			rs.renderCreateError(w, req, d, item, err)
+			return
+		}
+		if _, err := rs.createEntity(d, item, cf, actor(req)); err != nil {
 			serverError(w, req, err)
 			return
 		}
@@ -287,20 +331,18 @@ func (rs resource[T]) create(d handlerDeps) http.HandlerFunc {
 	}
 }
 
-func (rs resource[T]) editForm(w http.ResponseWriter, req *http.Request) {
-	id, ok := rs.idParam(w, req)
-	if !ok {
-		return
-	}
-	item, err := rs.repo.Get(id)
+// renderCreateError re-renders the create form preserving submitted custom
+// field values.
+func (rs resource[T]) renderCreateError(w http.ResponseWriter, req *http.Request, d handlerDeps, item T, cause error) {
+	rows, err := d.customFieldFormRows(rs.sing, 0, req.FormValue)
 	if err != nil {
-		notFoundOrServerError(w, req, rs.sing, err)
+		serverError(w, req, err)
 		return
 	}
 	render(w, req, rs.formTmpl, formData[T]{
-		Title: "Edit " + rs.sing, Heading: "Edit " + rs.sing,
-		Action: fmt.Sprintf("%s/%d", rs.basePath(), id), SubmitLabel: "Save",
-		Item: item, Extras: rs.extraData(),
+		Title: "New " + rs.sing, Heading: "New " + rs.sing,
+		Action: rs.basePath(), SubmitLabel: "Create",
+		Item: item, Extras: withCustomFields(rs.extraData(), rows), Error: cause.Error(),
 	})
 }
 
@@ -312,19 +354,35 @@ func (rs resource[T]) update(d handlerDeps) http.HandlerFunc {
 		}
 		item := rs.parse(req.FormValue, id)
 		if err := item.Validate(); err != nil {
-			render(w, req, rs.formTmpl, formData[T]{
-				Title: "Edit " + rs.sing, Heading: "Edit " + rs.sing,
-				Action: fmt.Sprintf("%s/%d", rs.basePath(), id), SubmitLabel: "Save",
-				Item: item, Extras: rs.extraData(), Error: err.Error(),
-			})
+			rs.renderUpdateError(w, req, d, id, item, err)
 			return
 		}
-		if err := rs.updateEntity(d, item, actor(req)); err != nil {
+		cf, err := d.parseCustomFields(rs.sing, req.FormValue)
+		if err != nil {
+			rs.renderUpdateError(w, req, d, id, item, err)
+			return
+		}
+		if err := rs.updateEntity(d, item, cf, actor(req)); err != nil {
 			notFoundOrServerError(w, req, rs.sing, err)
 			return
 		}
 		http.Redirect(w, req, rs.basePath(), http.StatusSeeOther)
 	}
+}
+
+// renderUpdateError re-renders the edit form preserving submitted custom field
+// values.
+func (rs resource[T]) renderUpdateError(w http.ResponseWriter, req *http.Request, d handlerDeps, id int64, item T, cause error) {
+	rows, err := d.customFieldFormRows(rs.sing, id, req.FormValue)
+	if err != nil {
+		serverError(w, req, err)
+		return
+	}
+	render(w, req, rs.formTmpl, formData[T]{
+		Title: "Edit " + rs.sing, Heading: "Edit " + rs.sing,
+		Action: fmt.Sprintf("%s/%d", rs.basePath(), id), SubmitLabel: "Save",
+		Item: item, Extras: withCustomFields(rs.extraData(), rows), Error: cause.Error(),
+	})
 }
 
 func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
@@ -382,10 +440,10 @@ func (rs resource[T]) del(d handlerDeps) http.HandlerFunc {
 // mount wires all seven routes for this entity.
 func (rs resource[T]) mount(r chi.Router, d handlerDeps) {
 	r.Get(rs.basePath(), rs.list)
-	r.Get(rs.basePath()+"/new", rs.newForm)
+	r.Get(rs.basePath()+"/new", rs.newForm(d))
 	r.Post(rs.basePath(), rs.create(d))
 	r.Get(rs.basePath()+"/{id}", rs.show(d))
-	r.Get(rs.basePath()+"/{id}/edit", rs.editForm)
+	r.Get(rs.basePath()+"/{id}/edit", rs.editForm(d))
 	r.Post(rs.basePath()+"/{id}", rs.update(d))
 	r.Post(rs.basePath()+"/{id}/delete", rs.del(d))
 	r.Post(rs.basePath()+"/{id}/journal", rs.addJournal(d))
@@ -434,7 +492,7 @@ func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		id, err := rs.createEntity(d, item, actor(req))
+		id, err := rs.createEntity(d, item, nil, actor(req))
 		if err != nil {
 			apiServerError(w, req, err)
 			return
@@ -464,7 +522,7 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if err := rs.updateEntity(d, item, actor(req)); err != nil {
+		if err := rs.updateEntity(d, item, nil, actor(req)); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
 				return

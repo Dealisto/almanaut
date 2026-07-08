@@ -478,8 +478,9 @@ func New(cfg Config) http.Handler {
 	users := store.NewUserRepo(db)
 	sessions := store.NewSessionRepo(db)
 	tokens := store.NewTokenRepo(db)
+	customFields := store.NewCustomFieldRepo(db)
 	cat := entityCatalog{resources: resources}
-	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, db: db}
+	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, customFields: customFields, db: db}
 	r := chi.NewRouter()
 	logger := cfg.Logger
 	if logger == nil {

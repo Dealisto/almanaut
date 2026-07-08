@@ -108,13 +108,13 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 	err = store.WithTx(d.db, func(tx *sql.Tx) error {
 		for _, p := range plan {
 			if p.create {
-				if _, e := rs.createEntityTx(tx, d, p.item, actor); e != nil {
+				if _, e := rs.createEntityTx(tx, d, p.item, nil, actor); e != nil {
 					return e
 				}
 				created++
 				continue
 			}
-			if e := rs.updateEntityTx(tx, d, p.item, actor); e != nil {
+			if e := rs.updateEntityTx(tx, d, p.item, nil, actor); e != nil {
 				return e
 			}
 			updated++

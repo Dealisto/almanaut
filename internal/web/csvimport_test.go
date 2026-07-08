@@ -86,7 +86,7 @@ func TestImportCSVCreatesRows(t *testing.T) {
 
 func TestImportCSVUpdatesByID(t *testing.T) {
 	rs, deps := hostResourceForTest(t)
-	id, err := rs.createEntity(deps, domain.Host{Name: "old", Type: "physical"}, "seed")
+	id, err := rs.createEntity(deps, domain.Host{Name: "old", Type: "physical"}, nil, "seed")
 	if err != nil {
 		t.Fatal(err)
 	}
