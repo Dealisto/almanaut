@@ -558,11 +558,10 @@ func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
 			return
 		}
 		rs.setID(&item, id)
-		vals, err := d.customFields.ListForEntity(rs.sing, id)
-		if err != nil {
-			apiServerError(w, req, err)
-			return
-		}
+		// Reload for the response echo only; the create already committed, so a
+		// failure here must not turn a successful write into a 500 (and, for
+		// this POST, risk a client retry creating a duplicate row).
+		vals, _ := d.customFields.ListForEntity(rs.sing, id)
 		w.Header().Set("Location", fmt.Sprintf("/api%s/%d", rs.basePath(), id))
 		writeEntityJSON(w, http.StatusCreated, item, vals)
 	}
@@ -609,11 +608,9 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 			apiServerError(w, req, err)
 			return
 		}
-		vals, err := d.customFields.ListForEntity(rs.sing, id)
-		if err != nil {
-			apiServerError(w, req, err)
-			return
-		}
+		// Reload for the response echo only; the update already committed, so a
+		// failure here must not turn a successful write into a 500.
+		vals, _ := d.customFields.ListForEntity(rs.sing, id)
 		writeEntityJSON(w, http.StatusOK, item, vals)
 	}
 }
