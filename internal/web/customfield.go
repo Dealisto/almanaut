@@ -2,8 +2,12 @@ package web
 
 import (
 	"fmt"
+	"net/http"
+	"strconv"
 
 	"github.com/Dealisto/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/store"
+	"github.com/go-chi/chi/v5"
 )
 
 // customFieldFormRow is one custom field rendered on an entity form: its slug
@@ -76,4 +80,99 @@ func withCustomFields(base map[string]any, rows []customFieldFormRow) map[string
 	}
 	m["customFields"] = rows
 	return m
+}
+
+// customFieldsPageData is the view model for the /custom-fields admin page.
+type customFieldsPageData struct {
+	Title       string
+	Defs        []domain.CustomFieldDef
+	EntityTypes []string
+	Kinds       []domain.CustomFieldKind
+	Error       string
+}
+
+func customFieldsPage(repo *store.CustomFieldRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		defs, err := repo.ListAllDefs()
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
+		render(w, req, "custom_fields.html", customFieldsPageData{
+			Title: "Custom fields", Defs: defs,
+			EntityTypes: domain.EntityTypes, Kinds: domain.CustomFieldKinds,
+		})
+	}
+}
+
+func createCustomField(repo *store.CustomFieldRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		label := req.FormValue("label")
+		name := req.FormValue("name")
+		if name == "" {
+			name = domain.SlugifyCustomField(label)
+		} else {
+			name = domain.SlugifyCustomField(name)
+		}
+		def := domain.CustomFieldDef{
+			EntityType: req.FormValue("entity_type"),
+			Name:       name,
+			Label:      label,
+			Kind:       domain.CustomFieldKind(req.FormValue("kind")),
+			CreatedAt:  nowRFC3339(),
+		}
+		if err := def.Validate(); err != nil {
+			renderCustomFieldsError(w, req, repo, err)
+			return
+		}
+		if _, err := repo.CreateDef(def); err != nil {
+			// UNIQUE(entity_type, name) violation → treat as a user error.
+			renderCustomFieldsError(w, req, repo, fmt.Errorf("a field named %q already exists for %s", def.Name, def.EntityType))
+			return
+		}
+		http.Redirect(w, req, "/custom-fields", http.StatusSeeOther)
+	}
+}
+
+func renderCustomFieldsError(w http.ResponseWriter, req *http.Request, repo *store.CustomFieldRepo, cause error) {
+	defs, err := repo.ListAllDefs()
+	if err != nil {
+		serverError(w, req, err)
+		return
+	}
+	render(w, req, "custom_fields.html", customFieldsPageData{
+		Title: "Custom fields", Defs: defs,
+		EntityTypes: domain.EntityTypes, Kinds: domain.CustomFieldKinds,
+		Error: cause.Error(),
+	})
+}
+
+func deleteCustomField(repo *store.CustomFieldRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := repo.DeleteDef(id); err != nil {
+			serverError(w, req, err)
+			return
+		}
+		http.Redirect(w, req, "/custom-fields", http.StatusSeeOther)
+	}
+}
+
+func updateCustomFieldLabel(repo *store.CustomFieldRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		if err := repo.UpdateDefLabel(id, req.FormValue("label")); err != nil {
+			notFoundOrServerError(w, req, "custom field", err)
+			return
+		}
+		http.Redirect(w, req, "/custom-fields", http.StatusSeeOther)
+	}
 }

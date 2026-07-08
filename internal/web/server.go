@@ -550,6 +550,11 @@ func New(cfg Config) http.Handler {
 		r.Post("/tags/delete", removeTag(tags, cat))
 		r.Get("/tags", tagsOverview(tags, cat))
 
+		r.Get("/custom-fields", customFieldsPage(customFields))
+		r.Post("/custom-fields", createCustomField(customFields))
+		r.Post("/custom-fields/{id}", updateCustomFieldLabel(customFields))
+		r.Post("/custom-fields/{id}/delete", deleteCustomField(customFields))
+
 		r.Get("/relationships", listRelationships(relationships, cat))
 		r.Post("/relationships", createRelationship(relationships, cat))
 		r.Post("/relationships/{id}/delete", deleteRelationship(relationships))

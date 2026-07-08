@@ -1,0 +1,63 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Configuration</span>
+    <h1>Custom fields</h1>
+  </div>
+</div>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+
+<section class="panel">
+  <h2>Add a field</h2>
+  <form class="stack" method="post" action="/custom-fields">
+    {{ csrfField }}
+    <label>Label<input name="label" required></label>
+    <label>Name (slug, optional)<input name="name" placeholder="auto from label"></label>
+    <label>Entity type
+      <select name="entity_type">
+        {{range .EntityTypes}}<option value="{{.}}">{{.}}</option>{{end}}
+      </select>
+    </label>
+    <label>Kind
+      <select name="kind">
+        {{range .Kinds}}<option value="{{.}}">{{.}}</option>{{end}}
+      </select>
+    </label>
+    <div class="actions"><button class="btn btn-primary" type="submit">Add field</button></div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Defined fields</h2>
+  {{if .Defs}}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Entity</th><th>Label</th><th>Name</th><th>Kind</th><th></th></tr></thead>
+    <tbody>
+      {{range .Defs}}
+      <tr>
+        <td>{{.EntityType}}</td>
+        <td>
+          <form class="form-inline" method="post" action="/custom-fields/{{.ID}}">
+            {{ csrfField }}
+            <input name="label" value="{{.Label}}">
+            <button class="btn" type="submit">Save</button>
+          </form>
+        </td>
+        <td><code>{{.Name}}</code></td>
+        <td>{{.Kind}}</td>
+        <td>
+          <form class="form-inline" method="post" action="/custom-fields/{{.ID}}/delete"
+                onsubmit="return confirm('Delete this field and all its values?');">
+            {{ csrfField }}
+            <button class="btn btn-danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}<p class="muted"><em>No custom fields defined yet.</em></p>{{end}}
+</section>
+{{end}}
