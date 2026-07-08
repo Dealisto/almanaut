@@ -54,15 +54,18 @@ func TestCustomFieldsPageCRUD(t *testing.T) {
 	}
 
 	// 4. Create a host, set cf_asset_tag, and confirm it shows on the detail page.
+	// Creating an entity redirects to its list page (not the detail page), so we
+	// find the new host's detail link on the list and follow that.
 	hostRec := postForm(t, srv, "/hosts", url.Values{"name": {"nas"}, "type": {"physical"}, "cf_asset_tag": {"ABC-1"}})
 	if hostRec.Code != http.StatusSeeOther {
 		t.Fatalf("POST /hosts = %d, want 303, body: %s", hostRec.Code, hostRec.Body.String())
 	}
-	hostLoc := hostRec.Header().Get("Location")
-	if hostLoc == "" {
-		t.Fatalf("POST /hosts redirect has no Location header")
+	_, hostListBody := getBody("/hosts")
+	hostMatch := regexp.MustCompile(`/hosts/(\d+)`).FindStringSubmatch(hostListBody)
+	if hostMatch == nil {
+		t.Fatalf("could not find host detail link on the hosts list:\n%s", hostListBody)
 	}
-	_, detailBody := getBody(hostLoc)
+	_, detailBody := getBody("/hosts/" + hostMatch[1])
 	if !strings.Contains(detailBody, "Asset tag") {
 		t.Errorf("host detail body missing %q:\n%s", "Asset tag", detailBody)
 	}
