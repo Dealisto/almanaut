@@ -13,6 +13,7 @@
   <label>Expires on<input type="date" name="expires_on" value="{{.Item.ExpiresOn}}" required></label>
   <label><input type="checkbox" name="auto_renew" {{if .Item.AutoRenew}}checked{{end}}> Auto-renew</label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
     <a class="btn" href="/certificates">Cancel</a>

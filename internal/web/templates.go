@@ -24,7 +24,7 @@ var pages = func() map[string]*template.Template {
 					"theme":       func() string { return "system" },
 					"currentUser": func() string { return "" },
 				}).
-				ParseFS(templatesFS, "templates/layout.html", "templates/"+page),
+				ParseFS(templatesFS, "templates/layout.html", "templates/custom_fields_form.html", "templates/"+page),
 		)
 	}
 	// login.html is standalone (no app shell): it defines its own "layout".

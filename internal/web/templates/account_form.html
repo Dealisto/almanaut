@@ -17,6 +17,7 @@
   <label>URL<input name="url" value="{{.Item.URL}}" placeholder="https://…"></label>
   <label>Status<input name="status" value="{{.Item.Status}}" placeholder="active, disabled"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
     <a class="btn" href="/accounts">Cancel</a>

@@ -13,6 +13,7 @@
   <label>Frequency<input name="frequency" value="{{.Item.Frequency}}" placeholder="daily"></label>
   <label>Last run<input type="date" name="last_run" value="{{.Item.LastRun}}"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
     <a class="btn" href="/backups">Cancel</a>

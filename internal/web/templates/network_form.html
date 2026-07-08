@@ -18,6 +18,7 @@
   </label>
   <label>Gateway<input name="gateway" value="{{.Item.Gateway}}"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
     <a class="btn" href="/networks">Cancel</a>

@@ -1,0 +1,20 @@
+{{define "customFieldsForm"}}
+{{if .}}
+<fieldset class="custom-fields">
+  <legend>Custom fields</legend>
+  {{range .}}
+  <label>{{.Label}}
+    {{if eq .Kind "bool"}}
+      <input type="checkbox" name="cf_{{.Name}}"{{if eq .Value "true"}} checked{{end}}>
+    {{else if eq .Kind "date"}}
+      <input type="date" name="cf_{{.Name}}" value="{{.Value}}">
+    {{else if eq .Kind "number"}}
+      <input type="number" step="any" name="cf_{{.Name}}" value="{{.Value}}">
+    {{else}}
+      <input name="cf_{{.Name}}" value="{{.Value}}">
+    {{end}}
+  </label>
+  {{end}}
+</fieldset>
+{{end}}
+{{end}}
