@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -38,6 +39,61 @@ func (d handlerDeps) parseCustomFields(entityType string, get func(string) strin
 		out[def.ID] = canon
 	}
 	return out, nil
+}
+
+// parseJSONCustomFields resolves a decoded custom_fields object (name → raw JSON
+// value) against the definitions for entityType, validating each value, and
+// returns a map[defID]canonical-value for SetForEntity. Names with no matching
+// definition are ignored. A value that fails validation is an error.
+func (d handlerDeps) parseJSONCustomFields(entityType string, raw map[string]json.RawMessage) (map[int64]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	defs, err := d.customFields.ListDefs(entityType)
+	if err != nil {
+		return nil, err
+	}
+	byName := make(map[string]domain.CustomFieldDef, len(defs))
+	for _, def := range defs {
+		byName[def.Name] = def
+	}
+	out := map[int64]string{}
+	for name, rawVal := range raw {
+		def, ok := byName[name]
+		if !ok {
+			continue // unknown field name: ignore
+		}
+		var v any
+		if err := json.Unmarshal(rawVal, &v); err != nil {
+			return nil, fmt.Errorf("%s: invalid value", name)
+		}
+		canon, err := domain.ValidateCustomFieldValue(def.Kind, jsonValueToString(v))
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", def.Label, err)
+		}
+		out[def.ID] = canon
+	}
+	return out, nil
+}
+
+// jsonValueToString renders a decoded JSON scalar as the string form
+// ValidateCustomFieldValue expects (number→formatted, bool→true/false, else as-is).
+func jsonValueToString(v any) string {
+	switch x := v.(type) {
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	case bool:
+		if x {
+			return "true"
+		}
+		return "false"
+	case string:
+		return x
+	case nil:
+		return ""
+	default:
+		return fmt.Sprintf("%v", x)
+	}
 }
 
 // customFieldFormRows builds the form rows for entityType: one per definition.

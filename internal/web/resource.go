@@ -466,42 +466,85 @@ func (rs resource[T]) mount(r chi.Router, d handlerDeps) {
 	r.Post(rs.basePath()+"/{id}/journal", rs.addJournal(d))
 }
 
-// listJSON writes all entities of this type as a JSON array.
-func (rs resource[T]) listJSON(w http.ResponseWriter, req *http.Request) {
-	items, err := rs.repo.List()
-	if err != nil {
-		apiServerError(w, req, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-
-// getJSON writes one entity as JSON, 404 if absent, 400 on a malformed id.
-func (rs resource[T]) getJSON(w http.ResponseWriter, req *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid id")
-		return
-	}
-	item, err := rs.repo.Get(id)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
+// listJSON writes all entities of this type as a JSON array, each merged with
+// its custom_fields.
+func (rs resource[T]) listJSON(d handlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		items, err := rs.repo.List()
+		if err != nil {
+			apiServerError(w, req, err)
 			return
 		}
-		apiServerError(w, req, err)
-		return
+		ids := make([]int64, 0, len(items))
+		for _, it := range items {
+			ids = append(ids, rs.id(it))
+		}
+		cfValues, err := d.customFields.ValuesForEntities(rs.sing, ids)
+		if err != nil {
+			apiServerError(w, req, err)
+			return
+		}
+		out := make([]json.RawMessage, 0, len(items))
+		for _, it := range items {
+			buf, err := mergeCustomFields(it, cfValues[rs.id(it)])
+			if err != nil {
+				apiServerError(w, req, err)
+				return
+			}
+			out = append(out, buf)
+		}
+		writeJSON(w, http.StatusOK, out)
 	}
-	writeJSON(w, http.StatusOK, item)
+}
+
+// getJSON writes one entity as JSON merged with its custom_fields, 404 if
+// absent, 400 on a malformed id.
+func (rs resource[T]) getJSON(d handlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid id")
+			return
+		}
+		item, err := rs.repo.Get(id)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
+				return
+			}
+			apiServerError(w, req, err)
+			return
+		}
+		vals, err := d.customFields.ListForEntity(rs.sing, id)
+		if err != nil {
+			apiServerError(w, req, err)
+			return
+		}
+		writeEntityJSON(w, http.StatusOK, item, vals)
+	}
 }
 
 // createJSON decodes a JSON entity, validates it, and creates it. The client's
 // id (if any) is ignored. Returns 201 with the created entity and a Location.
 func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		var item T
-		if err := json.NewDecoder(req.Body).Decode(&item); err != nil {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		var item T
+		if err := json.Unmarshal(body, &item); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		var aux struct {
+			CustomFields map[string]json.RawMessage `json:"custom_fields"`
+		}
+		_ = json.Unmarshal(body, &aux) // custom_fields is optional
+		cf, err := d.parseJSONCustomFields(rs.sing, aux.CustomFields)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		rs.setID(&item, 0)
@@ -509,14 +552,19 @@ func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		id, err := rs.createEntity(d, item, nil, actor(req))
+		id, err := rs.createEntity(d, item, cf, actor(req))
 		if err != nil {
 			apiServerError(w, req, err)
 			return
 		}
 		rs.setID(&item, id)
+		vals, err := d.customFields.ListForEntity(rs.sing, id)
+		if err != nil {
+			apiServerError(w, req, err)
+			return
+		}
 		w.Header().Set("Location", fmt.Sprintf("/api%s/%d", rs.basePath(), id))
-		writeJSON(w, http.StatusCreated, item)
+		writeEntityJSON(w, http.StatusCreated, item, vals)
 	}
 }
 
@@ -529,9 +577,23 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 			writeJSONError(w, http.StatusBadRequest, "invalid id")
 			return
 		}
-		var item T
-		if err := json.NewDecoder(req.Body).Decode(&item); err != nil {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		var item T
+		if err := json.Unmarshal(body, &item); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		var aux struct {
+			CustomFields map[string]json.RawMessage `json:"custom_fields"`
+		}
+		_ = json.Unmarshal(body, &aux) // custom_fields is optional
+		cf, err := d.parseJSONCustomFields(rs.sing, aux.CustomFields)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		rs.setID(&item, id)
@@ -539,7 +601,7 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if err := rs.updateEntity(d, item, nil, actor(req)); err != nil {
+		if err := rs.updateEntity(d, item, cf, actor(req)); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
 				return
@@ -547,7 +609,12 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 			apiServerError(w, req, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, item)
+		vals, err := d.customFields.ListForEntity(rs.sing, id)
+		if err != nil {
+			apiServerError(w, req, err)
+			return
+		}
+		writeEntityJSON(w, http.StatusOK, item, vals)
 	}
 }
 
@@ -574,9 +641,9 @@ func (rs resource[T]) deleteJSON(d handlerDeps) http.HandlerFunc {
 // mountAPI registers this resource's JSON routes (read + write).
 func (rs resource[T]) mountAPI(r chi.Router, d handlerDeps) {
 	base := "/api" + rs.basePath()
-	r.Get(base, rs.listJSON)
+	r.Get(base, rs.listJSON(d))
 	r.Post(base, rs.createJSON(d))
-	r.Get(base+"/{id}", rs.getJSON)
+	r.Get(base+"/{id}", rs.getJSON(d))
 	r.Put(base+"/{id}", rs.updateJSON(d))
 	r.Delete(base+"/{id}", rs.deleteJSON(d))
 }
