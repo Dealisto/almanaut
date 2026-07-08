@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -85,5 +86,69 @@ func TestCustomFieldsPageCRUD(t *testing.T) {
 	_, body = getBody("/custom-fields")
 	if strings.Contains(body, "Asset tag") {
 		t.Errorf("GET /custom-fields body still contains %q after delete:\n%s", "Asset tag", body)
+	}
+}
+
+// TestCustomFieldSearch verifies a custom field VALUE is matched by global search.
+func TestCustomFieldSearch(t *testing.T) {
+	srv := newTestServer(t)
+	// define a host field and create a host carrying a distinctive value
+	if rec := postForm(t, srv, "/custom-fields", url.Values{
+		"entity_type": {"host"}, "label": {"Asset tag"}, "kind": {"text"},
+	}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("create def = %d", rec.Code)
+	}
+	if rec := postForm(t, srv, "/hosts", url.Values{
+		"name": {"nas"}, "type": {"physical"}, "cf_asset_tag": {"ZZZ-9000"},
+	}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("create host = %d", rec.Code)
+	}
+	// web search page finds the host by its custom field value
+	req := httptest.NewRequest(http.MethodGet, "/search?q=ZZZ-9000", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if body := rec.Body.String(); !strings.Contains(body, "nas") {
+		t.Errorf("search body missing host 'nas' matched by cf value:\n%s", body)
+	}
+	// /api/search finds it too
+	req = httptest.NewRequest(http.MethodGet, "/api/search?q=ZZZ-9000", nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if body := rec.Body.String(); !strings.Contains(body, `"nas"`) {
+		t.Errorf("api search body missing host matched by cf value:\n%s", body)
+	}
+}
+
+// TestCustomFieldJSONAPI verifies GET includes custom_fields and POST/PUT set them.
+func TestCustomFieldJSONAPI(t *testing.T) {
+	srv := newTestServer(t)
+	if rec := postForm(t, srv, "/custom-fields", url.Values{
+		"entity_type": {"host"}, "label": {"Asset tag"}, "kind": {"text"},
+	}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("create def = %d", rec.Code)
+	}
+	// POST a host with custom_fields via JSON
+	body := `{"name":"nas","type":"physical","custom_fields":{"asset_tag":"ABC-1"}}`
+	req := httptest.NewRequest(http.MethodPost, "/api/hosts", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST /api/hosts = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	loc := rec.Header().Get("Location") // /api/hosts/{id}
+	if loc == "" {
+		t.Fatalf("no Location header")
+	}
+	// GET it back and confirm custom_fields is present with the value
+	req = httptest.NewRequest(http.MethodGet, loc, nil)
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	var got map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode GET: %v (%s)", err, rec.Body.String())
+	}
+	cf, ok := got["custom_fields"].(map[string]any)
+	if !ok || cf["asset_tag"] != "ABC-1" {
+		t.Fatalf("custom_fields missing/wrong: %v", got["custom_fields"])
 	}
 }

@@ -407,3 +407,57 @@ func TestExportImportRoundTripsReservations(t *testing.T) {
 		t.Fatalf("reservation not restored: %+v", got)
 	}
 }
+
+func TestExportImportRoundTripsCustomFields(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "src.db")
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+	if err := Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	// a host to attach a value to, a definition, and a value
+	if _, err := NewHostRepo(db).Create(domain.Host{Name: "nas", Type: "physical"}); err != nil {
+		t.Fatalf("create host: %v", err)
+	}
+	cf := NewCustomFieldRepo(db)
+	defID, err := cf.CreateDef(domain.CustomFieldDef{EntityType: "host", Name: "asset_tag", Label: "Asset tag", Kind: domain.KindText, CreatedAt: "2026-07-08T00:00:00Z"})
+	if err != nil {
+		t.Fatalf("CreateDef: %v", err)
+	}
+	if err := cf.SetForEntity("host", 1, map[int64]string{defID: "ABC-1"}); err != nil {
+		t.Fatalf("SetForEntity: %v", err)
+	}
+
+	snap, err := Export(db)
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if len(snap.CustomFieldDefs) != 1 || len(snap.CustomFieldValues) != 1 {
+		t.Fatalf("snapshot missing cf: defs=%d values=%d", len(snap.CustomFieldDefs), len(snap.CustomFieldValues))
+	}
+
+	// import into a fresh db and read back
+	dstPath := filepath.Join(t.TempDir(), "dst.db")
+	dst, err := Open(dstPath)
+	if err != nil {
+		t.Fatalf("Open dst: %v", err)
+	}
+	defer dst.Close()
+	if err := Migrate(dst, dstPath); err != nil {
+		t.Fatalf("Migrate dst: %v", err)
+	}
+	if err := Import(dst, snap); err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	defs, _ := NewCustomFieldRepo(dst).ListDefs("host")
+	if len(defs) != 1 || defs[0].Name != "asset_tag" {
+		t.Fatalf("defs not restored: %+v", defs)
+	}
+	vals, _ := NewCustomFieldRepo(dst).ListForEntity("host", 1)
+	if len(vals) != 1 || vals[0].Value != "ABC-1" {
+		t.Fatalf("values not restored: %+v", vals)
+	}
+}

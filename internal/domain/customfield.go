@@ -120,3 +120,28 @@ func ValidateCustomFieldValue(kind CustomFieldKind, raw string) (string, error) 
 		return "", fmt.Errorf("invalid kind %q", kind)
 	}
 }
+
+// CustomFieldValueRow is one raw custom_field_values row with full addressing,
+// used for portability (export/import). CustomFieldValue is the denormalised
+// form used for rendering; this is the storage form.
+type CustomFieldValueRow struct {
+	ID         int64  `yaml:"id"`
+	EntityType string `yaml:"entity_type"`
+	EntityID   int64  `yaml:"entity_id"`
+	DefID      int64  `yaml:"def_id"`
+	Value      string `yaml:"value"`
+}
+
+// Validate checks the entity reference and definition id.
+func (r CustomFieldValueRow) Validate() error {
+	if !contains(EntityTypes, r.EntityType) {
+		return fmt.Errorf("invalid entity type %q", r.EntityType)
+	}
+	if r.EntityID <= 0 {
+		return fmt.Errorf("entity id is required")
+	}
+	if r.DefID <= 0 {
+		return fmt.Errorf("def id is required")
+	}
+	return nil
+}

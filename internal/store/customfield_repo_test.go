@@ -107,3 +107,47 @@ func TestCustomFieldDeleteDefCascadesValues(t *testing.T) {
 		t.Fatalf("values not cascaded: %+v", vals)
 	}
 }
+
+func TestCustomFieldValuesForEntities(t *testing.T) {
+	repo := newCustomFieldRepo(t)
+	tagID, _ := repo.CreateDef(domain.CustomFieldDef{EntityType: "host", Name: "asset_tag", Label: "Asset tag", Kind: domain.KindText, CreatedAt: "t"})
+	wattID, _ := repo.CreateDef(domain.CustomFieldDef{EntityType: "host", Name: "watts", Label: "Watts", Kind: domain.KindNumber, CreatedAt: "t"})
+	if err := repo.SetForEntity("host", 1, map[int64]string{tagID: "ABC-1", wattID: "42"}); err != nil {
+		t.Fatalf("Set 1: %v", err)
+	}
+	if err := repo.SetForEntity("host", 2, map[int64]string{tagID: "XYZ-9"}); err != nil {
+		t.Fatalf("Set 2: %v", err)
+	}
+	got, err := repo.ValuesForEntities("host", []int64{1, 2, 3})
+	if err != nil {
+		t.Fatalf("ValuesForEntities: %v", err)
+	}
+	if len(got[1]) != 2 || len(got[2]) != 1 {
+		t.Fatalf("bulk load wrong: %+v", got)
+	}
+	if _, ok := got[3]; ok {
+		t.Errorf("entity 3 has no values but appeared in map")
+	}
+	// empty ids → empty map, no error
+	empty, err := repo.ValuesForEntities("host", nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("empty ids: %+v, %v", empty, err)
+	}
+}
+
+func TestCustomFieldListAllValues(t *testing.T) {
+	repo := newCustomFieldRepo(t)
+	id, _ := repo.CreateDef(domain.CustomFieldDef{EntityType: "host", Name: "asset_tag", Label: "Asset tag", Kind: domain.KindText, CreatedAt: "t"})
+	_ = repo.SetForEntity("host", 1, map[int64]string{id: "ABC-1"})
+	rows, err := repo.ListAllValues()
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("ListAllValues: %+v, %v", rows, err)
+	}
+	r := rows[0]
+	if r.EntityType != "host" || r.EntityID != 1 || r.DefID != id || r.Value != "ABC-1" {
+		t.Fatalf("row wrong: %+v", r)
+	}
+	if err := r.Validate(); err != nil {
+		t.Errorf("valid row rejected: %v", err)
+	}
+}

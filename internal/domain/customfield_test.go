@@ -61,3 +61,20 @@ func TestValidateCustomFieldValue(t *testing.T) {
 		t.Fatalf("bad date should fail")
 	}
 }
+
+func TestCustomFieldValueRowValidate(t *testing.T) {
+	ok := CustomFieldValueRow{EntityType: "host", EntityID: 1, DefID: 1, Value: "x"}
+	if err := ok.Validate(); err != nil {
+		t.Fatalf("valid row rejected: %v", err)
+	}
+	bad := []CustomFieldValueRow{
+		{EntityType: "nope", EntityID: 1, DefID: 1},
+		{EntityType: "host", EntityID: 0, DefID: 1},
+		{EntityType: "host", EntityID: 1, DefID: 0},
+	}
+	for i, r := range bad {
+		if err := r.Validate(); err == nil {
+			t.Errorf("bad row %d accepted", i)
+		}
+	}
+}

@@ -110,9 +110,18 @@ func (rs resource[T]) basePath() string { return "/" + rs.name }
 func (rs resource[T]) searchHeading() string { return rs.title }
 
 // searchEntries projects every entity into the form the global search handler
-// needs: its label, detail-page path, and the free-text fields to match against.
-func (rs resource[T]) searchEntries() ([]searchEntry, error) {
+// needs. Custom field values are folded into Fields (bulk-loaded to avoid N+1)
+// so search matches them too.
+func (rs resource[T]) searchEntries(cf *store.CustomFieldRepo) ([]searchEntry, error) {
 	items, err := rs.repo.List()
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int64, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, rs.id(it))
+	}
+	cfValues, err := cf.ValuesForEntities(rs.sing, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -122,6 +131,9 @@ func (rs resource[T]) searchEntries() ([]searchEntry, error) {
 		var fields []string
 		if rs.search != nil {
 			fields = rs.search(it)
+		}
+		for _, v := range cfValues[id] {
+			fields = append(fields, v.Value)
 		}
 		out = append(out, searchEntry{
 			Type:   rs.sing,
@@ -454,80 +466,48 @@ func (rs resource[T]) mount(r chi.Router, d handlerDeps) {
 	r.Post(rs.basePath()+"/{id}/journal", rs.addJournal(d))
 }
 
-// listJSON writes all entities of this type as a JSON array.
-func (rs resource[T]) listJSON(w http.ResponseWriter, req *http.Request) {
-	items, err := rs.repo.List()
-	if err != nil {
-		apiServerError(w, req, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, items)
-}
-
-// getJSON writes one entity as JSON, 404 if absent, 400 on a malformed id.
-func (rs resource[T]) getJSON(w http.ResponseWriter, req *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid id")
-		return
-	}
-	item, err := rs.repo.Get(id)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
-			return
-		}
-		apiServerError(w, req, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, item)
-}
-
-// createJSON decodes a JSON entity, validates it, and creates it. The client's
-// id (if any) is ignored. Returns 201 with the created entity and a Location.
-func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
+// listJSON writes all entities of this type as a JSON array, each merged with
+// its custom_fields.
+func (rs resource[T]) listJSON(d handlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		var item T
-		if err := json.NewDecoder(req.Body).Decode(&item); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
-			return
-		}
-		rs.setID(&item, 0)
-		if err := item.Validate(); err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		id, err := rs.createEntity(d, item, nil, actor(req))
+		items, err := rs.repo.List()
 		if err != nil {
 			apiServerError(w, req, err)
 			return
 		}
-		rs.setID(&item, id)
-		w.Header().Set("Location", fmt.Sprintf("/api%s/%d", rs.basePath(), id))
-		writeJSON(w, http.StatusCreated, item)
+		ids := make([]int64, 0, len(items))
+		for _, it := range items {
+			ids = append(ids, rs.id(it))
+		}
+		cfValues, err := d.customFields.ValuesForEntities(rs.sing, ids)
+		if err != nil {
+			apiServerError(w, req, err)
+			return
+		}
+		out := make([]json.RawMessage, 0, len(items))
+		for _, it := range items {
+			buf, err := mergeCustomFields(it, cfValues[rs.id(it)])
+			if err != nil {
+				apiServerError(w, req, err)
+				return
+			}
+			out = append(out, buf)
+		}
+		writeJSON(w, http.StatusOK, out)
 	}
 }
 
-// updateJSON decodes a JSON entity and full-replaces the row at {id}. The URL id
-// is authoritative (any id in the body is overwritten). 404 if the row is absent.
-func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
+// getJSON writes one entity as JSON merged with its custom_fields, 404 if
+// absent, 400 on a malformed id.
+func (rs resource[T]) getJSON(d handlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid id")
 			return
 		}
-		var item T
-		if err := json.NewDecoder(req.Body).Decode(&item); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
-			return
-		}
-		rs.setID(&item, id)
-		if err := item.Validate(); err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if err := rs.updateEntity(d, item, nil, actor(req)); err != nil {
+		item, err := rs.repo.Get(id)
+		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
 				return
@@ -535,7 +515,104 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 			apiServerError(w, req, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, item)
+		vals, err := d.customFields.ListForEntity(rs.sing, id)
+		if err != nil {
+			apiServerError(w, req, err)
+			return
+		}
+		writeEntityJSON(w, http.StatusOK, item, vals)
+	}
+}
+
+// createJSON decodes a JSON entity, validates it, and creates it. The client's
+// id (if any) is ignored. Returns 201 with the created entity and a Location.
+func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		var item T
+		if err := json.Unmarshal(body, &item); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		var aux struct {
+			CustomFields map[string]json.RawMessage `json:"custom_fields"`
+		}
+		_ = json.Unmarshal(body, &aux) // custom_fields is optional
+		cf, err := d.parseJSONCustomFields(rs.sing, aux.CustomFields)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		rs.setID(&item, 0)
+		if err := item.Validate(); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		id, err := rs.createEntity(d, item, cf, actor(req))
+		if err != nil {
+			apiServerError(w, req, err)
+			return
+		}
+		rs.setID(&item, id)
+		// Reload for the response echo only; the create already committed, so a
+		// failure here must not turn a successful write into a 500 (and, for
+		// this POST, risk a client retry creating a duplicate row).
+		vals, _ := d.customFields.ListForEntity(rs.sing, id)
+		w.Header().Set("Location", fmt.Sprintf("/api%s/%d", rs.basePath(), id))
+		writeEntityJSON(w, http.StatusCreated, item, vals)
+	}
+}
+
+// updateJSON decodes a JSON entity and full-replaces the row at {id}. The URL id
+// is authoritative (any id in the body is overwritten). 404 if the row is absent.
+// Custom fields are only modified when a custom_fields object is present in the body; an omitted or empty custom_fields leaves existing values unchanged.
+func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid id")
+			return
+		}
+		body, err := io.ReadAll(req.Body)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		var item T
+		if err := json.Unmarshal(body, &item); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		var aux struct {
+			CustomFields map[string]json.RawMessage `json:"custom_fields"`
+		}
+		_ = json.Unmarshal(body, &aux) // custom_fields is optional
+		cf, err := d.parseJSONCustomFields(rs.sing, aux.CustomFields)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		rs.setID(&item, id)
+		if err := item.Validate(); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := rs.updateEntity(d, item, cf, actor(req)); err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
+				return
+			}
+			apiServerError(w, req, err)
+			return
+		}
+		// Reload for the response echo only; the update already committed, so a
+		// failure here must not turn a successful write into a 500.
+		vals, _ := d.customFields.ListForEntity(rs.sing, id)
+		writeEntityJSON(w, http.StatusOK, item, vals)
 	}
 }
 
@@ -562,9 +639,9 @@ func (rs resource[T]) deleteJSON(d handlerDeps) http.HandlerFunc {
 // mountAPI registers this resource's JSON routes (read + write).
 func (rs resource[T]) mountAPI(r chi.Router, d handlerDeps) {
 	base := "/api" + rs.basePath()
-	r.Get(base, rs.listJSON)
+	r.Get(base, rs.listJSON(d))
 	r.Post(base, rs.createJSON(d))
-	r.Get(base+"/{id}", rs.getJSON)
+	r.Get(base+"/{id}", rs.getJSON(d))
 	r.Put(base+"/{id}", rs.updateJSON(d))
 	r.Delete(base+"/{id}", rs.deleteJSON(d))
 }
@@ -577,7 +654,7 @@ type mountable interface {
 	singular() string
 	basePath() string
 	searchHeading() string
-	searchEntries() ([]searchEntry, error)
+	searchEntries(cf *store.CustomFieldRepo) ([]searchEntry, error)
 	importCSV(d handlerDeps, r io.Reader, actor string) (int, int, []string, error)
 }
 

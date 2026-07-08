@@ -562,7 +562,7 @@ func New(cfg Config) http.Handler {
 		r.Get("/impact", impactView(relationships, cat))
 		r.Get("/history", history(cat, changelog))
 		r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
-		r.Get("/search", searchEntities(cat, tags))
+		r.Get("/search", searchEntities(cat, tags, customFields))
 		r.Get("/data", showData(cat))
 		r.Post("/theme", setTheme(cfg.SecureCookies))
 		r.Get("/export", exportData(db))
@@ -590,7 +590,7 @@ func New(cfg Config) http.Handler {
 		for _, rs := range resources {
 			rs.mountAPI(r, deps)
 		}
-		r.Get("/api/search", apiSearch(cat))
+		r.Get("/api/search", apiSearch(cat, customFields))
 		r.Get("/api/relationships", apiRelationships(relationships))
 		// /metrics is a GET: reachable with a bearer API token (Prometheus) or a
 		// session cookie (logged-in browser). Not under CSRF; no creds → 401.
