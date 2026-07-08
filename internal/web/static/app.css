@@ -75,10 +75,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 .sidebar .brand::before{content:"◆";width:26px;height:26px;border-radius:7px;flex:none;
   background:linear-gradient(145deg,var(--accent),var(--accent-2));color:#fff;
   display:grid;place-items:center;font-size:.85rem;box-shadow:0 2px 8px var(--active-bg)}
-.nav-group{margin-bottom:16px}
-.nav-label{display:block;padding:4px 10px;font-family:var(--mono);font-size:.64rem;
+.nav-group{margin-bottom:12px}
+.nav-label{display:block;padding:6px 10px 3px;font-family:var(--mono);font-size:.62rem;
   text-transform:uppercase;letter-spacing:.12em;color:var(--faint)}
-.sidebar nav a{display:block;padding:6px 10px;border-radius:8px;color:var(--text);
+.sidebar nav a{display:block;padding:5px 10px;border-radius:8px;color:var(--text);
   border-left:2px solid transparent;font-size:.9rem;transition:background .12s,color .12s}
 .sidebar nav a:hover{background:var(--active-bg);text-decoration:none}
 .sidebar nav a.active{background:var(--active-bg);border-left-color:var(--accent);
