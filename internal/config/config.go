@@ -28,6 +28,10 @@ type Config struct {
 	NtfyToken        string        // ALMANAUT_NTFY_TOKEN — optional bearer for a protected topic
 	NotifyWithinDays int           // ALMANAUT_NOTIFY_WITHIN_DAYS — "expiring soon" window
 	NotifyInterval   time.Duration // ALMANAUT_NOTIFY_INTERVAL — how often the scheduler checks
+
+	WebhooksEnabled    bool          // ALMANAUT_WEBHOOKS_ENABLED — master switch for outbound webhooks
+	WebhookTimeout     time.Duration // ALMANAUT_WEBHOOK_TIMEOUT — per-delivery HTTP timeout
+	WebhookMaxAttempts int           // ALMANAUT_WEBHOOK_MAX_ATTEMPTS — delivery attempts before giving up
 }
 
 // Load reads configuration from the environment, falling back to defaults. It
@@ -63,6 +67,9 @@ func Load() (Config, error) {
 		NtfyToken:          ntfyToken,
 		NotifyWithinDays:   getenvInt("ALMANAUT_NOTIFY_WITHIN_DAYS", 30),
 		NotifyInterval:     getenvDuration("ALMANAUT_NOTIFY_INTERVAL", 24*time.Hour),
+		WebhooksEnabled:    getenvBool("ALMANAUT_WEBHOOKS_ENABLED", false),
+		WebhookTimeout:     getenvDuration("ALMANAUT_WEBHOOK_TIMEOUT", 10*time.Second),
+		WebhookMaxAttempts: getenvInt("ALMANAUT_WEBHOOK_MAX_ATTEMPTS", 5),
 	}, nil
 }
 

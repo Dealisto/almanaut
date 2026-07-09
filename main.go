@@ -19,6 +19,7 @@ import (
 	"github.com/Dealisto/almanaut/internal/notify"
 	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/Dealisto/almanaut/internal/web"
+	"github.com/Dealisto/almanaut/internal/webhook"
 )
 
 // version is the build version, overridden at link time with
@@ -58,6 +59,15 @@ func main() {
 		log.Fatalf("bootstrap admin: %v", err)
 	}
 
+	var dispatcher webhook.Dispatcher = webhook.Noop{}
+	if cfg.WebhooksEnabled {
+		dispatcher = webhook.NewQueue(store.NewWebhookRepo(db), webhook.Options{
+			Timeout:     cfg.WebhookTimeout,
+			MaxAttempts: cfg.WebhookMaxAttempts,
+		})
+		log.Println("outbound webhooks enabled")
+	}
+
 	handler := web.New(web.Config{
 		Hosts:         store.NewHostRepo(db),
 		Services:      store.NewServiceRepo(db),
@@ -85,6 +95,7 @@ func main() {
 		AuthEnabled:   true,
 		SecureCookies: cfg.SecureCookies,
 		Version:       version,
+		Webhooks:      dispatcher,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
