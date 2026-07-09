@@ -266,9 +266,10 @@ func apiAuth(tokens *store.TokenRepo, sessions *store.SessionRepo) func(http.Han
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if raw, ok := bearerToken(r); ok {
-				u, err := tokens.UserByToken(hashToken(raw))
+				u, scope, err := tokens.UserByToken(hashToken(raw))
 				if err == nil {
-					next.ServeHTTP(w, r.WithContext(withUser(r.Context(), u)))
+					ctx := withTokenScope(withUser(r.Context(), u), domain.Scope(scope))
+					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
 				if !errors.Is(err, store.ErrNotFound) {
