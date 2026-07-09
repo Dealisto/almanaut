@@ -101,3 +101,31 @@ func TestQueueRetriesThenGivesUp(t *testing.T) {
 		t.Fatalf("attempts = %d, want 3", n)
 	}
 }
+
+func TestQueueOneFailingEndpointDoesNotBlockSibling(t *testing.T) {
+	okSrv, okGot, okMu := recordingServer(t, http.StatusOK)
+	var failHits int32
+	failSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&failHits, 1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(failSrv.Close)
+
+	q := testQueue(fakeLister{hooks: []domain.Webhook{
+		{URL: failSrv.URL, Secret: "s", Enabled: true},
+		{URL: okSrv.URL, Secret: "s", Enabled: true},
+	}}, Options{Workers: 1, MaxAttempts: 3, BaseDelay: time.Millisecond})
+
+	e, _ := NewEvent("host", 1, ActionCreated, "a", "t", map[string]string{})
+	q.Dispatch(e)
+	q.Wait()
+
+	okMu.Lock()
+	defer okMu.Unlock()
+	if len(*okGot) != 1 {
+		t.Fatalf("healthy endpoint got %d deliveries, want 1", len(*okGot))
+	}
+	if n := atomic.LoadInt32(&failHits); n != 3 {
+		t.Fatalf("failing endpoint attempts = %d, want 3", n)
+	}
+}

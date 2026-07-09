@@ -121,11 +121,18 @@ func (q *Queue) process(e Event) {
 		q.log.Printf("webhook: list endpoints: %v", err)
 		return
 	}
+	var wg sync.WaitGroup
 	for _, ep := range endpoints {
-		if ep.Matches(e.Type, e.Action) {
-			q.deliver(ep, e)
+		if !ep.Matches(e.Type, e.Action) {
+			continue
 		}
+		wg.Add(1)
+		go func(ep domain.Webhook) {
+			defer wg.Done()
+			q.deliver(ep, e)
+		}(ep)
 	}
+	wg.Wait()
 }
 
 func (q *Queue) deliver(ep domain.Webhook, e Event) {
