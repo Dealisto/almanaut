@@ -55,6 +55,7 @@
         {{if canWrite}}<a href="/discovery" class="{{if isActive "/discovery"}}active{{end}}">Discover</a>{{end}}
         <a href="/data" class="{{if isActive "/data"}}active{{end}}">Data</a>
         {{if isAdmin}}<a href="/users" class="{{if isActive "/users"}}active{{end}}">Users</a>{{end}}
+        {{if isAdmin}}<a href="/webhooks" class="{{if isActive "/webhooks"}}active{{end}}">Webhooks</a>{{end}}
         <a href="/account/tokens" class="{{if isActive "/account/tokens"}}active{{end}}">API tokens</a>
       </details>
     </nav>

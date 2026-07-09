@@ -1,0 +1,16 @@
+{{/* internal/web/templates/webhook_form_fields.html */}}
+{{define "webhook_form_fields"}}
+<label>Payload URL<input name="url" type="url" placeholder="https://receiver.example/hook" value="{{.URL}}" required></label>
+<fieldset class="check-group">
+  <legend>Events <span class="muted">(none = all)</span></legend>
+  <div class="check-grid">
+    {{range .Events}}<label class="check"><input type="checkbox" name="events" value="{{.}}"{{if index $.CheckedEvents .}} checked{{end}}> {{.}}</label>{{end}}
+  </div>
+</fieldset>
+<fieldset class="check-group">
+  <legend>Entity types <span class="muted">(none = all)</span></legend>
+  <div class="check-grid">
+    {{range .EntityTypes}}<label class="check"><input type="checkbox" name="entity_types" value="{{.}}"{{if index $.CheckedTypes .}} checked{{end}}> {{.}}</label>{{end}}
+  </div>
+</fieldset>
+{{end}}

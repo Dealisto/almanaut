@@ -334,3 +334,10 @@ form.search-page input{flex:1;padding:10px 12px;border:1px solid var(--border);b
 .rack-elev-meta{font-family:var(--mono);font-size:.7rem;opacity:.7}
 .rack-elev-occ.oob,.rack-elev-occ.overlap{border-color:var(--danger);background:var(--crit-soft)}
 .rack-elev-occ.overlap{border-style:dashed}
+
+/* Webhook filter checkbox groups */
+.check-group{border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 14px;margin:0}
+.check-group legend{font-size:.8rem;color:var(--muted);padding:0 6px}
+.check-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px 14px;margin-top:6px}
+.check{display:flex;align-items:center;gap:6px;font-weight:400}
+.check input{width:auto;margin:0}
