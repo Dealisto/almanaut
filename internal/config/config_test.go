@@ -240,3 +240,32 @@ func TestLoadWebhookOverrides(t *testing.T) {
 		t.Errorf("overrides not applied: %+v", cfg)
 	}
 }
+
+func TestLoadKumaConfig(t *testing.T) {
+	t.Setenv("ALMANAUT_KUMA_URL", "http://kuma.lan:3001")
+	t.Setenv("ALMANAUT_KUMA_USER", "admin")
+	t.Setenv("ALMANAUT_KUMA_PASS", "s3cret")
+	t.Setenv("ALMANAUT_KUMA_INSECURE", "true")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.KumaURL != "http://kuma.lan:3001" || cfg.KumaUser != "admin" || cfg.KumaPass != "s3cret" || !cfg.KumaInsecure {
+		t.Fatalf("unexpected kuma config: %+v", cfg)
+	}
+}
+
+func TestLoadKumaPassFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pass")
+	if err := os.WriteFile(path, []byte("filepass\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ALMANAUT_KUMA_PASS_FILE", path)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.KumaPass != "filepass" {
+		t.Fatalf("KumaPass = %q, want filepass", cfg.KumaPass)
+	}
+}
