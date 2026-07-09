@@ -564,6 +564,8 @@ func New(cfg Config) http.Handler {
 
 				r.Get("/webhooks", listWebhooks(webhooks))
 				r.Post("/webhooks", createWebhook(webhooks))
+				r.Get("/webhooks/{id}/edit", editWebhookForm(webhooks))
+				r.Post("/webhooks/{id}", updateWebhook(webhooks))
 				r.Post("/webhooks/{id}/toggle", toggleWebhook(webhooks))
 				r.Post("/webhooks/{id}/delete", deleteWebhook(webhooks))
 			})

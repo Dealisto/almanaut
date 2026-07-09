@@ -1,0 +1,22 @@
+{{/* internal/web/templates/webhook_edit.html */}}
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <p class="ph-eyebrow">Administration</p>
+    <h1>Edit webhook</h1>
+  </div>
+</div>
+
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+
+<div class="panel">
+  <form class="stack" method="post" action="/webhooks/{{.ID}}">
+    {{ csrfField }}
+    {{template "webhook_form_fields" .Form}}
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Save changes</button>
+      <a class="btn" href="/webhooks">Cancel</a>
+    </div>
+  </form>
+</div>
+{{end}}

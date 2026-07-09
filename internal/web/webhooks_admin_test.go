@@ -90,6 +90,89 @@ func TestCreateWebhookRejectsBadURL(t *testing.T) {
 	}
 }
 
+func TestEditWebhookUpdatesURLAndFilters(t *testing.T) {
+	db := rbacDB(t)
+	h := newAuthedTestHandler(t, db)
+	admin := seedUserAndLogin(t, h, db, "admin", domain.RoleAdmin)
+	repo := store.NewWebhookRepo(db)
+	id, err := repo.Create(domain.Webhook{
+		URL: "https://old.example/h", Secret: "whsec_keep", Enabled: true,
+		EntityTypes: []string{"host"}, Events: []string{"created"}, CreatedAt: nowRFC3339(),
+	})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// The edit form pre-checks current filters.
+	rec := getWith(t, h, admin, "/webhooks/1/edit")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "https://old.example/h") {
+		t.Fatalf("edit form should render prefilled; got %d", rec.Code)
+	}
+
+	// Update URL + filters; secret and created_at must be preserved.
+	if code := csrfPost(t, h, admin, "/webhooks/1", "url=https://new.example/h&events=updated&events=deleted&entity_types=service"); code != http.StatusSeeOther {
+		t.Fatalf("update = %d, want 303", code)
+	}
+	got, _ := repo.Get(id)
+	if got.URL != "https://new.example/h" {
+		t.Errorf("URL = %q, want updated", got.URL)
+	}
+	if got.Secret != "whsec_keep" {
+		t.Errorf("secret changed on edit: %q", got.Secret)
+	}
+	if got.CreatedAt == "" {
+		t.Errorf("created_at should be preserved, got empty")
+	}
+	if len(got.Events) != 2 || got.Events[0] != "updated" || got.Events[1] != "deleted" {
+		t.Errorf("events = %v", got.Events)
+	}
+	if len(got.EntityTypes) != 1 || got.EntityTypes[0] != "service" {
+		t.Errorf("entity_types = %v", got.EntityTypes)
+	}
+	if !got.Enabled {
+		t.Errorf("Enabled flipped unexpectedly on edit")
+	}
+}
+
+func TestEditWebhookNotFound(t *testing.T) {
+	db := rbacDB(t)
+	h := newAuthedTestHandler(t, db)
+	admin := seedUserAndLogin(t, h, db, "admin", domain.RoleAdmin)
+	if rec := getWith(t, h, admin, "/webhooks/999/edit"); rec.Code != http.StatusNotFound {
+		t.Fatalf("edit missing = %d, want 404", rec.Code)
+	}
+}
+
+func TestUpdateWebhookRejectsBadURLAndPreservesForm(t *testing.T) {
+	db := rbacDB(t)
+	h := newAuthedTestHandler(t, db)
+	admin := seedUserAndLogin(t, h, db, "admin", domain.RoleAdmin)
+	repo := store.NewWebhookRepo(db)
+	id, err := repo.Create(domain.Webhook{
+		URL: "https://old.example/h", Secret: "whsec_keep", Enabled: true,
+		EntityTypes: []string{"host"}, Events: []string{"created"}, CreatedAt: nowRFC3339(),
+	})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	code := csrfPostRec(t, h, admin, "/webhooks/1", "url=not-a-url&events=updated&entity_types=service")
+	if code.Code != http.StatusOK || !strings.Contains(code.Body.String(), "http") {
+		t.Fatalf("bad URL should re-render edit page with error; got %d", code.Code)
+	}
+	if !strings.Contains(code.Body.String(), `value="updated"`) && !strings.Contains(code.Body.String(), "checked") {
+		t.Fatalf("edit page should re-render with submitted values pre-checked; body: %s", code.Body.String())
+	}
+
+	got, _ := repo.Get(id)
+	if got.URL != "https://old.example/h" {
+		t.Errorf("URL changed on validation error: %q", got.URL)
+	}
+	if got.Secret != "whsec_keep" {
+		t.Errorf("secret changed on validation error: %q", got.Secret)
+	}
+}
+
 func TestToggleAndDeleteWebhook(t *testing.T) {
 	db := rbacDB(t)
 	h := newAuthedTestHandler(t, db)

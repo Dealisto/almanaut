@@ -81,6 +81,74 @@ func createWebhook(repo *store.WebhookRepo) http.HandlerFunc {
 	}
 }
 
+type webhookEditData struct {
+	Title string
+	ID    int64
+	Form  webhookFormData
+	Error string
+}
+
+// checkedSet turns a filter slice into a lookup for pre-checking checkboxes.
+func checkedSet(values []string) map[string]bool {
+	m := make(map[string]bool, len(values))
+	for _, v := range values {
+		m[v] = true
+	}
+	return m
+}
+
+func editWebhookForm(repo *store.WebhookRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := webhookIDParam(w, r)
+		if !ok {
+			return
+		}
+		wh, err := repo.Get(id)
+		if err != nil {
+			notFoundOrServerError(w, r, "webhook", err)
+			return
+		}
+		render(w, r, "webhook_edit.html", webhookEditData{
+			Title: "Edit webhook", ID: wh.ID,
+			Form: webhookFormData{
+				URL: wh.URL, EntityTypes: domain.EntityTypes, Events: allWebhookEvents,
+				CheckedTypes: checkedSet(wh.EntityTypes), CheckedEvents: checkedSet(wh.Events),
+			},
+		})
+	}
+}
+
+func updateWebhook(repo *store.WebhookRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := webhookIDParam(w, r)
+		if !ok {
+			return
+		}
+		wh, err := repo.Get(id)
+		if err != nil {
+			notFoundOrServerError(w, r, "webhook", err)
+			return
+		}
+		url, types, events, perr := parseWebhookForm(r)
+		if perr != nil {
+			render(w, r, "webhook_edit.html", webhookEditData{
+				Title: "Edit webhook", ID: wh.ID, Error: perr.Error(),
+				Form: webhookFormData{
+					URL: url, EntityTypes: domain.EntityTypes, Events: allWebhookEvents,
+					CheckedTypes: checkedSet(types), CheckedEvents: checkedSet(events),
+				},
+			})
+			return
+		}
+		wh.URL, wh.EntityTypes, wh.Events = url, types, events // secret, enabled, created_at preserved
+		if err := repo.Update(wh); err != nil {
+			notFoundOrServerError(w, r, "webhook", err)
+			return
+		}
+		http.Redirect(w, r, "/webhooks", http.StatusSeeOther)
+	}
+}
+
 func toggleWebhook(repo *store.WebhookRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := webhookIDParam(w, r)
