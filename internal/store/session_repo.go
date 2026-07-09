@@ -49,7 +49,7 @@ func (r *SessionRepo) Create(s Session) (int64, error) {
 // absent (ErrNotFound), so the caller need not special-case expiry.
 func (r *SessionRepo) UserByToken(tokenHash, now string) (domain.User, error) {
 	row := r.db.QueryRow(
-		`SELECT u.id, u.username, u.password_hash, u.created_at, u.updated_at
+		`SELECT u.id, u.username, u.role, u.password_hash, u.created_at, u.updated_at
 		 FROM sessions s JOIN users u ON u.id = s.user_id
 		 WHERE s.token_hash = ? AND s.expires_at > ?`,
 		tokenHash, now,

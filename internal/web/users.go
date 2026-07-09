@@ -48,7 +48,11 @@ func createUser(users *store.UserRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := strings.TrimSpace(r.FormValue("username"))
 		password := r.FormValue("password")
-		u := domain.User{Username: username}
+		role := domain.Role(strings.TrimSpace(r.FormValue("role")))
+		if role == "" {
+			role = domain.RoleViewer
+		}
+		u := domain.User{Username: username, Role: role}
 		if err := u.Validate(); err != nil {
 			renderUsers(w, r, users, err.Error())
 			return
@@ -70,7 +74,7 @@ func createUser(users *store.UserRepo) http.HandlerFunc {
 			return
 		}
 		now := nowRFC3339()
-		if _, err := users.Create(domain.User{Username: username, PasswordHash: hash, CreatedAt: now, UpdatedAt: now}); err != nil {
+		if _, err := users.Create(domain.User{Username: username, Role: role, PasswordHash: hash, CreatedAt: now, UpdatedAt: now}); err != nil {
 			serverError(w, r, err)
 			return
 		}

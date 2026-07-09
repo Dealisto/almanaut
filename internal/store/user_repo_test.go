@@ -85,3 +85,18 @@ func TestUserRepoUniqueUsername(t *testing.T) {
 		t.Fatal("duplicate username must be rejected by UNIQUE constraint")
 	}
 }
+
+func TestUserRepoRoundTripsRole(t *testing.T) {
+	r := newUserRepo(t)
+	id, err := r.Create(domain.User{Username: "ed", Role: domain.RoleEditor, PasswordHash: "h", CreatedAt: "t", UpdatedAt: "t"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	got, err := r.Get(id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Role != domain.RoleEditor {
+		t.Fatalf("role = %q, want editor", got.Role)
+	}
+}

@@ -6,6 +6,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/Dealisto/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/store"
 )
 
 // postAuthForm issues an authenticated, CSRF-valid POST and returns the
@@ -88,6 +91,55 @@ func TestResetUserPassword(t *testing.T) {
 	rec := postAuthForm(t, h, session, "/users/2/password", map[string]string{"password": "newpassword1"})
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("reset password code = %d, want 303 (body %s)", rec.Code, rec.Body)
+	}
+}
+
+// TestCreateUserDefaultsToViewer confirms createUser assigns the least
+// privileged role when the form omits "role" (the create-user form has no
+// role selector yet; PR B adds it). Before A8, an unset role failed
+// domain.User.Validate and the create silently re-rendered the form with an
+// error instead of creating the account.
+func TestCreateUserDefaultsToViewer(t *testing.T) {
+	dbPath := t.TempDir() + "/test.db"
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := store.Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	users := store.NewUserRepo(db)
+	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+		t.Fatalf("BootstrapAdmin: %v", err)
+	}
+	h := newAuthedTestHandler(t, db)
+
+	// Inline login flow (mirrors authTestServer) to obtain a session cookie.
+	loginGet := httptest.NewRecorder()
+	h.ServeHTTP(loginGet, httptest.NewRequest(http.MethodGet, "/login", nil))
+	loginCSRF := csrfCookie(loginGet.Result().Cookies())
+	loginForm := strings.NewReader("username=admin&password=password123&" + csrfFieldName + "=" + loginCSRF.Value)
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", loginForm)
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginReq.AddCookie(loginCSRF)
+	loginRec := httptest.NewRecorder()
+	h.ServeHTTP(loginRec, loginReq)
+	if loginRec.Code != http.StatusSeeOther {
+		t.Fatalf("login code = %d, want 303 (body %s)", loginRec.Code, loginRec.Body)
+	}
+	session := sessionCookie(t, loginRec.Result().Cookies())
+
+	rec := postAuthForm(t, h, session, "/users", map[string]string{"username": "newbie", "password": "password123"})
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create user = %d, want 303 (body %s)", rec.Code, rec.Body)
+	}
+	u, err := users.GetByUsername("newbie")
+	if err != nil {
+		t.Fatalf("GetByUsername: %v", err)
+	}
+	if u.Role != domain.RoleViewer {
+		t.Fatalf("default role = %q, want viewer", u.Role)
 	}
 }
 

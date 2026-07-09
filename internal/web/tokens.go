@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -51,13 +52,21 @@ func createToken(tokens *store.TokenRepo) http.HandlerFunc {
 			renderTokens(w, r, tokens, "label is required", "")
 			return
 		}
+		scope := strings.TrimSpace(r.FormValue("scope"))
+		if scope == "" {
+			scope = string(domain.ScopeReadWrite)
+		}
+		if !domain.Scope(scope).Valid() {
+			renderTokens(w, r, tokens, "invalid token scope", "")
+			return
+		}
 		raw, err := newAPIToken()
 		if err != nil {
 			serverError(w, r, err)
 			return
 		}
 		if _, err := tokens.Create(store.APIToken{
-			TokenHash: hashToken(raw), UserID: u.ID, Label: label, CreatedAt: nowRFC3339(),
+			TokenHash: hashToken(raw), UserID: u.ID, Label: label, Scope: scope, CreatedAt: nowRFC3339(),
 		}); err != nil {
 			serverError(w, r, err)
 			return

@@ -22,13 +22,13 @@ func (r *UserRepo) WithTx(tx *sql.Tx) *UserRepo {
 	return &UserRepo{db: tx}
 }
 
-const userColumns = `id, username, password_hash, created_at, updated_at`
+const userColumns = `id, username, role, password_hash, created_at, updated_at`
 
 // Create inserts u and returns its new ID.
 func (r *UserRepo) Create(u domain.User) (int64, error) {
 	res, err := r.db.Exec(
-		`INSERT INTO users (username, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?)`,
-		u.Username, u.PasswordHash, u.CreatedAt, u.UpdatedAt,
+		`INSERT INTO users (username, role, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+		u.Username, string(u.Role), u.PasswordHash, u.CreatedAt, u.UpdatedAt,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert user: %w", err)
@@ -97,7 +97,7 @@ func (r *UserRepo) Count() (int, error) {
 
 func scanUser(s scanner) (domain.User, error) {
 	var u domain.User
-	if err := s.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt); err != nil {
+	if err := s.Scan(&u.ID, &u.Username, &u.Role, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return domain.User{}, notFound(fmt.Errorf("scan user: %w", err))
 	}
 	return u, nil

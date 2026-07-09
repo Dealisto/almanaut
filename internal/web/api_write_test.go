@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
 )
 
@@ -39,7 +40,7 @@ func apiAuthServer(t *testing.T) (http.Handler, *store.TokenRepo, string) {
 		t.Fatalf("newAPIToken: %v", err)
 	}
 	if _, err := tokens.Create(store.APIToken{
-		TokenHash: hashToken(raw), UserID: u.ID, Label: "ci", CreatedAt: nowRFC3339(),
+		TokenHash: hashToken(raw), UserID: u.ID, Label: "ci", Scope: string(domain.ScopeReadWrite), CreatedAt: nowRFC3339(),
 	}); err != nil {
 		t.Fatalf("Create token: %v", err)
 	}
@@ -197,7 +198,7 @@ func TestAPIWriteAttributedToTokenUser(t *testing.T) {
 	u, _ := users.GetByUsername("alice")
 	tokens := store.NewTokenRepo(db)
 	raw, _ := newAPIToken()
-	_, _ = tokens.Create(store.APIToken{TokenHash: hashToken(raw), UserID: u.ID, Label: "ci", CreatedAt: nowRFC3339()})
+	_, _ = tokens.Create(store.APIToken{TokenHash: hashToken(raw), UserID: u.ID, Label: "ci", Scope: string(domain.ScopeReadWrite), CreatedAt: nowRFC3339()})
 	h := newAuthedTestHandler(t, db)
 
 	rec := httptest.NewRecorder()

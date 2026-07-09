@@ -36,7 +36,7 @@ func BootstrapAdmin(users *store.UserRepo, logger *log.Logger, envUser, envPass 
 		}
 		now := nowRFC3339()
 		if _, err := users.Create(domain.User{
-			Username: username, PasswordHash: hash, CreatedAt: now, UpdatedAt: now,
+			Username: username, Role: domain.RoleAdmin, PasswordHash: hash, CreatedAt: now, UpdatedAt: now,
 		}); err != nil {
 			return err
 		}

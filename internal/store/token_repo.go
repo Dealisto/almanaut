@@ -14,6 +14,7 @@ type APIToken struct {
 	TokenHash string
 	UserID    int64
 	Label     string
+	Scope     string
 	CreatedAt string
 }
 
@@ -31,8 +32,8 @@ func (r *TokenRepo) WithTx(tx *sql.Tx) *TokenRepo { return &TokenRepo{db: tx} }
 // Create inserts t and returns its new ID.
 func (r *TokenRepo) Create(t APIToken) (int64, error) {
 	res, err := r.db.Exec(
-		`INSERT INTO api_tokens (token_hash, user_id, label, created_at) VALUES (?, ?, ?, ?)`,
-		t.TokenHash, t.UserID, t.Label, t.CreatedAt,
+		`INSERT INTO api_tokens (token_hash, user_id, label, scope, created_at) VALUES (?, ?, ?, ?, ?)`,
+		t.TokenHash, t.UserID, t.Label, t.Scope, t.CreatedAt,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert api token: %w", err)
@@ -43,7 +44,7 @@ func (r *TokenRepo) Create(t APIToken) (int64, error) {
 // ListByUser returns userID's tokens, newest first.
 func (r *TokenRepo) ListByUser(userID int64) ([]APIToken, error) {
 	rows, err := r.db.Query(
-		`SELECT id, token_hash, user_id, label, created_at
+		`SELECT id, token_hash, user_id, label, scope, created_at
 		 FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC, id DESC`,
 		userID,
 	)
@@ -54,7 +55,7 @@ func (r *TokenRepo) ListByUser(userID int64) ([]APIToken, error) {
 	tokens := []APIToken{}
 	for rows.Next() {
 		var t APIToken
-		if err := rows.Scan(&t.ID, &t.TokenHash, &t.UserID, &t.Label, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.TokenHash, &t.UserID, &t.Label, &t.Scope, &t.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan api token: %w", err)
 		}
 		tokens = append(tokens, t)
@@ -62,15 +63,21 @@ func (r *TokenRepo) ListByUser(userID int64) ([]APIToken, error) {
 	return tokens, rows.Err()
 }
 
-// UserByToken returns the user owning the token with tokenHash, or ErrNotFound.
-func (r *TokenRepo) UserByToken(tokenHash string) (domain.User, error) {
+// UserByToken returns the user owning the token with tokenHash and the token's
+// scope, or ErrNotFound.
+func (r *TokenRepo) UserByToken(tokenHash string) (domain.User, string, error) {
 	row := r.db.QueryRow(
-		`SELECT u.id, u.username, u.password_hash, u.created_at, u.updated_at
+		`SELECT u.id, u.username, u.role, u.password_hash, u.created_at, u.updated_at, t.scope
 		 FROM api_tokens t JOIN users u ON u.id = t.user_id
 		 WHERE t.token_hash = ?`,
 		tokenHash,
 	)
-	return scanUser(row)
+	var u domain.User
+	var scope string
+	if err := row.Scan(&u.ID, &u.Username, &u.Role, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt, &scope); err != nil {
+		return domain.User{}, "", notFound(fmt.Errorf("scan token user: %w", err))
+	}
+	return u, scope, nil
 }
 
 // Delete removes token id, but only when it belongs to userID, so a user cannot
