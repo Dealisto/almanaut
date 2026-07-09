@@ -118,14 +118,22 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Expiry notifications are opt-in: only run when a topic URL is configured.
+	// Expiry notifications are opt-in: only run when at least one channel is
+	// configured. Every configured channel receives each alert (fan-out).
+	var senders []notify.Sender
 	if cfg.NtfyURL != "" {
+		senders = append(senders, notify.NewNtfyClient(cfg.NtfyURL, cfg.NtfyToken))
+	}
+	if cfg.DiscordWebhookURL != "" {
+		senders = append(senders, notify.NewDiscordClient(cfg.DiscordWebhookURL))
+	}
+	if len(senders) > 0 {
 		notifier := notify.New(
 			store.NewCertificateRepo(db),
 			store.NewHardwareRepo(db),
 			store.NewSubscriptionRepo(db),
 			store.NewNotificationRepo(db),
-			notify.NewNtfyClient(cfg.NtfyURL, cfg.NtfyToken),
+			notify.NewMultiSender(senders...),
 			cfg.NotifyWithinDays,
 		)
 		go runNotifier(ctx, notifier, cfg.NotifyInterval)
