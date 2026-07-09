@@ -35,34 +35,39 @@ type webhooksPageData struct {
 	NewSecret string // generated secret, shown once immediately after create
 }
 
-func emptyWebhookForm() webhookFormData {
+// webhookFormWith builds form data with the given URL and pre-checked filters.
+func webhookFormWith(url string, types, events []string) webhookFormData {
 	return webhookFormData{
-		URL: "", EntityTypes: domain.EntityTypes, Events: allWebhookEvents,
-		CheckedTypes: map[string]bool{}, CheckedEvents: map[string]bool{},
+		URL: url, EntityTypes: domain.EntityTypes, Events: allWebhookEvents,
+		CheckedTypes: checkedSet(types), CheckedEvents: checkedSet(events),
 	}
 }
 
-func renderWebhooks(w http.ResponseWriter, r *http.Request, repo *store.WebhookRepo, errMsg, newSecret string) {
+func emptyWebhookForm() webhookFormData {
+	return webhookFormWith("", nil, nil)
+}
+
+func renderWebhooks(w http.ResponseWriter, r *http.Request, repo *store.WebhookRepo, form webhookFormData, errMsg, newSecret string) {
 	list, err := repo.List()
 	if err != nil {
 		serverError(w, r, err)
 		return
 	}
 	render(w, r, "webhooks.html", webhooksPageData{
-		Title: "Webhooks", Webhooks: list, Form: emptyWebhookForm(),
+		Title: "Webhooks", Webhooks: list, Form: form,
 		Error: errMsg, NewSecret: newSecret,
 	})
 }
 
 func listWebhooks(repo *store.WebhookRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { renderWebhooks(w, r, repo, "", "") }
+	return func(w http.ResponseWriter, r *http.Request) { renderWebhooks(w, r, repo, emptyWebhookForm(), "", "") }
 }
 
 func createWebhook(repo *store.WebhookRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		url, types, events, err := parseWebhookForm(r)
-		if err != nil {
-			renderWebhooks(w, r, repo, err.Error(), "")
+		url, types, events, perr := parseWebhookForm(r)
+		if perr != nil {
+			renderWebhooks(w, r, repo, webhookFormWith(url, types, events), perr.Error(), "")
 			return
 		}
 		secret, gerr := newWebhookSecret()
@@ -77,7 +82,7 @@ func createWebhook(repo *store.WebhookRepo) http.HandlerFunc {
 			serverError(w, r, err)
 			return
 		}
-		renderWebhooks(w, r, repo, "", secret) // reveal once
+		renderWebhooks(w, r, repo, emptyWebhookForm(), "", secret) // reveal once
 	}
 }
 
@@ -110,10 +115,7 @@ func editWebhookForm(repo *store.WebhookRepo) http.HandlerFunc {
 		}
 		render(w, r, "webhook_edit.html", webhookEditData{
 			Title: "Edit webhook", ID: wh.ID,
-			Form: webhookFormData{
-				URL: wh.URL, EntityTypes: domain.EntityTypes, Events: allWebhookEvents,
-				CheckedTypes: checkedSet(wh.EntityTypes), CheckedEvents: checkedSet(wh.Events),
-			},
+			Form: webhookFormWith(wh.URL, wh.EntityTypes, wh.Events),
 		})
 	}
 }
@@ -133,10 +135,7 @@ func updateWebhook(repo *store.WebhookRepo) http.HandlerFunc {
 		if perr != nil {
 			render(w, r, "webhook_edit.html", webhookEditData{
 				Title: "Edit webhook", ID: wh.ID, Error: perr.Error(),
-				Form: webhookFormData{
-					URL: url, EntityTypes: domain.EntityTypes, Events: allWebhookEvents,
-					CheckedTypes: checkedSet(types), CheckedEvents: checkedSet(events),
-				},
+				Form: webhookFormWith(url, types, events),
 			})
 			return
 		}
@@ -183,20 +182,22 @@ func deleteWebhook(repo *store.WebhookRepo) http.HandlerFunc {
 	}
 }
 
-// parseWebhookForm reads and validates the create/edit form fields.
+// parseWebhookForm reads the create/edit form fields. It parses url/types/events
+// first and returns them even when validation fails, so an error re-render can
+// preserve what the user submitted.
 func parseWebhookForm(r *http.Request) (url string, types, events []string, err error) {
 	if perr := r.ParseForm(); perr != nil {
 		return "", nil, nil, errors.New("invalid form submission")
 	}
 	url = strings.TrimSpace(r.FormValue("url"))
-	if url == "" {
-		return "", nil, nil, errors.New("URL is required")
-	}
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		return "", nil, nil, errors.New("URL must start with http:// or https://")
-	}
 	types = filterAllowed(r.Form["entity_types"], domain.EntityTypes)
 	events = filterAllowed(r.Form["events"], allWebhookEvents)
+	if url == "" {
+		return url, types, events, errors.New("URL is required")
+	}
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		return url, types, events, errors.New("URL must start with http:// or https://")
+	}
 	return url, types, events, nil
 }
 

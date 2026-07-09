@@ -80,9 +80,16 @@ func TestCreateWebhookRejectsBadURL(t *testing.T) {
 	db := rbacDB(t)
 	h := newAuthedTestHandler(t, db)
 	admin := seedUserAndLogin(t, h, db, "admin", domain.RoleAdmin)
-	rec := csrfPostRec(t, h, admin, "/webhooks", "url=not-a-url")
+	rec := csrfPostRec(t, h, admin, "/webhooks", "url=not-a-url&events=updated&entity_types=host")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "http") {
 		t.Fatalf("bad URL should re-render with an error; got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `value="not-a-url"`) {
+		t.Fatalf("create form should preserve the submitted URL; body: %s", body)
+	}
+	if !strings.Contains(body, `value="updated" checked`) {
+		t.Fatalf("create form should pre-check the submitted event filter; body: %s", body)
 	}
 	hooks, _ := store.NewWebhookRepo(db).List()
 	if len(hooks) != 0 {
@@ -156,12 +163,16 @@ func TestUpdateWebhookRejectsBadURLAndPreservesForm(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	code := csrfPostRec(t, h, admin, "/webhooks/1", "url=not-a-url&events=updated&entity_types=service")
-	if code.Code != http.StatusOK || !strings.Contains(code.Body.String(), "http") {
-		t.Fatalf("bad URL should re-render edit page with error; got %d", code.Code)
+	rec := csrfPostRec(t, h, admin, "/webhooks/1", "url=not-a-url&events=updated&entity_types=service")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "http") {
+		t.Fatalf("bad URL should re-render edit page with error; got %d", rec.Code)
 	}
-	if !strings.Contains(code.Body.String(), `value="updated"`) && !strings.Contains(code.Body.String(), "checked") {
-		t.Fatalf("edit page should re-render with submitted values pre-checked; body: %s", code.Body.String())
+	body := rec.Body.String()
+	if !strings.Contains(body, `value="not-a-url"`) {
+		t.Fatalf("edit form should preserve the submitted URL; body: %s", body)
+	}
+	if !strings.Contains(body, `value="updated" checked`) {
+		t.Fatalf("edit form should pre-check the submitted event filter; body: %s", body)
 	}
 
 	got, _ := repo.Get(id)
