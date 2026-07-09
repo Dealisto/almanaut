@@ -1,112 +1,77 @@
+<div align="center">
+
 # Almanaut
+
+**A lightweight, self-hosted homelab inventory & documentation tool.**
+*"NetBox for the rest of us."*
 
 [![CI](https://github.com/Dealisto/almanaut/actions/workflows/ci.yml/badge.svg)](https://github.com/Dealisto/almanaut/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Container image](https://img.shields.io/badge/ghcr.io-dealisto%2Falmanaut-2496ed?logo=docker&logoColor=white)](https://github.com/Dealisto/almanaut/pkgs/container/almanaut)
 
-A lightweight, self-hosted homelab inventory & documentation tool.
-"NetBox for the rest of us."
-
-> Status: early development (v0.1).
-
-## Contents
-
-- [What it does](#what-it-does)
-- [Screenshots](#screenshots)
-- [Run with Docker](#run-with-docker)
-- [Run with Docker Compose](#run-with-docker-compose)
-- [Run from source](#run-from-source)
-- [Authentication](#authentication)
-- [Configuration](#configuration)
-- [Export & import](#export--import)
-- [JSON API](#json-api)
-- [Metrics](#metrics)
-- [Health & version](#health--version)
-- [Auto-discovery](#auto-discovery)
-- [License](#license)
-
-## What it does
-
-Almanaut is a single Go binary (SQLite storage, server-rendered UI, no
-client-side JS framework) for keeping track of your homelab. It tracks nine
-entity types and the relationships between them:
-
-- **Hosts** — physical machines, VMs, LXC containers, and VPSes
-- **Services** — the things running on your hosts
-- **Networks** — subnets, with built-in IPAM (usage, capacity, next-free IP)
-- **Domains** — DNS names / FQDNs
-- **Certificates** — TLS certs with expiry tracking
-- **Backups** — what's backed up, from where
-- **Hardware** — devices with warranty tracking
-- **Subscriptions** — recurring services with renewal dates
-- **Accounts** — logins and secret references
-
-### Sites, Locations & Racks
-
-almanaut models physical placement as a **Site → Location → Rack** hierarchy:
-
-- A **Site** is a building or campus.
-- A **Location** is a room/area within a site.
-- A **Rack** is an equipment rack within a location, with a height in rack units (U).
-
-Each level references its parent (chosen from a dropdown). A site's detail page
-lists its locations, and a location's lists its racks, so you can navigate the
-hierarchy top-down. Like every entity, they support search, tags, relationships,
-change history, the JSON API, and CSV import.
-
-Hosts and hardware can be **assigned to a rack and a U position** (with a height
-in U) from their edit form. The rack's detail page then renders a **U elevation**
-— a top-to-bottom diagram of the rack with each occupant drawn at its position,
-linking to its detail page. Occupants that extend past the rack or overlap
-another are highlighted; placement is advisory, not enforced at save time.
-
-### Contacts
-
-**Contacts** record the people and vendors responsible for infrastructure
-(name, email, phone, role, organization). Link a contact to any entity through
-the relationship catalog with the **administered by** or **owned by** kinds; the
-link shows on both detail pages and in the neighbourhood graph. Contacts support
-search, tags, history, the JSON API, and CSV import like every other entity.
-
-### VLANs
-
-**VLANs** are first-class entities (name + 802.1Q VLAN ID). A network references
-a VLAN from its edit form, and the network's detail page shows the resolved
-`VLAN <id> (<name>)`. Like every entity they support search, tags, relationships,
-history, the JSON API, and CSV import.
-
-### IP reservations
-
-Reserve a named IP range within a network (e.g. a DHCP pool or a block kept for
-switches). Reserved addresses show on the network's IPAM view, are skipped by
-the "next free" suggestion, and are subtracted from the free-address count.
-Reservations are ordinary entities — searchable, taggable, exported, imported.
-
-On top of the inventory you get:
-
-- **Relationships & a neighbourhood graph** on each detail page (e.g. a service
-  *runs on* a host, *is backed up by* a backup)
-- **Global search** across every entity type
-- **A dashboard** summarising your inventory and what's expiring soon
-- **Auto-discovery** from Docker, a network subnet scan, and Proxmox VE
-- **History & journal** — an automatic per-entity change log (field-level
-  diffs), manual categorised journal entries on each detail page, and a global
-  `/history` activity feed (also surfaced on the dashboard)
-- **Expiry notifications** via [ntfy](https://ntfy.sh) for certs, warranties,
-  and renewals
-- **A read-write JSON API** with per-user API tokens, and a Prometheus
-  **`/metrics`** endpoint
-- **YAML export/import** of the entire inventory
-- **Mandatory account-based login** — session-cookie auth with per-user
-  passwords, an auto-created admin on first run, and a `/users` admin page
-
-## Screenshots
-
-**Dashboard** — a launchpad: prominent search, a "needs attention" panel with
-severity dots, clickable service tiles, and a compact inventory strip, all on a
-grouped left sidebar:
+One Go binary · SQLite storage · server-rendered UI · zero client-side JS frameworks
 
 ![almanaut dashboard](docs/screenshots/dashboard.png)
+
+</div>
+
+Almanaut keeps track of everything in your homelab — machines, services,
+networks, certificates, backups, subscriptions, and how they all relate — in
+one place, with the operational extras that usually require three more tools:
+IPAM, expiry alerts, auto-discovery, a JSON API, and Prometheus metrics.
+
+It is deliberately small: a single binary, a single SQLite file, and a
+server-rendered UI. Back it up by copying one file (or one YAML export).
+
+> **Status:** early development (v0.1). Expect rough edges; the export/import
+> path makes upgrades and migrations safe.
+
+## Features
+
+**Inventory**
+
+- **15 entity types** — hosts, services, networks, domains, certificates,
+  backups, hardware, subscriptions, accounts, sites, locations, racks,
+  contacts, VLANs, and IP reservations
+- **Relationships & a neighbourhood graph** on every detail page (a service
+  *runs on* a host, *is backed up by* a backup, *administered by* a contact…)
+- **Global search** across every entity type, tags, and custom-field values
+- **Dashboard** with a "needs attention" panel, inventory summary, and recent
+  activity
+- **Custom fields** — add your own typed fields (text, number, bool, date) to
+  any entity type
+- **Attachments** — upload files (manuals, invoices, configs) to any entity
+- **Tags** on everything, **journal** notes, and an automatic field-level
+  **change history** per entity plus a global `/history` feed
+
+**Networking & physical layout**
+
+- **IPAM** — per-network usage, capacity, next-free IP, VLANs, and named IP
+  reservations (DHCP pools, reserved blocks)
+- **Sites → locations → racks** hierarchy, with a rendered **U elevation** for
+  each rack showing its occupants at their positions
+
+**Automation & integrations**
+
+- **Auto-discovery** from Docker (via the socket), a network subnet scan, and
+  Proxmox VE — discovery only ever *creates* records, never overwrites yours
+- **Expiry notifications** via [ntfy](https://ntfy.sh) and/or Discord for
+  certificates, warranties, and renewals
+- **Outbound webhooks** — signed HTTP payloads on entity create/update/delete
+- **Uptime Kuma sync** — one-way sync of your services to Kuma HTTP monitors
+- **Read-write JSON API** with per-user, scoped API tokens
+- **Prometheus `/metrics`** endpoint
+
+**Operations**
+
+- **Mandatory login** with **role-based access control** (admin / editor /
+  viewer), per-username login throttling, and session-cookie auth
+- **YAML export/import** of the whole inventory, plus additive per-entity
+  **CSV import**
+- **Dark mode** (System / Light / Dark), Docker `HEALTHCHECK`, multi-arch
+  images (`amd64` / `arm64`), distroless non-root container
+
+## Screenshots
 
 **Relationship graph** — each entity's neighbourhood is drawn on its detail
 page (here, a host with the VM it runs on and the services running on it):
@@ -117,24 +82,27 @@ page (here, a host with the VM it runs on and the services running on it):
 
 ![almanaut in dark mode](docs/screenshots/dashboard-dark.png)
 
-## Run with Docker
+## Quick start
+
+### Docker
 
 ```bash
 docker run --rm -p 8080:8080 -v almanaut-data:/data ghcr.io/dealisto/almanaut:dev
 ```
 
-Then open http://localhost:8080.
+Open http://localhost:8080 and log in with the admin credentials printed in
+the container log (see [First login](#first-login)).
 
 Images are published to GHCR automatically: `:dev` tracks `master`, and a
-tagged release (`vX.Y.Z`) publishes `:X.Y.Z`, `:X.Y`, and `:latest`. Images are
-multi-arch (`linux/amd64` and `linux/arm64`).
+tagged release (`vX.Y.Z`) publishes `:X.Y.Z`, `:X.Y`, and `:latest`. Images
+are multi-arch (`linux/amd64` and `linux/arm64`).
 
 The container runs as a non-root user (uid `65532`). A fresh named volume (as
 above) inherits the right ownership automatically. If you instead bind-mount a
 host directory (`-v /host/path:/data`), make it writable by that uid first —
 `sudo chown 65532:65532 /host/path` — otherwise the database cannot be created.
 
-## Run with Docker Compose
+### Docker Compose
 
 Drop this into `docker-compose.yml` and run `docker compose up -d`:
 
@@ -162,21 +130,19 @@ volumes:
   almanaut-data:
 ```
 
-Then open http://localhost:8080. The image ships its own `HEALTHCHECK`, so
-`docker compose ps` reports the container's health directly.
+The image ships its own `HEALTHCHECK`, so `docker compose ps` reports the
+container's health directly.
 
-## Run from source
+### From source
+
+Requires Go 1.26+.
 
 ```bash
 go build -o almanaut .
 ALMANAUT_DATA_DIR=./data ./almanaut
 ```
 
-## Authentication
-
-Almanaut **requires a login** — every page and the whole JSON API sit behind a
-session-cookie auth check, with no way to run it open. (This is a breaking
-change from earlier versions' optional HTTP Basic auth.)
+### First login
 
 On first startup, if the user table is empty, almanaut creates one admin
 account:
@@ -199,36 +165,66 @@ account:
   Copy that password immediately — it is not stored anywhere in recoverable
   form and is never logged again.
 
-`ALMANAUT_AUTH_USER` / `ALMANAUT_AUTH_PASS` only seed that *initial* admin;
-they are **not** HTTP Basic auth credentials and are not checked on every
-request. The `_FILE` convention still applies to `ALMANAUT_AUTH_PASS` (see
-[Secrets from files](#secrets-from-files) below).
+### Try it with sample data
+
+Want to see the app populated before entering your own data? This repo ships a
+small example homelab (three hosts, some services, a network, a certificate, a
+backup, and the relationships between them). Grab
+[`examples/inventory.yaml`](examples/inventory.yaml), then go to **Data →
+Import**, upload it, tick the confirmation box, and import. You'll land on a
+populated dashboard with a browsable relationship graph.
+
+Since import wipes existing data, only load the sample into a fresh instance
+(or export your real data first).
+
+## Authentication & access control
+
+Almanaut **requires a login** — every page and the whole JSON API sit behind a
+session-cookie auth check, with no way to run it open.
+
+### Roles
+
+Every user has one of three built-in roles (there are no custom roles):
+
+| Role | Can do |
+|---|---|
+| **admin** | Everything, including managing users, webhooks, custom fields, and integrations |
+| **editor** | Create, edit, and delete inventory |
+| **viewer** | Read-only access to everything |
+
+Admins manage accounts at **Users** (`/users`): create users (viewer by
+default), change roles, reset passwords, and delete accounts. The last
+remaining user cannot be deleted, so you can't lock yourself out entirely.
+Each user changes their own password at `/account/password`.
+
+### Sessions & login throttling
+
+Sessions are server-side (stored in SQLite), cookie-based, and last 30 days;
+use the **Logout** button to end one early. Failed logins are throttled
+per-username: after 5 consecutive failures, further attempts for that username
+are refused for 15 minutes (state is in-memory and resets on restart).
+
+`/api/*` returns a plain `401` JSON error when called without valid
+credentials (a session cookie or a bearer token). `/healthz` and `/version`
+are the only endpoints that bypass the login, so container health probes keep
+working.
+
+### Lockout recovery
 
 Locked out? Set `ALMANAUT_RESET_ADMIN=true` and restart — almanaut resets the
 admin's password (using `ALMANAUT_AUTH_PASS` if set, otherwise a fresh random
-one) and logs the new value the same way. **Unset `ALMANAUT_RESET_ADMIN`
-afterwards**, or every restart will reset the password again.
+one) and logs the new value the same way as the first-run banner. **Unset
+`ALMANAUT_RESET_ADMIN` afterwards**, or every restart will reset the password
+again.
 
-Once logged in, manage accounts at **Users** (`/users`): create, list, delete,
-and reset other users' passwords. The last remaining user cannot be deleted,
-so you can't lock yourself out entirely. Each user changes their own password
-at `/account/password`. There are no roles yet — every logged-in user has full
-access.
-
-Sessions are server-side (stored in SQLite), cookie-based, and last 30 days;
-use the **Logout** button to end one early. For scripted/programmatic access,
-create a personal API token at **API tokens** (`/account/tokens`) — see
-[JSON API](#json-api). `/api/*` returns a plain `401` JSON error when called
-without valid credentials (a session cookie or a bearer token). `/healthz` and
-`/version` are the only endpoints that bypass the login, so container health
-probes keep working.
-
-Because credentials and the session cookie travel in the request just like
-before, put a TLS-terminating reverse proxy in front of almanaut for anything
-beyond localhost (see [Behind a reverse proxy](#behind-a-reverse-proxy-tls))
-and set `ALMANAUT_SECURE_COOKIES=true` once you do.
+Note that `ALMANAUT_AUTH_USER` / `ALMANAUT_AUTH_PASS` only seed the *initial*
+admin (or feed `ALMANAUT_RESET_ADMIN`); they are **not** HTTP Basic auth
+credentials and are not checked on every request. The `_FILE` convention
+applies to `ALMANAUT_AUTH_PASS` (see [Secrets from files](#secrets-from-files)).
 
 ## Configuration
+
+All configuration is via environment variables; everything is optional.
 
 | Variable                      | Default              | Description                                    |
 |-------------------------------|----------------------|------------------------------------------------|
@@ -259,37 +255,21 @@ and set `ALMANAUT_SECURE_COOKIES=true` once you do.
 
 ### Secrets from files
 
-The two sensitive values — `ALMANAUT_AUTH_PASS` and `ALMANAUT_PROXMOX_TOKEN` —
+Sensitive values (`ALMANAUT_AUTH_PASS`, `ALMANAUT_PROXMOX_TOKEN`,
+`ALMANAUT_NTFY_TOKEN`, `ALMANAUT_DISCORD_WEBHOOK_URL`, `ALMANAUT_KUMA_PASS`)
 can instead be read from a file by appending `_FILE` to the variable name and
-pointing it at the file (`ALMANAUT_AUTH_PASS_FILE=/run/secrets/auth_pass`). This
-keeps the secret out of the process environment, where it would otherwise be
-visible via `docker inspect`, `/proc`, or inherited by child processes. It pairs
-directly with [Docker secrets](https://docs.docker.com/engine/swarm/secrets/) and
-Kubernetes secrets, which are mounted as files. The `_FILE` variant takes
+pointing it at the file (`ALMANAUT_AUTH_PASS_FILE=/run/secrets/auth_pass`).
+This keeps the secret out of the process environment, where it would otherwise
+be visible via `docker inspect`, `/proc`, or inherited by child processes. It
+pairs directly with [Docker secrets](https://docs.docker.com/engine/swarm/secrets/)
+and Kubernetes secrets, which are mounted as files. The `_FILE` variant takes
 precedence over the plain variable, and a single trailing newline is stripped.
-
-`ALMANAUT_AUTH_USER` / `ALMANAUT_AUTH_PASS` only seed the initial admin account
-at first startup — see [Authentication](#authentication) for the full login
-model, the bootstrap banner, and `ALMANAUT_RESET_ADMIN`. Every page requires a
-logged-in session, and the JSON API requires either a session cookie or an API
-token (see [JSON API](#json-api)); there is no unauthenticated mode.
-Session cookies and login form submissions travel like any other request, so
-terminate TLS in front of Almanaut when exposing it beyond localhost. Almanaut
-also does not rate-limit or lock out failed logins, so do not expose it
-directly to the internet — keep it behind a reverse proxy (which can add
-throttling and TLS) or a VPN.
-
-Note that `/export` returns the **entire inventory**, including account entries
-(usernames, password-manager names, and secret references) — anyone with a
-valid login can download it, so treat every account you create as having full
-access to that data.
 
 ### Behind a reverse proxy (TLS)
 
-Almanaut serves plain HTTP with no built-in TLS or rate limiting, so put a
-reverse proxy in front for anything beyond localhost. Whatever proxy you use,
-set `ALMANAUT_SECURE_COOKIES=true` so cookies get the `Secure` flag once TLS is
-terminated upstream.
+Almanaut serves plain HTTP with no built-in TLS, so put a reverse proxy in
+front for anything beyond localhost, and set `ALMANAUT_SECURE_COOKIES=true` so
+cookies get the `Secure` flag once TLS is terminated upstream.
 
 **Caddy** — automatic Let's Encrypt TLS in two lines (`Caddyfile`):
 
@@ -310,18 +290,156 @@ almanaut.example.com {
       - "traefik.http.services.almanaut.loadbalancer.server.port=8080"
 ```
 
-### Expiry notifications
+### Security model
 
-Set `ALMANAUT_NTFY_URL` to an [ntfy](https://ntfy.sh) topic URL and almanaut
-pushes a notification when a certificate, hardware warranty, or subscription
-renewal falls within `ALMANAUT_NOTIFY_WITHIN_DAYS` (default 30). Each item
-notifies **once**; renewing it (pushing the date beyond the window) re-arms it
-for next time. The check runs at startup and every `ALMANAUT_NOTIFY_INTERVAL`.
+Almanaut is built for a **trusted LAN behind a reverse proxy or VPN**, not for
+direct internet exposure:
 
-Set `ALMANAUT_DISCORD_WEBHOOK_URL` to a Discord [incoming-webhook](https://support.discord.com/hc/en-us/articles/228383668)
-URL to post the same alerts to a Discord channel as an embed. ntfy and Discord
-can be enabled together or independently; each configured channel receives every
-alert once. Leave both unset to disable notifications entirely.
+- Session cookies and login forms travel over plain HTTP until you terminate
+  TLS in front of it.
+- Login throttling slows brute force but there is no CAPTCHA, 2FA, or
+  IP-level rate limiting.
+- `/export` returns the **entire inventory**, including account entries
+  (usernames, password-manager names, and secret references) — any logged-in
+  user (including viewers) can download it, so treat every account you create
+  as having read access to all of it.
+- The change history is append-only and **retains prior values of edited
+  fields** — including account fields such as `username` and `secret_ref`. A
+  value you later change is not scrubbed from history. (`secret_ref` is a
+  pointer to where a secret lives, not a stored secret.)
+
+## The inventory model
+
+Fifteen entity types, all sharing the same machinery — search, tags,
+relationships, change history, journal, custom fields, attachments, the JSON
+API, and CSV import:
+
+| | |
+|---|---|
+| **Hosts** | Physical machines, VMs, LXC containers, and VPSes |
+| **Services** | The things running on your hosts |
+| **Networks** | Subnets, with built-in IPAM (usage, capacity, next-free IP) |
+| **Domains** | DNS names / FQDNs |
+| **Certificates** | TLS certs with expiry tracking |
+| **Backups** | What's backed up, from where |
+| **Hardware** | Devices with warranty tracking |
+| **Subscriptions** | Recurring services with renewal dates |
+| **Accounts** | Logins and secret references |
+| **Sites / Locations / Racks** | Physical placement hierarchy (see below) |
+| **Contacts** | People and vendors responsible for infrastructure |
+| **VLANs** | 802.1Q VLANs referenced by networks |
+| **IP reservations** | Named reserved ranges within a network |
+
+### Sites, locations & racks
+
+Physical placement is a **Site → Location → Rack** hierarchy: a site is a
+building or campus, a location is a room or area within it, and a rack has a
+height in rack units (U). Each level's detail page lists its children, so you
+can navigate top-down.
+
+Hosts and hardware can be **assigned to a rack and a U position** (with a
+height in U) from their edit form. The rack's detail page then renders a
+**U elevation** — a top-to-bottom diagram with each occupant drawn at its
+position, linking to its detail page. Occupants that extend past the rack or
+overlap another are highlighted; placement is advisory, not enforced at save
+time.
+
+### IPAM: VLANs & IP reservations
+
+A network can reference a **VLAN** (name + 802.1Q ID) from its edit form; the
+network's detail page shows the resolved `VLAN <id> (<name>)`.
+
+**IP reservations** mark a named range within a network (a DHCP pool, a block
+kept for switches). Reserved addresses show on the network's IPAM view, are
+skipped by the "next free" suggestion, and are subtracted from the
+free-address count.
+
+### Custom fields
+
+Admins define **custom fields** at `/custom-fields`: each field belongs to one
+entity type and has a kind (text, number, bool, or date). Defined fields
+appear on that type's edit forms and detail pages, their values are searchable
+from global search, and they round-trip through the YAML export.
+
+### Attachments
+
+Any entity's detail page accepts **file attachments** (manuals, invoices,
+config dumps) up to 16 MiB each, stored inside the SQLite database.
+Attachments are **not** included in the YAML export — back up the database
+file itself to keep them.
+
+### History & journal
+
+Every create, update, and delete is recorded automatically with a field-level
+diff (e.g. `status: running → down`). Each entity's detail page shows its
+**Journal** — manual, categorised notes (info / success / warning / incident)
+you add as a running log — and a collapsible **Change history**. A global
+**`/history`** feed (and a "Recent activity" panel on the dashboard) lists the
+latest changes across every entity; delete events remain visible there even
+after the entity is gone. Journal entries are included in the YAML export;
+the change log is not.
+
+## Auto-discovery
+
+All discovery sources are read-only and additive: they only ever **create**
+new records and never overwrite your manual data.
+
+### Docker containers
+
+Mount the Docker socket read-only into the container:
+
+```bash
+docker run --rm -p 8080:8080 -v almanaut-data:/data \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  ghcr.io/dealisto/almanaut:dev
+```
+
+(Override a non-standard socket path with `ALMANAUT_DOCKER_SOCKET`.)
+
+Then navigate to **Discover → Docker containers**. Optionally select a host,
+choose the containers to import, and they are created as Services with an
+automatic "runs on" relationship to the selected host.
+
+### Network scan
+
+Set `ALMANAUT_ENABLE_NETWORK_SCAN=true` (and optionally `ALMANAUT_SCAN_SUBNET`
+to pre-fill the form). Then navigate to **Discover → Network scan**, enter a
+subnet (CIDR) and optional ports, and import the live hosts you select. The
+scan is a lightweight pure-Go TCP-connect probe (a host is "live" if at least
+one probed port is open). Subnets larger than 1024 hosts are rejected.
+
+### Proxmox VE
+
+Set `ALMANAUT_PROXMOX_URL` (e.g. `https://pve.lan:8006`) and
+`ALMANAUT_PROXMOX_TOKEN`. The token needs read access; to create one:
+
+1. In the Proxmox web UI, go to **Datacenter → Permissions → API Tokens**
+2. Click **Add**, choose a user and token ID
+3. Assign the **PVEAuditor** role (or an equivalent read-only role)
+4. Copy the token as `user@realm!tokenid=secret` into `ALMANAUT_PROXMOX_TOKEN`
+
+For a self-signed Proxmox certificate (the default), set
+`ALMANAUT_PROXMOX_INSECURE=true`.
+
+Then navigate to **Discover → Proxmox**, review the discovered resources,
+optionally keep "Link VMs/LXC to their Proxmox node" checked to create
+"runs on" relationships, and import. Proxmox nodes become `physical` hosts,
+QEMU VMs become `vm` hosts, and LXC containers become `lxc` hosts.
+
+## Notifications & integrations
+
+### Expiry notifications (ntfy & Discord)
+
+Set `ALMANAUT_NTFY_URL` to an [ntfy](https://ntfy.sh) topic URL and/or
+`ALMANAUT_DISCORD_WEBHOOK_URL` to a Discord
+[incoming-webhook](https://support.discord.com/hc/en-us/articles/228383668)
+URL. Almanaut pushes an alert when a certificate, hardware warranty, or
+subscription renewal falls within `ALMANAUT_NOTIFY_WITHIN_DAYS` (default 30).
+
+Each item notifies **once** per configured channel; renewing it (pushing the
+date beyond the window) re-arms it for next time. The check runs at startup
+and every `ALMANAUT_NOTIFY_INTERVAL`. Leave both URLs unset to disable
+notifications entirely.
 
 ### Outbound webhooks
 
@@ -329,59 +447,53 @@ Set `ALMANAUT_WEBHOOKS_ENABLED=true` to push a signed HTTP payload to your own
 endpoints on entity create/update/delete. Admins manage endpoints on the
 **Webhooks** page (`/webhooks`): add one by URL, optionally scope it to
 specific entity types and events (leave everything unchecked to fire on
-everything), and enable/disable or edit its URL and filters later. A signing
-secret is generated when the endpoint is created and shown **once** — copy it
-then, since receivers verify each delivery's `X-Almanaut-Signature:
-sha256=<hex>` header with it. Each delivery also carries an
-`X-Almanaut-Delivery: <id>` header, stable across retries, for receiver-side
-idempotency/dedup.
+everything), and enable/disable or edit it later.
+
+A signing secret is generated when the endpoint is created and shown **once**
+— receivers verify each delivery's `X-Almanaut-Signature: sha256=<hex>` header
+with it. Each delivery also carries an `X-Almanaut-Delivery: <id>` header,
+stable across retries, for receiver-side idempotency. Failed deliveries retry
+with backoff up to `ALMANAUT_WEBHOOK_MAX_ATTEMPTS` times.
 
 ### Uptime Kuma sync
 
 Set `ALMANAUT_KUMA_URL`, `ALMANAUT_KUMA_USER`, and `ALMANAUT_KUMA_PASS` (or
-`_FILE`) to one-way sync services with an http(s) URL to
+`_FILE`) to one-way sync services that have an http(s) URL to
 [Uptime Kuma](https://github.com/louislam/uptime-kuma) HTTP monitors — the
-sync is disabled unless all three are set. It logs in and manages monitors
-through Kuma's internal socket.io API rather than a stable REST API, since
-Kuma has no public API for monitor CRUD; **pin your Kuma version**, since that
-internal API can change between releases. 2FA-enabled Kuma accounts are not
-supported — use a dedicated account without 2FA. Only monitors that almanaut
-itself created are ever touched — existing monitors you made by hand in Kuma
-are left alone. Check status and trigger an on-demand resync from the
-**Kuma** admin page (`/kuma`). A whole-inventory YAML import (**Data →
-Import**) does not itself trigger a sync — use the **Sync now** button on
-`/kuma` afterwards. If a create's acknowledgment is lost mid-flight (e.g. Kuma
-restarting during a sync), the monitor can end up created in Kuma with no
-matching almanaut record; almanaut logs this case, and the orphaned monitor
-should be removed by hand in Kuma before the next sync creates a duplicate.
+sync is disabled unless all three are set. Check status and trigger an
+on-demand resync from the **Kuma** admin page (`/kuma`).
+
+Things to know:
+
+- Kuma has no public API for monitor CRUD, so almanaut uses Kuma's internal
+  socket.io API. **Pin your Kuma version** — that API can change between
+  releases.
+- 2FA-enabled Kuma accounts are not supported — use a dedicated account
+  without 2FA.
+- Only monitors that almanaut itself created are ever touched — monitors you
+  made by hand in Kuma are left alone.
+- A whole-inventory YAML import does not itself trigger a sync — use **Sync
+  now** on `/kuma` afterwards.
+- If a create's acknowledgment is lost mid-flight (e.g. Kuma restarting during
+  a sync), the monitor can end up created in Kuma with no matching almanaut
+  record; almanaut logs this case, and the orphaned monitor should be removed
+  by hand in Kuma before the next sync creates a duplicate.
 
 ## Export & import
 
 The whole inventory round-trips through a single YAML file. **Data → Export**
 (or `GET /export`) downloads `almanaut-export.yaml`; **Data → Import** uploads
-one back. This is your backup/restore and migration path.
+one back. This is your backup/restore and migration path (attachments
+excepted — they live only in the database file).
 
 > ⚠️ Import **replaces the entire inventory** — every existing record is
 > deleted and re-created from the file. It is not a merge. The import form
 > makes you tick a confirmation checkbox first.
 
-### Try it with sample data
-
-Want to see the app populated before entering your own data? This repo ships a
-small example homelab (three hosts, some services, a network, a certificate, a
-backup, and the relationships between them). Grab
-[`examples/inventory.yaml`](examples/inventory.yaml), then go to **Data →
-Import**, upload it, tick the confirmation box, and import. You'll land on a
-populated dashboard with a browsable relationship graph.
-
-Since import wipes existing data, only load the sample into a fresh instance
-(or export your real data first).
-
 ### Additive CSV import
 
 The **Data** page also imports a CSV for a single entity type without touching
-any other data — the complement to the whole-inventory YAML import (which
-replaces everything).
+any other data — the complement to the whole-inventory YAML import.
 
 - The header row uses the entity's field names in `snake_case`, matching the
   YAML export (e.g. for hosts: `name,type,os,cpu,ram,disk,status,ips,notes`).
@@ -391,11 +503,11 @@ replaces everything).
   `"10.0.0.1,10.0.0.2"` (quote the cell so the commas are not column separators).
 - Boolean fields (`auto_renew`) accept `true`/`false` (also `1`/`0`, `yes`/`no`).
 - Updating a row is a **full replace** of that row's columns present in the
-  file — an omitted column is written as empty, same as clearing it in the edit
-  form.
-- The import is **all-or-nothing**: if any row is invalid, the page lists every
-  bad row and writes nothing. Each created/updated row is recorded in the
-  entity's history.
+  file — an omitted column is written as empty, same as clearing it in the
+  edit form.
+- The import is **all-or-nothing**: if any row is invalid, the page lists
+  every bad row and writes nothing. Each created/updated row is recorded in
+  the entity's history.
 
 Example (`hosts.csv`):
 
@@ -411,20 +523,20 @@ A read-write JSON API mirrors the inventory for scripts and dashboards.
 **Reads** (`GET`) accept either a logged-in session cookie or an API token.
 **Writes** (`POST`/`PUT`/`DELETE`) require an API token — a request carrying
 only a session cookie is rejected, so a browser can never trigger a write via
-a plain form post (no separate CSRF token is needed for `/api`, since a
-browser never sends an `Authorization` header on its own). Any request
-missing valid credentials gets a plain `401 {"error":"…"}` instead of the
-UI's redirect to `/login`.
+a plain form post. Any request missing valid credentials gets a plain
+`401 {"error":"…"}` instead of the UI's redirect to `/login`.
 
 ### API tokens
 
-Create a personal token at **API tokens** (`/account/tokens`) while logged
-in: give it a label and it's created immediately. The raw token (`alm_...`)
-is shown **once**, right after creation — copy it then, since only its hash
-is stored and it cannot be redisplayed. Revoke a token from the same page at
-any time; each user only sees and can revoke their own tokens. There are no
-per-token scopes yet — a token carries its owner's full access, same as their
-session would.
+Create a personal token at **API tokens** (`/account/tokens`) while logged in:
+give it a label and a **scope** — `read-write` or `read-only`. A request's
+effective permission is the intersection of the token's scope and its owner's
+role (a viewer's token can never write, and a read-only token can't write
+even for an admin).
+
+The raw token (`alm_...`) is shown **once**, right after creation — copy it
+then, since only its hash is stored. Revoke a token from the same page at any
+time; each user only sees and can revoke their own tokens.
 
 Send the token as a bearer header:
 
@@ -448,26 +560,24 @@ curl -X POST http://localhost:8080/api/hosts \
 | `GET /api/relationships` | All relationships |
 
 `{type}` bases mirror the web UI's routes, not a naive plural of the entity
-name — `hardware`, not `hardwares` (see the entity list under
-[What it does](#what-it-does) for the full set). Field names match the YAML
-export (snake_case), and request bodies use the same shape. Responses are
-`application/json`.
+name — `hardware`, not `hardwares` (see [The inventory model](#the-inventory-model)
+for the full set). Field names match the YAML export (snake_case), and request
+bodies use the same shape. Responses are `application/json`.
 
 Every API write is recorded in the same per-entity **change history** as UI
-edits (see [History & journal](#history--journal)), attributed to the
-token's owning user — so `GET /history` and each entity's Change history show
-exactly who made a scripted change, same as a UI edit.
+edits, attributed to the token's owning user — so `GET /history` and each
+entity's Change history show exactly who made a scripted change.
 
 ```bash
-curl -s http://localhost:8080/api/certificates | jq '.[] | {subject, expires_on}'
+curl -s http://localhost:8080/api/certificates \
+  -H "Authorization: Bearer alm_..." | jq '.[] | {subject, expires_on}'
 ```
 
 ## Metrics
 
-`GET /metrics` exposes aggregate inventory gauges in the Prometheus text format.
-When authentication is enabled, `/metrics` is authenticated like the JSON API:
-create an API token at **API tokens** (`/account/tokens`) and pass it as a
-bearer token. A logged-in browser can also view it via its session cookie.
+`GET /metrics` exposes aggregate inventory gauges in the Prometheus text
+format. It is authenticated like the JSON API: pass an API token as a bearer
+token (a logged-in browser can also view it via its session cookie).
 
 | Metric | Meaning |
 |---|---|
@@ -489,30 +599,6 @@ scrape_configs:
     static_configs:
       - targets: ["almanaut.example:8080"]
 ```
-
-When authentication is disabled, the endpoint is open:
-
-```bash
-curl -s http://localhost:8080/metrics
-```
-
-## History & journal
-
-Every create, update, and delete is recorded automatically with a field-level
-diff (e.g. `status: running → down`). Each entity's detail page shows its
-**Journal** — manual, categorised notes (info / success / warning / incident)
-you add as a running log — and a collapsible **Change history**. A global
-**`/history`** feed (and a "Recent activity" panel on the dashboard) lists the
-latest changes across every entity; delete events remain visible there even
-after the entity is gone. Journal entries are included in the YAML export;
-the change log is not.
-
-The change log is append-only and cannot be edited or deleted from the UI, so
-it **retains prior values of edited fields** — including account fields such as
-`username`, `password_manager`, and `secret_ref`. This is consistent with the
-trusted-LAN model (`/export` already exposes those fields, and `secret_ref` is a
-pointer, not a stored secret), but be aware that a value you later change is not
-scrubbed from the history.
 
 ## Health & version
 
@@ -538,39 +624,6 @@ go build -ldflags "-X main.version=v0.2.0" -o almanaut .
 docker build --build-arg VERSION=v0.2.0 -t almanaut .
 ```
 
-## Auto-discovery
-
-To enable Docker container discovery, mount the Docker socket read-only into the container:
-
-```bash
-docker run --rm -p 8080:8080 -v almanaut-data:/data -v /var/run/docker.sock:/var/run/docker.sock:ro ghcr.io/dealisto/almanaut:dev
-```
-
-If your Docker socket is at a non-standard path, override it with the `ALMANAUT_DOCKER_SOCKET` environment variable.
-
-Then navigate to **Discover → Docker containers** to scan for containers. Optionally select a host, choose the containers you want to import, and they will be created as Services with an automatic "runs on" relationship to the selected host. Discovery only reads from the socket and creates new Services—it never overwrites your manual data.
-
-### Network scan
-
-To enable network subnet scanning, set `ALMANAUT_ENABLE_NETWORK_SCAN=true`. Optionally set `ALMANAUT_SCAN_SUBNET` to pre-fill the subnet in the scan form.
-
-Then navigate to **Discover → Network scan**, enter a subnet (CIDR) and optional ports, click Scan, pick a host type, select the hosts you want to import, and they will be created. The scan is a lightweight pure-Go TCP-connect probe (a host is considered "live" if at least one probed port is open). Network discovery only ever creates new Hosts and never overwrites your manual data. Subnets larger than 1024 hosts are rejected.
-
-### Proxmox
-
-To enable Proxmox discovery, set both `ALMANAUT_PROXMOX_URL` (e.g. `https://pve.lan:8006`) and `ALMANAUT_PROXMOX_TOKEN`. The token must be a Proxmox API token with read access. To create one:
-
-1. Log in to your Proxmox VE web interface
-2. Navigate to **Datacenter → Permissions → API Tokens**
-3. Click **Add**
-4. Choose a user (e.g. `root`) and token ID
-5. Assign the **PVEAuditor** role (or equivalent read-only role) to the token
-6. Copy the token in the format `user@realm!tokenid=secret` and set it as `ALMANAUT_PROXMOX_TOKEN`
-
-If your Proxmox server uses a self-signed certificate (the default), set `ALMANAUT_PROXMOX_INSECURE=true` to skip TLS verification.
-
-Then navigate to **Discover → Proxmox**, review the discovered resources, optionally keep "Link VMs/LXC to their Proxmox node" checked to create "runs on" relationships, select what to import, and click Import. Proxmox nodes are imported as `physical` hosts, QEMU VMs as `vm` hosts, and LXC containers as `lxc` hosts. Proxmox discovery only reads and only ever creates new Hosts—it never overwrites your manual data.
-
 ## License
 
-MIT (see LICENSE).
+[MIT](LICENSE)
