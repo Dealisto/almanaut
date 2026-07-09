@@ -317,11 +317,15 @@ Leave `ALMANAUT_NTFY_URL` unset to disable notifications entirely.
 ### Outbound webhooks
 
 Set `ALMANAUT_WEBHOOKS_ENABLED=true` to push a signed HTTP payload to your own
-endpoints on entity create/update/delete; endpoints are managed in the admin UI
-(coming in a follow-up PR), each with its own HMAC secret, and every delivery
-carries an `X-Almanaut-Signature: sha256=<hex>` header. Each delivery also
-carries an `X-Almanaut-Delivery: <id>` header, stable across retries, for
-receiver-side idempotency/dedup.
+endpoints on entity create/update/delete. Admins manage endpoints on the
+**Webhooks** page (`/webhooks`): add one by URL, optionally scope it to
+specific entity types and events (leave everything unchecked to fire on
+everything), and enable/disable or edit its URL and filters later. A signing
+secret is generated when the endpoint is created and shown **once** — copy it
+then, since receivers verify each delivery's `X-Almanaut-Signature:
+sha256=<hex>` header with it. Each delivery also carries an
+`X-Almanaut-Delivery: <id>` header, stable across retries, for receiver-side
+idempotency/dedup.
 
 ## Export & import
 
