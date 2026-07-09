@@ -17,9 +17,11 @@ import (
 var errLastUser = errors.New("cannot delete the last remaining user")
 
 type usersPageData struct {
-	Title string
-	Users []domain.User
-	Error string
+	Title   string
+	Users   []domain.User
+	Roles   []domain.Role
+	NewRole domain.Role // default selection for the create-user form (least privilege)
+	Error   string
 }
 
 type passwordPageData struct {
@@ -35,7 +37,7 @@ func renderUsers(w http.ResponseWriter, r *http.Request, users *store.UserRepo, 
 		serverError(w, r, err)
 		return
 	}
-	render(w, r, "users.html", usersPageData{Title: "Users", Users: list, Error: errMsg})
+	render(w, r, "users.html", usersPageData{Title: "Users", Users: list, Roles: domain.Roles, NewRole: domain.RoleViewer, Error: errMsg})
 }
 
 func listUsers(users *store.UserRepo) http.HandlerFunc {
@@ -76,6 +78,25 @@ func createUser(users *store.UserRepo) http.HandlerFunc {
 		now := nowRFC3339()
 		if _, err := users.Create(domain.User{Username: username, Role: role, PasswordHash: hash, CreatedAt: now, UpdatedAt: now}); err != nil {
 			serverError(w, r, err)
+			return
+		}
+		http.Redirect(w, r, "/users", http.StatusSeeOther)
+	}
+}
+
+func updateUserRole(users *store.UserRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := userIDParam(w, r)
+		if !ok {
+			return
+		}
+		role := domain.Role(strings.TrimSpace(r.FormValue("role")))
+		if !role.Valid() {
+			renderUsers(w, r, users, "invalid role")
+			return
+		}
+		if err := users.UpdateRole(id, role, nowRFC3339()); err != nil {
+			notFoundOrServerError(w, r, "user", err)
 			return
 		}
 		http.Redirect(w, r, "/users", http.StatusSeeOther)

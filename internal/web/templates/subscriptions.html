@@ -5,7 +5,7 @@
     <h1>Subscriptions</h1>
   </div>
   <div class="ph-actions">
-    <a class="btn btn-primary" href="/subscriptions/new">+ New subscription</a>
+    {{if canWrite}}<a class="btn btn-primary" href="/subscriptions/new">+ New subscription</a>{{end}}
   </div>
 </div>
 {{if .Items}}
@@ -22,12 +22,14 @@
       <td>{{.BillingCycle}}</td>
       <td>{{.RenewalDate}}</td>
       <td>
+        {{if canWrite}}
         <a class="btn" href="/subscriptions/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/subscriptions/{{.ID}}/delete"
               onsubmit="return confirm('Delete this subscription?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        {{end}}
       </td>
     </tr>
   {{end}}

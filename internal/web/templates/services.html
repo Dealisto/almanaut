@@ -5,7 +5,7 @@
     <h1>Services</h1>
   </div>
   <div class="ph-actions">
-    <a class="btn btn-primary" href="/services/new">+ New service</a>
+    {{if canWrite}}<a class="btn btn-primary" href="/services/new">+ New service</a>{{end}}
   </div>
 </div>
 {{if .Items}}
@@ -21,12 +21,14 @@
       <td>{{.Ports}}</td>
       <td>{{.Category}}</td>
       <td>
+        {{if canWrite}}
         <a class="btn" href="/services/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/services/{{.ID}}/delete"
               onsubmit="return confirm('Delete this service?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        {{end}}
       </td>
     </tr>
   {{end}}

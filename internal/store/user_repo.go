@@ -78,6 +78,18 @@ func (r *UserRepo) UpdatePassword(id int64, passwordHash, updatedAt string) erro
 	return rowsAffectedOrNotFound(res)
 }
 
+// UpdateRole sets the role of the user with id.
+func (r *UserRepo) UpdateRole(id int64, role domain.Role, updatedAt string) error {
+	res, err := r.db.Exec(
+		`UPDATE users SET role = ?, updated_at = ? WHERE id = ?`,
+		string(role), updatedAt, id,
+	)
+	if err != nil {
+		return fmt.Errorf("update user role: %w", err)
+	}
+	return rowsAffectedOrNotFound(res)
+}
+
 // Delete removes the user with the given id (its sessions cascade away).
 func (r *UserRepo) Delete(id int64) error {
 	if _, err := r.db.Exec(`DELETE FROM users WHERE id = ?`, id); err != nil {

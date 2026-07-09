@@ -5,7 +5,7 @@
     <h1>VLANs</h1>
   </div>
   <div class="ph-actions">
-    <a class="btn btn-primary" href="/vlans/new">+ New VLAN</a>
+    {{if canWrite}}<a class="btn btn-primary" href="/vlans/new">+ New VLAN</a>{{end}}
   </div>
 </div>
 {{if .Items}}
@@ -18,12 +18,14 @@
       <td><a href="/vlans/{{.ID}}">{{.VID}}</a></td>
       <td>{{.Name}}</td>
       <td>
+        {{if canWrite}}
         <a class="btn" href="/vlans/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/vlans/{{.ID}}/delete"
               onsubmit="return confirm('Delete this VLAN?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        {{end}}
       </td>
     </tr>
   {{end}}

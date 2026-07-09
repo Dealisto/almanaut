@@ -5,7 +5,7 @@
     <h1>Hardware</h1>
   </div>
   <div class="ph-actions">
-    <a class="btn btn-primary" href="/hardware/new">+ New hardware</a>
+    {{if canWrite}}<a class="btn btn-primary" href="/hardware/new">+ New hardware</a>{{end}}
   </div>
 </div>
 {{if .Items}}
@@ -21,12 +21,14 @@
       <td>{{.Model}}</td>
       <td>{{.WarrantyEnd}}</td>
       <td>
+        {{if canWrite}}
         <a class="btn" href="/hardware/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/hardware/{{.ID}}/delete"
               onsubmit="return confirm('Delete this hardware?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        {{end}}
       </td>
     </tr>
   {{end}}

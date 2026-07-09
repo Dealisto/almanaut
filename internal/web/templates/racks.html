@@ -5,7 +5,7 @@
     <h1>Racks</h1>
   </div>
   <div class="ph-actions">
-    <a class="btn btn-primary" href="/racks/new">+ New rack</a>
+    {{if canWrite}}<a class="btn btn-primary" href="/racks/new">+ New rack</a>{{end}}
   </div>
 </div>
 {{if .Items}}
@@ -18,12 +18,14 @@
       <td><a href="/racks/{{.ID}}">{{.Name}}</a></td>
       <td>{{.UHeight}}</td>
       <td>
+        {{if canWrite}}
         <a class="btn" href="/racks/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/racks/{{.ID}}/delete"
               onsubmit="return confirm('Delete this rack?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        {{end}}
       </td>
     </tr>
   {{end}}

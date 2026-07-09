@@ -7,19 +7,27 @@
 </div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 <table class="list">
-  <thead><tr><th>Username</th><th>Created</th><th></th></tr></thead>
+  <thead><tr><th>Username</th><th>Role</th><th>Created</th><th></th></tr></thead>
   <tbody>
-  {{range .Users}}
+  {{range $user := .Users}}
     <tr>
-      <td>{{.Username}}</td>
-      <td>{{.CreatedAt}}</td>
+      <td>{{$user.Username}}</td>
+      <td>{{$user.Role}}</td>
+      <td>{{$user.CreatedAt}}</td>
       <td class="row-actions">
-        <form method="post" action="/users/{{.ID}}/password" class="inline">
+        <form method="post" action="/users/{{$user.ID}}/role" class="inline">
+          {{ csrfField }}
+          <select name="role">
+            {{range $.Roles}}<option value="{{.}}"{{if eq . $user.Role}} selected{{end}}>{{.}}</option>{{end}}
+          </select>
+          <button class="btn" type="submit">Set role</button>
+        </form>
+        <form method="post" action="/users/{{$user.ID}}/password" class="inline">
           {{ csrfField }}
           <input name="password" type="password" placeholder="new password" required>
           <button class="btn" type="submit">Reset</button>
         </form>
-        <form method="post" action="/users/{{.ID}}/delete" class="inline">
+        <form method="post" action="/users/{{$user.ID}}/delete" class="inline">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
@@ -33,6 +41,11 @@
   {{ csrfField }}
   <label>Username<input name="username" required></label>
   <label>Password<input name="password" type="password" required></label>
+  <label>Role
+    <select name="role">
+      {{range .Roles}}<option value="{{.}}"{{if eq . $.NewRole}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </label>
   <div class="actions">
     <button class="btn btn-primary" type="submit">Create</button>
   </div>

@@ -7,6 +7,7 @@
 </div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 {{if .Options}}
+{{if canWrite}}
 <section class="panel">
   <h2>Add relationship</h2>
   <form class="rel-form" method="post" action="/relationships">
@@ -23,6 +24,7 @@
     <button class="btn btn-primary" type="submit">Add relationship</button>
   </form>
 </section>
+{{end}}
 {{else}}
 <p class="muted">Create some entities first, then you can link them here.</p>
 {{end}}
@@ -37,11 +39,13 @@
       <td>{{.Kind}}</td>
       <td>{{.ToLabel}}</td>
       <td>
+        {{if canWrite}}
         <form class="form-inline" method="post" action="/relationships/{{.ID}}/delete"
               onsubmit="return confirm('Delete this relationship?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        {{end}}
       </td>
     </tr>
   {{end}}

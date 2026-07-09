@@ -23,6 +23,8 @@ var pages = func() map[string]*template.Template {
 					"isActive":    func(string) bool { return false },
 					"theme":       func() string { return "system" },
 					"currentUser": func() string { return "" },
+					"canWrite":    func() bool { return false },
+					"isAdmin":     func() bool { return false },
 				}).
 				ParseFS(templatesFS, "templates/layout.html", "templates/custom_fields_form.html", "templates/"+page),
 		)
@@ -69,6 +71,20 @@ func render(w http.ResponseWriter, r *http.Request, page string, data any) {
 				return u.Username
 			}
 			return ""
+		},
+		// When auth is disabled there is no user in context and thus no RBAC:
+		// show every control rather than hiding them behind a false default.
+		"canWrite": func() bool {
+			if _, ok := userFrom(r.Context()); !ok {
+				return true
+			}
+			return effectiveCanWrite(r.Context())
+		},
+		"isAdmin": func() bool {
+			if _, ok := userFrom(r.Context()); !ok {
+				return true
+			}
+			return effectiveIsAdmin(r.Context())
 		},
 	})
 	var buf bytes.Buffer
