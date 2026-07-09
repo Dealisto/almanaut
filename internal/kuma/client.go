@@ -319,3 +319,72 @@ func okOrError(raw json.RawMessage) error {
 	}
 	return nil
 }
+
+// addDefaults are the fields Kuma's UI sends for a new HTTP monitor; sending
+// them keeps the created monitor identical to a hand-made one with defaults.
+func addPayload(m Monitor) map[string]any {
+	return map[string]any{
+		"type":                 "http",
+		"name":                 m.Name,
+		"url":                  m.URL,
+		"method":               "GET",
+		"interval":             60,
+		"retryInterval":        60,
+		"resendInterval":       0,
+		"maxretries":           1,
+		"notificationIDList":   map[string]any{},
+		"accepted_statuscodes": []string{"200-299"},
+	}
+}
+
+// Add creates an HTTP monitor and returns its Kuma id.
+func (s *Session) Add(ctx context.Context, m Monitor) (int64, error) {
+	raw, err := s.emit(ctx, "add", addPayload(m))
+	if err != nil {
+		return 0, fmt.Errorf("add %q: %w", m.Name, err)
+	}
+	var res ackResult
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return 0, fmt.Errorf("add %q: malformed ack %.128q", m.Name, string(raw))
+	}
+	if !res.OK {
+		return 0, fmt.Errorf("add %q: kuma refused: %.200s", m.Name, res.Msg)
+	}
+	if res.MonitorID == 0 {
+		return 0, fmt.Errorf("add %q: ack carried no monitorID", m.Name)
+	}
+	return res.MonitorID, nil
+}
+
+// Edit updates a monitor's name and url. The raw object from the monitorList
+// is round-tripped so fields almanaut does not manage (interval, retries,
+// notification assignments, ...) survive the edit.
+func (s *Session) Edit(ctx context.Context, m Monitor) error {
+	obj := make(map[string]any, len(m.raw)+3)
+	for k, v := range m.raw {
+		obj[k] = v
+	}
+	obj["id"] = m.ID
+	obj["name"] = m.Name
+	obj["url"] = m.URL
+	raw, err := s.emit(ctx, "editMonitor", obj)
+	if err != nil {
+		return fmt.Errorf("edit monitor %d: %w", m.ID, err)
+	}
+	if err := okOrError(raw); err != nil {
+		return fmt.Errorf("edit monitor %d: %w", m.ID, err)
+	}
+	return nil
+}
+
+// Delete removes a monitor by Kuma id.
+func (s *Session) Delete(ctx context.Context, id int64) error {
+	raw, err := s.emit(ctx, "deleteMonitor", id)
+	if err != nil {
+		return fmt.Errorf("delete monitor %d: %w", id, err)
+	}
+	if err := okOrError(raw); err != nil {
+		return fmt.Errorf("delete monitor %d: %w", id, err)
+	}
+	return nil
+}
