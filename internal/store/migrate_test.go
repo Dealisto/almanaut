@@ -144,3 +144,28 @@ func TestMigrateCreatesAPITokensTable(t *testing.T) {
 		t.Fatalf("api_tokens table not created: %v", err)
 	}
 }
+
+func TestUserRoleColumnBackfillsAdmin(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	// Insert as a legacy caller would (no role column) → DEFAULT must apply.
+	if _, err := db.Exec(
+		`INSERT INTO users (username, password_hash, created_at, updated_at) VALUES ('legacy','h','t','t')`,
+	); err != nil {
+		t.Fatalf("insert legacy user: %v", err)
+	}
+	var role string
+	if err := db.QueryRow(`SELECT role FROM users WHERE username='legacy'`).Scan(&role); err != nil {
+		t.Fatalf("scan role: %v", err)
+	}
+	if role != "admin" {
+		t.Fatalf("legacy role = %q, want admin (no silent privilege loss)", role)
+	}
+}
