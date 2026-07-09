@@ -3,6 +3,7 @@ module github.com/Dealisto/almanaut
 go 1.26.5
 
 require (
+	github.com/coder/websocket v1.8.15
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/yuin/goldmark v1.8.2
 	golang.org/x/crypto v0.53.0

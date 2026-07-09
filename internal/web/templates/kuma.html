@@ -1,0 +1,37 @@
+{{/* internal/web/templates/kuma.html */}}
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <p class="ph-eyebrow">Administration</p>
+    <h1>Uptime Kuma</h1>
+  </div>
+</div>
+
+{{if .Message}}<div class="notice">Sync requested — it runs in the background; reload to see the result.</div>{{end}}
+
+<div class="panel">
+  <h2>Status</h2>
+  <table>
+    <tr><th>Instance</th><td class="mono">{{.URL}}</td></tr>
+    <tr><th>Last sync</th><td>
+      {{if .Last.Ran}}
+        {{.Last.Time.Format "2006-01-02 15:04:05"}}
+        {{if .Last.Summary.Err}}
+          — failed: {{.Last.Summary.Err}}
+        {{else}}
+          — ok: {{.Last.Summary.Created}} created, {{.Last.Summary.Updated}} updated,
+          {{.Last.Summary.Deleted}} deleted, {{.Last.Summary.Skipped}} skipped (no URL)
+        {{end}}
+      {{else}}
+        never
+      {{end}}
+    </td></tr>
+  </table>
+  <form method="post" action="/kuma/sync">
+    {{ csrfField }}
+    <button class="btn btn-primary" type="submit">Sync now</button>
+  </form>
+  <p class="muted">Services with an http(s) URL are created as HTTP monitors.
+  Only monitors created by almanaut are ever updated or deleted.</p>
+</div>
+{{end}}

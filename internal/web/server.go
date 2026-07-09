@@ -50,6 +50,8 @@ type Config struct {
 	// Webhooks receives entity-change events for outbound delivery. Nil defaults
 	// to a no-op dispatcher (webhooks disabled).
 	Webhooks webhook.Dispatcher
+	// Kuma wires the Uptime Kuma sync admin page. Zero value = disabled.
+	Kuma KumaOptions
 }
 
 // New builds the HTTP handler with all routes wired to the given repos.
@@ -500,6 +502,9 @@ func New(cfg Config) http.Handler {
 	r.Use(injectLogger(logger))
 	r.Use(recoverer(logger))
 	r.Use(securityHeaders)
+	if cfg.Kuma.Enabled {
+		r.Use(markKumaEnabled)
+	}
 
 	// Unauthenticated operational endpoints, registered before the auth/CSRF
 	// group so a container HEALTHCHECK or probe can reach them without creds.
@@ -568,6 +573,11 @@ func New(cfg Config) http.Handler {
 				r.Post("/webhooks/{id}", updateWebhook(webhooks))
 				r.Post("/webhooks/{id}/toggle", toggleWebhook(webhooks))
 				r.Post("/webhooks/{id}/delete", deleteWebhook(webhooks))
+
+				if cfg.Kuma.Enabled {
+					r.Get("/kuma", kumaPage(cfg.Kuma))
+					r.Post("/kuma/sync", kumaSyncNow(cfg.Kuma))
+				}
 			})
 		}
 

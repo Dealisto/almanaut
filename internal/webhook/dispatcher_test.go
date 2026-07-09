@@ -129,3 +129,16 @@ func TestQueueOneFailingEndpointDoesNotBlockSibling(t *testing.T) {
 		t.Fatalf("failing endpoint attempts = %d, want 3", n)
 	}
 }
+
+type recordingDispatcher struct{ got []Event }
+
+func (r *recordingDispatcher) Dispatch(events ...Event) { r.got = append(r.got, events...) }
+
+func TestMultiFansOut(t *testing.T) {
+	a, b := &recordingDispatcher{}, &recordingDispatcher{}
+	m := Multi{a, b}
+	m.Dispatch(Event{Type: "service", ID: 1}, Event{Type: "host", ID: 2})
+	if len(a.got) != 2 || len(b.got) != 2 {
+		t.Fatalf("fan-out incomplete: a=%d b=%d", len(a.got), len(b.got))
+	}
+}

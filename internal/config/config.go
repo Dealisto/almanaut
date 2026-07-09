@@ -33,6 +33,11 @@ type Config struct {
 	WebhooksEnabled    bool          // ALMANAUT_WEBHOOKS_ENABLED — master switch for outbound webhooks
 	WebhookTimeout     time.Duration // ALMANAUT_WEBHOOK_TIMEOUT — per-delivery HTTP timeout
 	WebhookMaxAttempts int           // ALMANAUT_WEBHOOK_MAX_ATTEMPTS — delivery attempts before giving up
+
+	KumaURL      string // ALMANAUT_KUMA_URL — Uptime Kuma base URL; with user+pass, enables the monitor sync
+	KumaUser     string // ALMANAUT_KUMA_USER — Kuma username (socket.io login; API keys don't cover monitor CRUD)
+	KumaPass     string // ALMANAUT_KUMA_PASS — Kuma password (or _FILE)
+	KumaInsecure bool   // ALMANAUT_KUMA_INSECURE — skip TLS verification (self-signed cert)
 }
 
 // Load reads configuration from the environment, falling back to defaults. It
@@ -52,6 +57,10 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	discordWebhookURL, err := secretFromEnv("ALMANAUT_DISCORD_WEBHOOK_URL")
+	if err != nil {
+		return Config{}, err
+	}
+	kumaPass, err := secretFromEnv("ALMANAUT_KUMA_PASS")
 	if err != nil {
 		return Config{}, err
 	}
@@ -76,6 +85,10 @@ func Load() (Config, error) {
 		WebhooksEnabled:    getenvBool("ALMANAUT_WEBHOOKS_ENABLED", false),
 		WebhookTimeout:     getenvDuration("ALMANAUT_WEBHOOK_TIMEOUT", 10*time.Second),
 		WebhookMaxAttempts: getenvInt("ALMANAUT_WEBHOOK_MAX_ATTEMPTS", 5),
+		KumaURL:            getenv("ALMANAUT_KUMA_URL", ""),
+		KumaUser:           getenv("ALMANAUT_KUMA_USER", ""),
+		KumaPass:           kumaPass,
+		KumaInsecure:       getenvBool("ALMANAUT_KUMA_INSECURE", false),
 	}, nil
 }
 

@@ -252,6 +252,10 @@ and set `ALMANAUT_SECURE_COOKIES=true` once you do.
 | `ALMANAUT_WEBHOOKS_ENABLED`   | `false`              | Master switch for outbound webhooks; disabled leaves delivery off |
 | `ALMANAUT_WEBHOOK_TIMEOUT`    | `10s`                | Per-delivery HTTP timeout for webhook requests (Go duration, e.g. `5s`) |
 | `ALMANAUT_WEBHOOK_MAX_ATTEMPTS` | `5`                | Delivery attempts (with backoff) before giving up and logging the drop |
+| `ALMANAUT_KUMA_URL`           | (empty)              | Uptime Kuma base URL (e.g. `http://kuma.lan:3001`); enables the monitor sync when set together with user and pass |
+| `ALMANAUT_KUMA_USER`          | (empty)              | Kuma username (socket.io login; API keys don't cover monitor CRUD) |
+| `ALMANAUT_KUMA_PASS`          | (empty)              | Kuma password (supports the `_FILE` convention) |
+| `ALMANAUT_KUMA_INSECURE`      | `false`              | Skip TLS verification for a self-signed Kuma certificate |
 
 ### Secrets from files
 
@@ -331,6 +335,25 @@ then, since receivers verify each delivery's `X-Almanaut-Signature:
 sha256=<hex>` header with it. Each delivery also carries an
 `X-Almanaut-Delivery: <id>` header, stable across retries, for receiver-side
 idempotency/dedup.
+
+### Uptime Kuma sync
+
+Set `ALMANAUT_KUMA_URL`, `ALMANAUT_KUMA_USER`, and `ALMANAUT_KUMA_PASS` (or
+`_FILE`) to one-way sync services with an http(s) URL to
+[Uptime Kuma](https://github.com/louislam/uptime-kuma) HTTP monitors — the
+sync is disabled unless all three are set. It logs in and manages monitors
+through Kuma's internal socket.io API rather than a stable REST API, since
+Kuma has no public API for monitor CRUD; **pin your Kuma version**, since that
+internal API can change between releases. 2FA-enabled Kuma accounts are not
+supported — use a dedicated account without 2FA. Only monitors that almanaut
+itself created are ever touched — existing monitors you made by hand in Kuma
+are left alone. Check status and trigger an on-demand resync from the
+**Kuma** admin page (`/kuma`). A whole-inventory YAML import (**Data →
+Import**) does not itself trigger a sync — use the **Sync now** button on
+`/kuma` afterwards. If a create's acknowledgment is lost mid-flight (e.g. Kuma
+restarting during a sync), the monitor can end up created in Kuma with no
+matching almanaut record; almanaut logs this case, and the orphaned monitor
+should be removed by hand in Kuma before the next sync creates a duplicate.
 
 ## Export & import
 

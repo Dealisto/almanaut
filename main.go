@@ -16,6 +16,7 @@ import (
 
 	"github.com/Dealisto/almanaut/internal/config"
 	"github.com/Dealisto/almanaut/internal/discovery"
+	"github.com/Dealisto/almanaut/internal/kuma"
 	"github.com/Dealisto/almanaut/internal/notify"
 	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/Dealisto/almanaut/internal/web"
@@ -68,6 +69,27 @@ func main() {
 		log.Println("outbound webhooks enabled")
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Uptime Kuma monitor sync: opt-in, enabled only when URL + user + pass
+	// are all configured. The syncer receives the same post-commit events as
+	// the webhook queue (fan-out) and also serves the admin Sync-now button.
+	kumaOpts := web.KumaOptions{}
+	kumaEnabled := cfg.KumaURL != "" && cfg.KumaUser != "" && cfg.KumaPass != ""
+	if kumaEnabled {
+		syncer := kuma.NewSyncer(
+			kuma.NewClient(cfg.KumaURL, cfg.KumaUser, cfg.KumaPass, cfg.KumaInsecure),
+			store.NewServiceRepo(db),
+			store.NewKumaRepo(db),
+			log.Default(),
+		)
+		go syncer.Start(ctx)
+		dispatcher = webhook.Multi{dispatcher, syncer}
+		kumaOpts = web.KumaOptions{Enabled: true, URL: cfg.KumaURL, Syncer: syncer}
+		log.Println("uptime kuma sync enabled")
+	}
+
 	handler := web.New(web.Config{
 		Hosts:         store.NewHostRepo(db),
 		Services:      store.NewServiceRepo(db),
@@ -96,6 +118,7 @@ func main() {
 		SecureCookies: cfg.SecureCookies,
 		Version:       version,
 		Webhooks:      dispatcher,
+		Kuma:          kumaOpts,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
@@ -114,9 +137,6 @@ func main() {
 			serverErr <- err
 		}
 	}()
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	// Expiry notifications are opt-in: only run when at least one channel is
 	// configured. Every configured channel receives each alert (fan-out).
