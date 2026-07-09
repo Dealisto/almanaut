@@ -20,7 +20,7 @@ const webhookCols = `id, url, secret, enabled, entity_types, events, created_at`
 func (r *WebhookRepo) Create(w domain.Webhook) (int64, error) {
 	res, err := r.db.Exec(
 		`INSERT INTO webhooks (url, secret, enabled, entity_types, events, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		w.URL, w.Secret, boolInt(w.Enabled), whJoin(w.EntityTypes), whJoin(w.Events), w.CreatedAt,
+		w.URL, w.Secret, boolToInt(w.Enabled), whJoin(w.EntityTypes), whJoin(w.Events), w.CreatedAt,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert webhook: %w", err)
@@ -61,7 +61,7 @@ func (r *WebhookRepo) query(sqlStr string) ([]domain.Webhook, error) {
 func (r *WebhookRepo) Update(w domain.Webhook) error {
 	res, err := r.db.Exec(
 		`UPDATE webhooks SET url=?, secret=?, enabled=?, entity_types=?, events=? WHERE id=?`,
-		w.URL, w.Secret, boolInt(w.Enabled), whJoin(w.EntityTypes), whJoin(w.Events), w.ID,
+		w.URL, w.Secret, boolToInt(w.Enabled), whJoin(w.EntityTypes), whJoin(w.Events), w.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update webhook: %w", err)
@@ -89,13 +89,6 @@ func scanWebhook(s scanner) (domain.Webhook, error) {
 	w.EntityTypes = whSplit(types)
 	w.Events = whSplit(events)
 	return w, nil
-}
-
-func boolInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 func whJoin(items []string) string { return strings.Join(items, ",") }
