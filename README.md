@@ -248,6 +248,9 @@ and set `ALMANAUT_SECURE_COOKIES=true` once you do.
 | `ALMANAUT_NTFY_TOKEN`         | (empty)              | Optional bearer token for a protected ntfy topic (supports the `_FILE` convention) |
 | `ALMANAUT_NOTIFY_WITHIN_DAYS` | `30`                 | Days ahead to treat certificates/warranties/renewals as "expiring soon" |
 | `ALMANAUT_NOTIFY_INTERVAL`    | `24h`                | How often the notifier checks (Go duration, e.g. `12h`) |
+| `ALMANAUT_WEBHOOKS_ENABLED`   | `false`              | Master switch for outbound webhooks; disabled leaves delivery off |
+| `ALMANAUT_WEBHOOK_TIMEOUT`    | `10s`                | Per-delivery HTTP timeout for webhook requests (Go duration, e.g. `5s`) |
+| `ALMANAUT_WEBHOOK_MAX_ATTEMPTS` | `5`                | Delivery attempts (with backoff) before giving up and logging the drop |
 
 ### Secrets from files
 
@@ -310,6 +313,13 @@ renewal falls within `ALMANAUT_NOTIFY_WITHIN_DAYS` (default 30). Each item
 notifies **once**; renewing it (pushing the date beyond the window) re-arms it
 for next time. The check runs at startup and every `ALMANAUT_NOTIFY_INTERVAL`.
 Leave `ALMANAUT_NTFY_URL` unset to disable notifications entirely.
+
+### Outbound webhooks
+
+Set `ALMANAUT_WEBHOOKS_ENABLED=true` to push a signed HTTP payload to your own
+endpoints on entity create/update/delete; endpoints are managed in the admin UI
+(coming in a follow-up PR), each with its own HMAC secret, and every delivery
+carries an `X-Almanaut-Signature: sha256=<hex>` header.
 
 ## Export & import
 
