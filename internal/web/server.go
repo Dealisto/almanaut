@@ -532,54 +532,71 @@ func New(cfg Config) http.Handler {
 		// unsafe request, so an oversize upload is rejected up front.
 		r.Use(limitBody)
 		r.Use(csrfProtect(cfg.SecureCookies))
+
+		// Self-service: available to every authenticated user regardless of role.
 		if cfg.AuthEnabled {
 			r.Post("/logout", logout(sessions, cfg.SecureCookies))
-			r.Get("/users", listUsers(users))
-			r.Post("/users", createUser(users))
-			r.Post("/users/{id}/delete", deleteUser(users, db))
-			r.Post("/users/{id}/password", resetUserPassword(users))
 			r.Get("/account/password", changePasswordForm)
 			r.Post("/account/password", changePassword(users))
 			r.Get("/account/tokens", listTokens(tokens))
 			r.Post("/account/tokens", createToken(tokens))
 			r.Post("/account/tokens/{id}/delete", deleteToken(tokens))
 		}
-		r.Get("/", dashboard(repos, relationships, cat, changelog))
-		for _, rs := range resources {
-			rs.mount(r, deps)
+		r.Post("/theme", setTheme(cfg.SecureCookies)) // UI preference, any role
+
+		// Admin-only: user management. requireAdmin only meaningful with auth on.
+		if cfg.AuthEnabled {
+			r.Group(func(r chi.Router) {
+				r.Use(requireAdmin)
+				r.Get("/users", listUsers(users))
+				r.Post("/users", createUser(users))
+				r.Post("/users/{id}/delete", deleteUser(users, db))
+				r.Post("/users/{id}/password", resetUserPassword(users))
+			})
 		}
-		r.Post("/tags", addTag(tags, cat))
-		r.Post("/tags/delete", removeTag(tags, cat))
-		r.Get("/tags", tagsOverview(tags, cat))
 
-		r.Get("/custom-fields", customFieldsPage(customFields))
-		r.Post("/custom-fields", createCustomField(customFields))
-		r.Post("/custom-fields/{id}", updateCustomFieldLabel(customFields))
-		r.Post("/custom-fields/{id}/delete", deleteCustomField(customFields))
+		// Everything else: readable by all, mutations gated to writers. GET passes
+		// requireWrite untouched; POST/PUT/DELETE require an effective writer.
+		r.Group(func(r chi.Router) {
+			if cfg.AuthEnabled {
+				r.Use(requireWrite)
+			}
+			r.Get("/", dashboard(repos, relationships, cat, changelog))
+			for _, rs := range resources {
+				rs.mount(r, deps)
+			}
+			r.Post("/tags", addTag(tags, cat))
+			r.Post("/tags/delete", removeTag(tags, cat))
+			r.Get("/tags", tagsOverview(tags, cat))
 
-		r.Get("/relationships", listRelationships(relationships, cat))
-		r.Post("/relationships", createRelationship(relationships, cat))
-		r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
-		r.Post("/journal/{id}/delete", deleteJournal(cat, deps))
-		r.Get("/attachments/{id}", downloadAttachment(deps))
-		r.Post("/attachments/{id}/delete", deleteAttachment(cat, deps))
-		r.Get("/impact", impactView(relationships, cat))
-		r.Get("/history", history(cat, changelog))
-		r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
-		r.Get("/search", searchEntities(cat, tags, customFields))
-		r.Get("/data", showData(cat))
-		r.Post("/theme", setTheme(cfg.SecureCookies))
-		r.Get("/export", exportData(db))
-		r.Post("/import", importData(db))
-		r.Post("/import-csv", importCSV(cat, deps))
-		r.Get("/discovery", discoveryLanding(netOpts, pveOpts))
-		r.Get("/discovery/docker", scanDocker(docker, services, hosts))
-		r.Post("/discovery/docker/import", importDocker(docker, services, relationships, db))
-		r.Get("/discovery/network", networkForm(netOpts))
-		r.Post("/discovery/network/scan", scanNetwork(netscan, hosts, netOpts))
-		r.Post("/discovery/network/import", importNetwork(hosts, netOpts, db))
-		r.Get("/discovery/proxmox", scanProxmox(proxmox, hosts, pveOpts))
-		r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts, db))
+			r.Get("/custom-fields", customFieldsPage(customFields))
+			r.Post("/custom-fields", createCustomField(customFields))
+			r.Post("/custom-fields/{id}", updateCustomFieldLabel(customFields))
+			r.Post("/custom-fields/{id}/delete", deleteCustomField(customFields))
+
+			r.Get("/relationships", listRelationships(relationships, cat))
+			r.Post("/relationships", createRelationship(relationships, cat))
+			r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
+			r.Post("/journal/{id}/delete", deleteJournal(cat, deps))
+			r.Get("/attachments/{id}", downloadAttachment(deps))
+			r.Post("/attachments/{id}/delete", deleteAttachment(cat, deps))
+			r.Get("/impact", impactView(relationships, cat))
+			r.Get("/history", history(cat, changelog))
+			r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
+			r.Get("/search", searchEntities(cat, tags, customFields))
+			r.Get("/data", showData(cat))
+			r.Get("/export", exportData(db))
+			r.Post("/import", importData(db))
+			r.Post("/import-csv", importCSV(cat, deps))
+			r.Get("/discovery", discoveryLanding(netOpts, pveOpts))
+			r.Get("/discovery/docker", scanDocker(docker, services, hosts))
+			r.Post("/discovery/docker/import", importDocker(docker, services, relationships, db))
+			r.Get("/discovery/network", networkForm(netOpts))
+			r.Post("/discovery/network/scan", scanNetwork(netscan, hosts, netOpts))
+			r.Post("/discovery/network/import", importNetwork(hosts, netOpts, db))
+			r.Get("/discovery/proxmox", scanProxmox(proxmox, hosts, pveOpts))
+			r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts, db))
+		})
 	})
 
 	// JSON API: authenticated by a bearer API token, or a session cookie for
@@ -590,6 +607,7 @@ func New(cfg Config) http.Handler {
 		r.Use(limitBody)
 		if cfg.AuthEnabled {
 			r.Use(apiAuth(tokens, sessions))
+			r.Use(requireWrite)
 		}
 		for _, rs := range resources {
 			rs.mountAPI(r, deps)
