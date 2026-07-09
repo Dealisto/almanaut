@@ -133,6 +133,26 @@ func TestTokenCreateDefaultsToReadWriteScope(t *testing.T) {
 	}
 }
 
+func TestCreateTokenHonorsScope(t *testing.T) {
+	db := rbacDB(t)
+	users := store.NewUserRepo(db)
+	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+		t.Fatalf("BootstrapAdmin: %v", err)
+	}
+	h := newAuthedTestHandler(t, db)
+	admin := adminSession(t, h)
+	if code := csrfPost(t, h, admin, "/account/tokens", "label=ci&scope=read-only"); code != http.StatusOK && code != http.StatusSeeOther {
+		t.Fatalf("create token = %d", code)
+	}
+	list, err := store.NewTokenRepo(db).ListByUser(1) // admin is user id 1
+	if err != nil || len(list) == 0 {
+		t.Fatalf("ListByUser: %v (n=%d)", err, len(list))
+	}
+	if list[0].Scope != "read-only" {
+		t.Fatalf("scope = %q, want read-only", list[0].Scope)
+	}
+}
+
 // tokenIDRE extracts the id from a token row's delete-form action
 // (/account/tokens/{id}/delete) rendered by templates/tokens.html.
 var tokenIDRE = regexp.MustCompile(`/account/tokens/(\d+)/delete`)

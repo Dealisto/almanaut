@@ -13,11 +13,12 @@
 </div>
 {{end}}
 <table class="list">
-  <thead><tr><th>Label</th><th>Created</th><th></th></tr></thead>
+  <thead><tr><th>Label</th><th>Scope</th><th>Created</th><th></th></tr></thead>
   <tbody>
   {{range .Tokens}}
     <tr>
       <td>{{.Label}}</td>
+      <td>{{.Scope}}</td>
       <td>{{.CreatedAt}}</td>
       <td class="row-actions">
         <form method="post" action="/account/tokens/{{.ID}}/delete" class="inline">
@@ -33,6 +34,11 @@
 <form class="stack" method="post" action="/account/tokens">
   {{ csrfField }}
   <label>Label<input name="label" required></label>
+  <label>Scope
+    <select name="scope">
+      {{range .Scopes}}<option value="{{.}}">{{.}}</option>{{end}}
+    </select>
+  </label>
   <div class="actions">
     <button class="btn btn-primary" type="submit">Create token</button>
   </div>

@@ -14,6 +14,7 @@ import (
 type tokensPageData struct {
 	Title    string
 	Tokens   []store.APIToken
+	Scopes   []domain.Scope
 	Error    string
 	NewToken string // raw token, shown once immediately after creation
 }
@@ -31,7 +32,7 @@ func renderTokens(w http.ResponseWriter, r *http.Request, tokens *store.TokenRep
 		serverError(w, r, err)
 		return
 	}
-	render(w, r, "tokens.html", tokensPageData{Title: "API tokens", Tokens: list, Error: errMsg, NewToken: newToken})
+	render(w, r, "tokens.html", tokensPageData{Title: "API tokens", Tokens: list, Scopes: domain.Scopes, Error: errMsg, NewToken: newToken})
 }
 
 func listTokens(tokens *store.TokenRepo) http.HandlerFunc {
