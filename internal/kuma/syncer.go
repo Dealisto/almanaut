@@ -13,12 +13,12 @@ import (
 // passTimeout bounds one reconcile pass so a hung Kuma cannot wedge the loop.
 const passTimeout = 30 * time.Second
 
-// ServiceLister is the slice of store.ServiceRepo the syncer needs.
+// ServiceLister is the subset of store.ServiceRepo the syncer needs.
 type ServiceLister interface {
 	List() ([]domain.Service, error)
 }
 
-// mappingStore is the slice of *store.KumaRepo the syncer needs.
+// mappingStore is the subset of *store.KumaRepo the syncer needs.
 type mappingStore interface {
 	All() (map[int64]int64, error)
 	Put(serviceID, monitorID int64) error
@@ -120,7 +120,9 @@ func (y *Syncer) pass(ctx context.Context) {
 
 // Reconcile runs one synchronous pass and records it as the last sync. A
 // mapping row only changes after the corresponding Kuma operation succeeded,
-// so a mid-pass failure leaves a state the next pass repairs.
+// so a mid-pass failure leaves a state the next pass repairs. Callers must
+// pass a bounded context — Start's trigger loop applies passTimeout — since an
+// unbounded ctx can hang a pass on an unresponsive Kuma.
 func (y *Syncer) Reconcile(ctx context.Context) Summary {
 	sum := y.reconcile(ctx)
 	y.mu.Lock()
@@ -160,6 +162,11 @@ func (y *Syncer) reconcile(ctx context.Context) Summary {
 		case actCreate:
 			id, err := session.Add(ctx, a.monitor)
 			if err != nil {
+				// If the add frame reached Kuma but the ack was lost (timeout,
+				// disconnect, shutdown), the monitor may exist server-side with no
+				// mapping row — the next pass would then create a duplicate.
+				// Nothing here can tell the two apart, so surface it for the operator.
+				y.log.Printf("kuma: create %q failed (%v) — if the monitor was created anyway it is now unmanaged; remove it in Kuma before the next sync duplicates it", a.monitor.Name, err)
 				sum.Err = err
 				return sum
 			}

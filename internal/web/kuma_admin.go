@@ -7,7 +7,7 @@ import (
 	"github.com/Dealisto/almanaut/internal/kuma"
 )
 
-// kumaSyncer is the slice of *kuma.Syncer the admin page needs.
+// kumaSyncer is the subset of *kuma.Syncer the admin page needs.
 type kumaSyncer interface {
 	TriggerSync()
 	LastSync() kuma.LastSync

@@ -320,7 +320,7 @@ func okOrError(raw json.RawMessage) error {
 	return nil
 }
 
-// addDefaults are the fields Kuma's UI sends for a new HTTP monitor; sending
+// addPayload builds the fields Kuma's UI sends for a new HTTP monitor; sending
 // them keeps the created monitor identical to a hand-made one with defaults.
 func addPayload(m Monitor) map[string]any {
 	return map[string]any{

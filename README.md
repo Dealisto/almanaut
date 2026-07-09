@@ -348,7 +348,12 @@ internal API can change between releases. 2FA-enabled Kuma accounts are not
 supported — use a dedicated account without 2FA. Only monitors that almanaut
 itself created are ever touched — existing monitors you made by hand in Kuma
 are left alone. Check status and trigger an on-demand resync from the
-**Kuma** admin page (`/kuma`).
+**Kuma** admin page (`/kuma`). A whole-inventory YAML import (**Data →
+Import**) does not itself trigger a sync — use the **Sync now** button on
+`/kuma` afterwards. If a create's acknowledgment is lost mid-flight (e.g. Kuma
+restarting during a sync), the monitor can end up created in Kuma with no
+matching almanaut record; almanaut logs this case, and the orphaned monitor
+should be removed by hand in Kuma before the next sync creates a duplicate.
 
 ## Export & import
 
