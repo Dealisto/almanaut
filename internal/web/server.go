@@ -487,6 +487,7 @@ func New(cfg Config) http.Handler {
 	tokens := store.NewTokenRepo(db)
 	customFields := store.NewCustomFieldRepo(db)
 	attachments := store.NewAttachmentRepo(db)
+	webhooks := store.NewWebhookRepo(db)
 	cat := entityCatalog{resources: resources}
 	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, customFields: customFields, attachments: attachments, db: db, webhooks: cfg.Webhooks}
 	r := chi.NewRouter()
@@ -560,6 +561,11 @@ func New(cfg Config) http.Handler {
 				r.Post("/users/{id}/delete", deleteUser(users, db))
 				r.Post("/users/{id}/password", resetUserPassword(users))
 				r.Post("/users/{id}/role", updateUserRole(users))
+
+				r.Get("/webhooks", listWebhooks(webhooks))
+				r.Post("/webhooks", createWebhook(webhooks))
+				r.Post("/webhooks/{id}/toggle", toggleWebhook(webhooks))
+				r.Post("/webhooks/{id}/delete", deleteWebhook(webhooks))
 			})
 		}
 

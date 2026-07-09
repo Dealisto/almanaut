@@ -1,0 +1,117 @@
+package web
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/Dealisto/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/store"
+)
+
+func getWith(t *testing.T, h http.Handler, cookie *http.Cookie, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withCookie(httptest.NewRequest(http.MethodGet, path, nil), cookie))
+	return rec
+}
+
+func csrfPostRec(t *testing.T, h http.Handler, cookie *http.Cookie, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	rec0 := httptest.NewRecorder()
+	h.ServeHTTP(rec0, withCookie(httptest.NewRequest(http.MethodGet, "/", nil), cookie))
+	csrf := csrfCookie(rec0.Result().Cookies())
+	form := strings.NewReader(body + "&" + csrfFieldName + "=" + csrf.Value)
+	req := httptest.NewRequest(http.MethodPost, path, form)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	req.AddCookie(csrf)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestWebhooksPageRequiresAdmin(t *testing.T) {
+	db := rbacDB(t)
+	h := newAuthedTestHandler(t, db)
+	viewer := seedUserAndLogin(t, h, db, "viewer", domain.RoleViewer)
+	if rec := getWith(t, h, viewer, "/webhooks"); rec.Code != http.StatusForbidden {
+		t.Fatalf("GET /webhooks as viewer = %d, want 403", rec.Code)
+	}
+}
+
+func TestCreateWebhookGeneratesSecretShownOnce(t *testing.T) {
+	db := rbacDB(t)
+	h := newAuthedTestHandler(t, db)
+	admin := seedUserAndLogin(t, h, db, "admin", domain.RoleAdmin)
+
+	// Create re-renders the page (200) with the generated secret revealed once.
+	rec := csrfPostRec(t, h, admin, "/webhooks", "url=https://ci.example/hook&events=created&entity_types=host")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /webhooks = %d, want 200 (reveal-once render)", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "whsec_") {
+		t.Fatalf("created page should reveal the generated secret once; body: %s", body)
+	}
+
+	// It is persisted and listed, but the secret is NOT shown on a plain list load.
+	hooks, err := store.NewWebhookRepo(db).List()
+	if err != nil || len(hooks) != 1 {
+		t.Fatalf("List = %v, %v; want 1 webhook", hooks, err)
+	}
+	if hooks[0].URL != "https://ci.example/hook" || !hooks[0].Enabled {
+		t.Errorf("stored webhook = %+v", hooks[0])
+	}
+	if len(hooks[0].Events) != 1 || hooks[0].Events[0] != "created" {
+		t.Errorf("events = %v", hooks[0].Events)
+	}
+	if len(hooks[0].EntityTypes) != 1 || hooks[0].EntityTypes[0] != "host" {
+		t.Errorf("entity_types = %v", hooks[0].EntityTypes)
+	}
+	list := getWith(t, h, admin, "/webhooks")
+	if strings.Contains(list.Body.String(), hooks[0].Secret) {
+		t.Errorf("plain list page must not display the stored secret")
+	}
+}
+
+func TestCreateWebhookRejectsBadURL(t *testing.T) {
+	db := rbacDB(t)
+	h := newAuthedTestHandler(t, db)
+	admin := seedUserAndLogin(t, h, db, "admin", domain.RoleAdmin)
+	rec := csrfPostRec(t, h, admin, "/webhooks", "url=not-a-url")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "http") {
+		t.Fatalf("bad URL should re-render with an error; got %d", rec.Code)
+	}
+	hooks, _ := store.NewWebhookRepo(db).List()
+	if len(hooks) != 0 {
+		t.Errorf("no webhook should be created on validation error, got %d", len(hooks))
+	}
+}
+
+func TestToggleAndDeleteWebhook(t *testing.T) {
+	db := rbacDB(t)
+	h := newAuthedTestHandler(t, db)
+	admin := seedUserAndLogin(t, h, db, "admin", domain.RoleAdmin)
+	repo := store.NewWebhookRepo(db)
+	id, err := repo.Create(domain.Webhook{URL: "https://x.example/h", Secret: "whsec_x", Enabled: true, CreatedAt: nowRFC3339()})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	if code := csrfPost(t, h, admin, "/webhooks/1/toggle", ""); code != http.StatusSeeOther {
+		t.Fatalf("toggle = %d, want 303", code)
+	}
+	got, _ := repo.Get(id)
+	if got.Enabled {
+		t.Errorf("after toggle Enabled = true, want false")
+	}
+
+	if code := csrfPost(t, h, admin, "/webhooks/1/delete", ""); code != http.StatusSeeOther {
+		t.Fatalf("delete = %d, want 303", code)
+	}
+	if _, err := repo.Get(id); err != store.ErrNotFound {
+		t.Errorf("after delete Get = %v, want ErrNotFound", err)
+	}
+}

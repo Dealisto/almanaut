@@ -1,0 +1,61 @@
+{{/* internal/web/templates/webhooks.html */}}
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <p class="ph-eyebrow">Administration</p>
+    <h1>Webhooks</h1>
+  </div>
+</div>
+
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .NewSecret}}
+<div class="notice">
+  <p>New endpoint secret — copy it now, it will not be shown again. Configure your receiver to verify the <code>X-Almanaut-Signature: sha256=&lt;hmac&gt;</code> header with it:</p>
+  <code class="token">{{.NewSecret}}</code>
+</div>
+{{end}}
+
+<div class="panel">
+  <h2>Registered endpoints</h2>
+  {{if .Webhooks}}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>URL</th><th>Events</th><th>Types</th><th>Status</th><th>Created</th><th></th></tr></thead>
+      <tbody>
+      {{range .Webhooks}}
+        <tr>
+          <td class="mono">{{.URL}}</td>
+          <td>{{if .Events}}{{range $i, $e := .Events}}{{if $i}}, {{end}}{{$e}}{{end}}{{else}}<span class="muted">all</span>{{end}}</td>
+          <td>{{if .EntityTypes}}{{range $i, $t := .EntityTypes}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}<span class="muted">all</span>{{end}}</td>
+          <td>{{if .Enabled}}<span class="badge">enabled</span>{{else}}<span class="badge badge-warn">disabled</span>{{end}}</td>
+          <td>{{.CreatedAt}}</td>
+          <td class="row-actions">
+            <a class="btn" href="/webhooks/{{.ID}}/edit">Edit</a>
+            <form method="post" action="/webhooks/{{.ID}}/toggle" class="inline">
+              {{ csrfField }}
+              <button class="btn" type="submit">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
+            </form>
+            <form method="post" action="/webhooks/{{.ID}}/delete" class="inline">
+              {{ csrfField }}
+              <button class="btn btn-danger" type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="muted">No webhook endpoints yet.</p>
+  {{end}}
+</div>
+
+<div class="panel">
+  <h2>Add endpoint</h2>
+  <form class="stack" method="post" action="/webhooks">
+    {{ csrfField }}
+    {{template "webhook_form_fields" .Form}}
+    <div class="actions"><button class="btn btn-primary" type="submit">Create endpoint</button></div>
+  </form>
+</div>
+{{end}}
