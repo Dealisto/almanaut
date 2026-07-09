@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
-	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/Dealisto/almanaut/internal/webhook"
 )
 
@@ -17,6 +16,13 @@ const passTimeout = 30 * time.Second
 // ServiceLister is the slice of store.ServiceRepo the syncer needs.
 type ServiceLister interface {
 	List() ([]domain.Service, error)
+}
+
+// mappingStore is the slice of *store.KumaRepo the syncer needs.
+type mappingStore interface {
+	All() (map[int64]int64, error)
+	Put(serviceID, monitorID int64) error
+	Delete(serviceID int64) error
 }
 
 // Summary reports what one reconcile pass did.
@@ -37,7 +43,7 @@ type LastSync struct {
 type Syncer struct {
 	client   *Client
 	services ServiceLister
-	mapping  *store.KumaRepo
+	mapping  mappingStore
 	log      *log.Logger
 
 	trigger chan struct{} // size 1: pending-work flag, coalesces bursts
@@ -48,7 +54,7 @@ type Syncer struct {
 
 // NewSyncer wires a syncer; Start must be called (in a goroutine) to serve
 // triggers. logger nil defaults to log.Default().
-func NewSyncer(client *Client, services ServiceLister, mapping *store.KumaRepo, logger *log.Logger) *Syncer {
+func NewSyncer(client *Client, services ServiceLister, mapping mappingStore, logger *log.Logger) *Syncer {
 	if logger == nil {
 		logger = log.Default()
 	}
@@ -153,10 +159,17 @@ func (y *Syncer) reconcile(ctx context.Context) Summary {
 		switch a.kind {
 		case actCreate:
 			id, err := session.Add(ctx, a.monitor)
-			if err == nil {
-				err = y.mapping.Put(a.serviceID, id)
-			}
 			if err != nil {
+				sum.Err = err
+				return sum
+			}
+			if err := y.mapping.Put(a.serviceID, id); err != nil {
+				// The monitor exists in Kuma but almanaut failed to record it. Delete
+				// it again so a re-run cannot create a duplicate; if the cleanup also
+				// fails, log the orphan loudly for manual removal.
+				if derr := session.Delete(ctx, id); derr != nil {
+					y.log.Printf("kuma: orphaned monitor %d (%q): mapping write failed (%v) and cleanup delete failed (%v)", id, a.monitor.Name, err, derr)
+				}
 				sum.Err = err
 				return sum
 			}

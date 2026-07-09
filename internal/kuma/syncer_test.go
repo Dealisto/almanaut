@@ -3,6 +3,7 @@ package kuma
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log"
 	"path/filepath"
 	"testing"
@@ -57,6 +58,7 @@ func TestReconcileEndToEnd(t *testing.T) {
 	if len(all) != 1 || all[1] == 0 {
 		t.Fatalf("mapping = %v", all)
 	}
+	wantMonitorID := all[1]
 
 	// Idempotence: same input → no actions, no duplicates.
 	sum = y.Reconcile(context.Background())
@@ -65,6 +67,10 @@ func TestReconcileEndToEnd(t *testing.T) {
 	}
 	if f.monitorCount() != 2 {
 		t.Fatalf("second pass duplicated monitors: %d", f.monitorCount())
+	}
+	all, _ = mapping.All()
+	if len(all) != 1 || all[1] != wantMonitorID {
+		t.Fatalf("mapping after idempotent pass = %v, want {1: %d}", all, wantMonitorID)
 	}
 
 	// Edit + delete: rename service 1's URL, drop nothing else.
@@ -93,6 +99,57 @@ func TestReconcileEndToEnd(t *testing.T) {
 	last := y3.LastSync()
 	if !last.Ran || last.Time.IsZero() {
 		t.Fatalf("LastSync = %+v", last)
+	}
+}
+
+// failingPuts wraps a mappingStore and makes Put always fail, to exercise the
+// actCreate compensating-delete path.
+type failingPuts struct {
+	mappingStore
+	err error
+}
+
+func (f failingPuts) Put(serviceID, monitorID int64) error { return f.err }
+
+func TestReconcileCreateMappingFailureDeletesOrphan(t *testing.T) {
+	f := newFakeKuma(t)
+	db := newSyncerDB(t)
+	realMapping := store.NewKumaRepo(db)
+	putErr := errors.New("mapping write failed")
+	failing := failingPuts{mappingStore: realMapping, err: putErr}
+
+	services := staticServices{
+		{ID: 1, Name: "jellyfin", Kind: "container", URL: "http://jellyfin.lan:8096"},
+	}
+	y := NewSyncer(NewClient(f.url(), "admin", "s3cret", false), services, failing, log.Default())
+
+	sum := y.Reconcile(context.Background())
+	if sum.Err == nil {
+		t.Fatal("expected an error when the mapping write fails")
+	}
+	if sum.Created != 0 {
+		t.Fatalf("Created = %d, want 0", sum.Created)
+	}
+	if f.monitorCount() != 0 {
+		t.Fatalf("monitorCount = %d, want 0 (compensating delete should remove the orphan)", f.monitorCount())
+	}
+	all, _ := realMapping.All()
+	if len(all) != 0 {
+		t.Fatalf("mapping = %v, want empty", all)
+	}
+
+	// Re-run with the real (non-failing) repo: exactly one monitor should
+	// exist afterward — no duplicate left behind by the failed first pass.
+	y2 := NewSyncer(NewClient(f.url(), "admin", "s3cret", false), services, realMapping, log.Default())
+	sum = y2.Reconcile(context.Background())
+	if sum.Err != nil {
+		t.Fatalf("Reconcile: %v", sum.Err)
+	}
+	if sum.Created != 1 {
+		t.Fatalf("Created = %d, want 1", sum.Created)
+	}
+	if f.monitorCount() != 1 {
+		t.Fatalf("monitorCount = %d, want 1 (no duplicate)", f.monitorCount())
 	}
 }
 
