@@ -51,6 +51,11 @@ func seedUserAndLogin(t *testing.T, h http.Handler, db *sql.DB, username string,
 	return loginAs(t, h, username, "password123")
 }
 
+func adminSession(t *testing.T, h http.Handler) *http.Cookie {
+	t.Helper()
+	return loginAs(t, h, "admin", "password123")
+}
+
 // csrfPost issues an authenticated POST with a valid CSRF token and returns the
 // status code.
 func csrfPost(t *testing.T, h http.Handler, cookie *http.Cookie, path, body string) int {

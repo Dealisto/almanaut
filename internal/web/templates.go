@@ -23,6 +23,8 @@ var pages = func() map[string]*template.Template {
 					"isActive":    func(string) bool { return false },
 					"theme":       func() string { return "system" },
 					"currentUser": func() string { return "" },
+					"canWrite":    func() bool { return false },
+					"isAdmin":     func() bool { return false },
 				}).
 				ParseFS(templatesFS, "templates/layout.html", "templates/custom_fields_form.html", "templates/"+page),
 		)
@@ -70,6 +72,8 @@ func render(w http.ResponseWriter, r *http.Request, page string, data any) {
 			}
 			return ""
 		},
+		"canWrite": func() bool { return effectiveCanWrite(r.Context()) },
+		"isAdmin":  func() bool { return effectiveIsAdmin(r.Context()) },
 	})
 	var buf bytes.Buffer
 	if err := clone.ExecuteTemplate(&buf, "layout", data); err != nil {
