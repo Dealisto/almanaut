@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -179,5 +180,27 @@ func TestAPITokenScopeRoleIntersection(t *testing.T) {
 	// Reads still work for a read-only token.
 	if code := apiGet(t, h, edRO, "/api/hosts"); code != http.StatusOK {
 		t.Fatalf("editor+read-only GET = %d, want 200", code)
+	}
+}
+
+func TestAdminCanChangeUserRole(t *testing.T) {
+	db := rbacDB(t)
+	users := store.NewUserRepo(db)
+	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+		t.Fatalf("BootstrapAdmin: %v", err)
+	}
+	h := newAuthedTestHandler(t, db)
+	admin := adminSession(t, h)
+	// Create a viewer via the admin form, then promote to editor.
+	if code := csrfPost(t, h, admin, "/users", "username=bob&password=password123&role=viewer"); code != http.StatusSeeOther {
+		t.Fatalf("create bob = %d", code)
+	}
+	bob, _ := users.GetByUsername("bob")
+	if code := csrfPost(t, h, admin, "/users/"+strconv.FormatInt(bob.ID, 10)+"/role", "role=editor"); code != http.StatusSeeOther {
+		t.Fatalf("promote bob = %d", code)
+	}
+	bob, _ = users.GetByUsername("bob")
+	if bob.Role != domain.RoleEditor {
+		t.Fatalf("bob role = %q, want editor", bob.Role)
 	}
 }

@@ -552,6 +552,7 @@ func New(cfg Config) http.Handler {
 				r.Post("/users", createUser(users))
 				r.Post("/users/{id}/delete", deleteUser(users, db))
 				r.Post("/users/{id}/password", resetUserPassword(users))
+				r.Post("/users/{id}/role", updateUserRole(users))
 			})
 		}
 
