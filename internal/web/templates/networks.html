@@ -5,7 +5,7 @@
     <h1>Networks</h1>
   </div>
   <div class="ph-actions">
-    <a class="btn btn-primary" href="/networks/new">+ New network</a>
+    {{if canWrite}}<a class="btn btn-primary" href="/networks/new">+ New network</a>{{end}}
   </div>
 </div>
 {{if .Items}}
@@ -19,12 +19,14 @@
       <td>{{.CIDR}}</td>
       <td>{{.Gateway}}</td>
       <td>
+        {{if canWrite}}
         <a class="btn" href="/networks/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/networks/{{.ID}}/delete"
               onsubmit="return confirm('Delete this network?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        {{end}}
       </td>
     </tr>
   {{end}}

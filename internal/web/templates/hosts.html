@@ -5,7 +5,7 @@
     <h1>Hosts</h1>
   </div>
   <div class="ph-actions">
-    <a class="btn btn-primary" href="/hosts/new">+ New host</a>
+    {{if canWrite}}<a class="btn btn-primary" href="/hosts/new">+ New host</a>{{end}}
   </div>
 </div>
 {{if .Items}}
@@ -21,12 +21,14 @@
       <td>{{range $i, $ip := .IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}</td>
       <td>{{.Status}}</td>
       <td>
+        {{if canWrite}}
         <a class="btn" href="/hosts/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/hosts/{{.ID}}/delete"
               onsubmit="return confirm('Delete this host?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        {{end}}
       </td>
     </tr>
   {{end}}

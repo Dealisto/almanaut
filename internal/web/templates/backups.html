@@ -5,7 +5,7 @@
     <h1>Backups</h1>
   </div>
   <div class="ph-actions">
-    <a class="btn btn-primary" href="/backups/new">+ New backup</a>
+    {{if canWrite}}<a class="btn btn-primary" href="/backups/new">+ New backup</a>{{end}}
   </div>
 </div>
 {{if .Items}}
@@ -20,12 +20,14 @@
       <td>{{.Frequency}}</td>
       <td>{{.LastRun}}</td>
       <td>
+        {{if canWrite}}
         <a class="btn" href="/backups/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/backups/{{.ID}}/delete"
               onsubmit="return confirm('Delete this backup?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        {{end}}
       </td>
     </tr>
   {{end}}

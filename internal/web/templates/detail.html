@@ -5,7 +5,7 @@
     <h1>{{.Heading}}</h1>
   </div>
   <div class="ph-actions">
-    <a class="btn btn-primary" href="{{.EditURL}}">Edit</a>
+    {{if canWrite}}<a class="btn btn-primary" href="{{.EditURL}}">Edit</a>{{end}}
     <a class="btn" href="{{.ListURL}}">Back to list</a>
   </div>
 </div>
@@ -23,6 +23,7 @@
     <div class="tags">
       {{range .Tags}}
         <span class="tag">#{{.Name}}
+          {{if canWrite}}
           <form class="form-inline" method="post" action="/tags/delete">
             {{ csrfField }}
             <input type="hidden" name="id" value="{{.ID}}">
@@ -30,9 +31,11 @@
             <input type="hidden" name="entity_id" value="{{.EntityID}}">
             <button class="tag-x" type="submit" title="remove">&times;</button>
           </form>
+          {{end}}
         </span>
       {{else}}<em>No tags.</em>{{end}}
     </div>
+    {{if canWrite}}
     <form class="form-inline" method="post" action="/tags">
       {{ csrfField }}
       <input type="hidden" name="entity_type" value="{{.EntityType}}">
@@ -40,6 +43,7 @@
       <input name="tag" placeholder="add a tag" required>
       <button class="btn btn-primary" type="submit">Add tag</button>
     </form>
+    {{end}}
   </section>
 </div>
 
@@ -110,22 +114,26 @@
 
 <section class="panel">
   <h2>Attachments</h2>
+  {{if canWrite}}
   <form class="journal-add" method="post" action="{{.ListURL}}/{{.EntityID}}/attachments" enctype="multipart/form-data">
     {{ csrfField }}
     <input type="file" name="file" required>
     <button class="btn btn-primary" type="submit">Upload</button>
   </form>
+  {{end}}
   {{if .Attachments}}
   <ul class="related">
     {{range .Attachments}}
     <li>
       <a href="/attachments/{{.ID}}">{{.Filename}}</a>
       <span class="muted">{{.Size}} · {{.UploadedAt}}</span>
+      {{if canWrite}}
       <form class="form-inline" method="post" action="/attachments/{{.ID}}/delete"
             onsubmit="return confirm('Delete this attachment?');">
         {{ csrfField }}
         <button class="tag-x" type="submit" title="delete">&times;</button>
       </form>
+      {{end}}
     </li>
     {{end}}
   </ul>
@@ -142,6 +150,7 @@
 
 <section class="panel">
   <h2>Journal</h2>
+  {{if canWrite}}
   <form class="journal-add" method="post" action="{{.ListURL}}/{{.EntityID}}/journal">
     {{ csrfField }}
     <select name="kind" aria-label="kind">
@@ -150,6 +159,7 @@
     <input name="body" placeholder="add a journal entry…" required>
     <button class="btn btn-primary" type="submit">Add</button>
   </form>
+  {{end}}
   {{if .JournalEntries}}
   <ul class="journal">
     {{range .JournalEntries}}
@@ -157,10 +167,12 @@
       <span class="jk jk-{{.Kind}}" title="{{.Kind}}"></span>
       <div class="journal-body">{{.BodyHTML}}</div>
       <time>{{.CreatedAt}}</time>
+      {{if canWrite}}
       <form class="form-inline" method="post" action="/journal/{{.ID}}/delete">
         {{ csrfField }}
         <button class="tag-x" type="submit" title="delete">&times;</button>
       </form>
+      {{end}}
     </li>
     {{end}}
   </ul>

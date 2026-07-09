@@ -5,7 +5,7 @@
     <h1>Certificates</h1>
   </div>
   <div class="ph-actions">
-    <a class="btn btn-primary" href="/certificates/new">+ New certificate</a>
+    {{if canWrite}}<a class="btn btn-primary" href="/certificates/new">+ New certificate</a>{{end}}
   </div>
 </div>
 {{if .Items}}
@@ -20,12 +20,14 @@
       <td>{{.ExpiresOn}}</td>
       <td>{{if .AutoRenew}}yes{{else}}no{{end}}</td>
       <td>
+        {{if canWrite}}
         <a class="btn" href="/certificates/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/certificates/{{.ID}}/delete"
               onsubmit="return confirm('Delete this certificate?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        {{end}}
       </td>
     </tr>
   {{end}}

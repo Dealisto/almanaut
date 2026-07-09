@@ -32,3 +32,26 @@ func TestListPageHidesNewForViewer(t *testing.T) {
 		t.Error("admin should see the New host control")
 	}
 }
+
+func TestDetailPageHidesMutatorsForViewer(t *testing.T) {
+	db := rbacDB(t)
+	users := store.NewUserRepo(db)
+	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+		t.Fatalf("BootstrapAdmin: %v", err)
+	}
+	h := newAuthedTestHandler(t, db)
+	admin := adminSession(t, h)
+	// Create a host to view.
+	if code := csrfPost(t, h, admin, "/hosts", "name=nas&type=physical"); code != http.StatusSeeOther {
+		t.Fatalf("seed host = %d", code)
+	}
+	viewer := seedUserAndLogin(t, h, db, "vic", domain.RoleViewer)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withCookie(httptest.NewRequest(http.MethodGet, "/hosts/1", nil), viewer))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("viewer detail = %d, want 200", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "/hosts/1/delete") {
+		t.Error("viewer must not see the Delete control on the detail page")
+	}
+}

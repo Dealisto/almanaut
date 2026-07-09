@@ -7,6 +7,7 @@
 </div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 
+{{if canWrite}}
 <section class="panel">
   <h2>Add a field</h2>
   <form class="stack" method="post" action="/custom-fields">
@@ -26,6 +27,7 @@
     <div class="actions"><button class="btn btn-primary" type="submit">Add field</button></div>
   </form>
 </section>
+{{end}}
 
 <section class="panel">
   <h2>Defined fields</h2>
@@ -38,20 +40,24 @@
       <tr>
         <td>{{.EntityType}}</td>
         <td>
+          {{if canWrite}}
           <form class="form-inline" method="post" action="/custom-fields/{{.ID}}">
             {{ csrfField }}
             <input name="label" value="{{.Label}}" required>
             <button class="btn" type="submit">Save</button>
           </form>
+          {{else}}{{.Label}}{{end}}
         </td>
         <td><code>{{.Name}}</code></td>
         <td>{{.Kind}}</td>
         <td>
+          {{if canWrite}}
           <form class="form-inline" method="post" action="/custom-fields/{{.ID}}/delete"
                 onsubmit="return confirm('Delete this field and all its values?');">
             {{ csrfField }}
             <button class="btn btn-danger" type="submit">Delete</button>
           </form>
+          {{end}}
         </td>
       </tr>
       {{end}}

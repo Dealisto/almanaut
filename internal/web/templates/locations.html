@@ -5,7 +5,7 @@
     <h1>Locations</h1>
   </div>
   <div class="ph-actions">
-    <a class="btn btn-primary" href="/locations/new">+ New location</a>
+    {{if canWrite}}<a class="btn btn-primary" href="/locations/new">+ New location</a>{{end}}
   </div>
 </div>
 {{if .Items}}
@@ -17,12 +17,14 @@
     <tr>
       <td><a href="/locations/{{.ID}}">{{.Name}}</a></td>
       <td>
+        {{if canWrite}}
         <a class="btn" href="/locations/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/locations/{{.ID}}/delete"
               onsubmit="return confirm('Delete this location?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        {{end}}
       </td>
     </tr>
   {{end}}

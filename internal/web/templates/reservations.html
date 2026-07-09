@@ -5,7 +5,7 @@
     <h1>Reservations</h1>
   </div>
   <div class="ph-actions">
-    <a class="btn btn-primary" href="/reservations/new">+ New reservation</a>
+    {{if canWrite}}<a class="btn btn-primary" href="/reservations/new">+ New reservation</a>{{end}}
   </div>
 </div>
 {{if .Items}}
@@ -19,12 +19,14 @@
       <td><code>{{.StartIP}}</code></td>
       <td><code>{{.EndIP}}</code></td>
       <td>
+        {{if canWrite}}
         <a class="btn" href="/reservations/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/reservations/{{.ID}}/delete"
               onsubmit="return confirm('Delete this reservation?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        {{end}}
       </td>
     </tr>
   {{end}}

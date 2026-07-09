@@ -17,12 +17,14 @@
 <section class="panel">
   <h2>Import</h2>
   <p class="muted">Replace <strong>all</strong> current data with the contents of a YAML export.</p>
+  {{if canWrite}}
   <form class="stack" method="post" action="/import" enctype="multipart/form-data">
   {{ csrfField }}
     <label>YAML file<input type="file" name="file" accept=".yaml,.yml" required></label>
     <label><input type="checkbox" name="confirm" required> This permanently replaces all current data.</label>
     <div class="actions"><button class="btn btn-danger" type="submit">Import &amp; replace</button></div>
   </form>
+  {{end}}
 </section>
 
 {{if .CSVImported}}<p class="muted">CSV import complete — {{.CSVCreated}} created, {{.CSVUpdated}} updated.</p>{{end}}
@@ -36,6 +38,7 @@
 <section class="panel">
   <h2>Import CSV (additive)</h2>
   <p class="muted">Add or update rows of a <strong>single type</strong> without touching other data. The header row must use the export field names (snake_case). Include an <code>id</code> column to update existing rows; leave it blank or omit it to create.</p>
+  {{if canWrite}}
   <form class="stack" method="post" action="/import-csv" enctype="multipart/form-data">
   {{ csrfField }}
     <label>Type
@@ -47,5 +50,6 @@
     <label><input type="checkbox" name="confirm" required> Add/update rows from this file.</label>
     <div class="actions"><button class="btn btn-primary" type="submit">Import CSV</button></div>
   </form>
+  {{end}}
 </section>
 {{end}}

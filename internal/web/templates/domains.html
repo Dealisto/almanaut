@@ -5,7 +5,7 @@
     <h1>Domains</h1>
   </div>
   <div class="ph-actions">
-    <a class="btn btn-primary" href="/domains/new">+ New domain</a>
+    {{if canWrite}}<a class="btn btn-primary" href="/domains/new">+ New domain</a>{{end}}
   </div>
 </div>
 {{if .Items}}
@@ -18,12 +18,14 @@
       <td><a href="/domains/{{.ID}}">{{.FQDN}}</a></td>
       <td>{{.Provider}}</td>
       <td>
+        {{if canWrite}}
         <a class="btn" href="/domains/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/domains/{{.ID}}/delete"
               onsubmit="return confirm('Delete this domain?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        {{end}}
       </td>
     </tr>
   {{end}}
