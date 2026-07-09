@@ -3,9 +3,13 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/Dealisto/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/store"
 )
 
 // loginAs performs a real login POST for the given credentials and returns the
@@ -66,6 +70,66 @@ func TestTokenUICreateShowsRawOnce(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "ci") {
 		t.Fatalf("token label not listed")
+	}
+}
+
+// TestTokenCreateDefaultsToReadWriteScope confirms createToken assigns
+// read-write when the form omits "scope" (the token form has no scope
+// selector yet; PR B adds it), and rejects an explicit but invalid scope.
+func TestTokenCreateDefaultsToReadWriteScope(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := store.Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	users := store.NewUserRepo(db)
+	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+		t.Fatalf("BootstrapAdmin: %v", err)
+	}
+	h := newAuthedTestHandler(t, db)
+
+	// Inline login flow (mirrors authTestServer) to obtain a session cookie.
+	loginGet := httptest.NewRecorder()
+	h.ServeHTTP(loginGet, httptest.NewRequest(http.MethodGet, "/login", nil))
+	loginCSRF := csrfCookie(loginGet.Result().Cookies())
+	loginForm := strings.NewReader("username=admin&password=password123&" + csrfFieldName + "=" + loginCSRF.Value)
+	loginReq := httptest.NewRequest(http.MethodPost, "/login", loginForm)
+	loginReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	loginReq.AddCookie(loginCSRF)
+	loginRec := httptest.NewRecorder()
+	h.ServeHTTP(loginRec, loginReq)
+	if loginRec.Code != http.StatusSeeOther {
+		t.Fatalf("login code = %d, want 303 (body %s)", loginRec.Code, loginRec.Body)
+	}
+	session := sessionCookie(t, loginRec.Result().Cookies())
+
+	rec := postAuthForm(t, h, session, "/account/tokens", map[string]string{"label": "ci"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create token = %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+	u, err := users.GetByUsername("admin")
+	if err != nil {
+		t.Fatalf("GetByUsername: %v", err)
+	}
+	list, err := store.NewTokenRepo(db).ListByUser(u.ID)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("ListByUser = %+v, err %v, want 1 token", list, err)
+	}
+	if list[0].Scope != string(domain.ScopeReadWrite) {
+		t.Fatalf("default scope = %q, want read-write", list[0].Scope)
+	}
+
+	// An explicit, invalid scope is rejected rather than silently accepted.
+	rec = postAuthForm(t, h, session, "/account/tokens", map[string]string{"label": "bad", "scope": "bogus"})
+	if strings.Contains(rec.Body.String(), "alm_") {
+		t.Fatalf("token created with invalid scope: %s", rec.Body)
+	}
+	if !strings.Contains(rec.Body.String(), "invalid token scope") {
+		t.Fatalf("expected invalid-scope error, got %s", rec.Body)
 	}
 }
 
