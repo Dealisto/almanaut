@@ -7,11 +7,23 @@ import (
 )
 
 func TestUserValidate(t *testing.T) {
-	if err := (User{Username: "admin"}).Validate(); err != nil {
+	if err := (User{Username: "admin", Role: RoleAdmin}).Validate(); err != nil {
 		t.Fatalf("valid user rejected: %v", err)
 	}
-	if err := (User{Username: "  "}).Validate(); err == nil {
+	if err := (User{Username: "  ", Role: RoleAdmin}).Validate(); err == nil {
 		t.Fatal("blank username must be rejected")
+	}
+}
+
+func TestUserValidateRole(t *testing.T) {
+	if err := (User{Username: "a", Role: RoleViewer}).Validate(); err != nil {
+		t.Fatalf("valid user rejected: %v", err)
+	}
+	if err := (User{Username: "a", Role: Role("bogus")}).Validate(); err == nil {
+		t.Fatal("invalid role must be rejected")
+	}
+	if err := (User{Username: "", Role: RoleAdmin}).Validate(); err == nil {
+		t.Fatal("empty username must be rejected")
 	}
 }
 
