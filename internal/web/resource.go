@@ -12,6 +12,7 @@ import (
 
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
+	"github.com/Dealisto/almanaut/internal/webhook"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -56,6 +57,7 @@ type handlerDeps struct {
 	customFields *store.CustomFieldRepo
 	attachments  *store.AttachmentRepo
 	db           *sql.DB
+	webhooks     webhook.Dispatcher
 }
 
 // resource describes one entity. Only the genuinely entity-specific behavior
@@ -221,7 +223,9 @@ func (rs resource[T]) editForm(d handlerDeps) http.HandlerFunc {
 // createEntityTx inserts item, sets its custom field values, and records a
 // create in the changelog on the given transaction. item's id is expected to be
 // zero; the new id is returned. cf may be nil (no custom field values to set).
-func (rs resource[T]) createEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[int64]string, actor string) (int64, error) {
+// The webhook event for the create is appended to events (dispatched by the
+// caller only after the surrounding transaction commits).
+func (rs resource[T]) createEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[int64]string, actor string, events *[]webhook.Event) (int64, error) {
 	id, err := rs.repo.CreateTx(tx, item)
 	if err != nil {
 		return 0, err
@@ -234,32 +238,47 @@ func (rs resource[T]) createEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[i
 	if err != nil {
 		return 0, err
 	}
-	err = d.changelog.WithTx(tx).Create(store.ChangeEvent{
+	now := nowRFC3339()
+	if err := d.changelog.WithTx(tx).Create(store.ChangeEvent{
 		EntityType: rs.sing, EntityID: id, Label: rs.label(item),
 		Action: domain.ActionCreate, Actor: actor,
-		Changes: changes, CreatedAt: nowRFC3339(),
-	})
-	return id, err
+		Changes: changes, CreatedAt: now,
+	}); err != nil {
+		return 0, err
+	}
+	ev, err := webhook.NewEvent(rs.sing, id, webhook.ActionCreated, actor, now, item)
+	if err != nil {
+		return 0, err
+	}
+	*events = append(*events, ev)
+	return id, nil
 }
 
 // createEntity inserts item, sets its custom field values, and records a create
-// in the changelog, atomically. cf may be nil.
+// in the changelog, atomically, then dispatches the webhook event after commit.
+// cf may be nil.
 func (rs resource[T]) createEntity(d handlerDeps, item T, cf map[int64]string, actor string) (int64, error) {
 	var id int64
+	var events []webhook.Event
 	err := store.WithTx(d.db, func(tx *sql.Tx) error {
 		var err error
-		id, err = rs.createEntityTx(tx, d, item, cf, actor)
+		id, err = rs.createEntityTx(tx, d, item, cf, actor, &events)
 		return err
 	})
-	return id, err
+	if err != nil {
+		return id, err
+	}
+	d.webhooks.Dispatch(events...)
+	return id, nil
 }
 
 // updateEntityTx overwrites the row identified by rs.id(item), sets its custom
 // field values, and records the typed-field diff in the changelog on the given
 // transaction. Custom field values are always applied (even when the typed
-// fields are unchanged); a no-op typed diff records no changelog entry. cf may
-// be nil.
-func (rs resource[T]) updateEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[int64]string, actor string) error {
+// fields are unchanged); a no-op typed diff records no changelog entry and no
+// webhook event. cf may be nil. The webhook event (when any) is appended to
+// events for the caller to dispatch after commit.
+func (rs resource[T]) updateEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[int64]string, actor string, events *[]webhook.Event) error {
 	old, err := rs.repo.GetTx(tx, rs.id(item))
 	if err != nil {
 		return err
@@ -275,27 +294,45 @@ func (rs resource[T]) updateEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[i
 		return err
 	}
 	if len(changes) == 0 {
-		return nil // no-op typed save: nothing worth logging
+		return nil // no-op typed save: nothing worth logging or dispatching
 	}
-	return d.changelog.WithTx(tx).Create(store.ChangeEvent{
+	now := nowRFC3339()
+	if err := d.changelog.WithTx(tx).Create(store.ChangeEvent{
 		EntityType: rs.sing, EntityID: rs.id(item), Label: rs.label(item),
 		Action: domain.ActionUpdate, Actor: actor,
-		Changes: changes, CreatedAt: nowRFC3339(),
-	})
+		Changes: changes, CreatedAt: now,
+	}); err != nil {
+		return err
+	}
+	ev, err := webhook.NewEvent(rs.sing, rs.id(item), webhook.ActionUpdated, actor, now, item)
+	if err != nil {
+		return err
+	}
+	*events = append(*events, ev)
+	return nil
 }
 
 // updateEntity overwrites the row identified by rs.id(item), sets its custom
-// field values, and records the typed-field diff, atomically. cf may be nil.
+// field values, and records the typed-field diff, atomically, then dispatches
+// the webhook event (if any) after commit. cf may be nil.
 func (rs resource[T]) updateEntity(d handlerDeps, item T, cf map[int64]string, actor string) error {
-	return store.WithTx(d.db, func(tx *sql.Tx) error {
-		return rs.updateEntityTx(tx, d, item, cf, actor)
+	var events []webhook.Event
+	err := store.WithTx(d.db, func(tx *sql.Tx) error {
+		return rs.updateEntityTx(tx, d, item, cf, actor, &events)
 	})
+	if err != nil {
+		return err
+	}
+	d.webhooks.Dispatch(events...)
+	return nil
 }
 
 // deleteEntity removes the entity and its relationship/tag/journal/custom-field
-// edges and records a delete in the changelog, atomically.
+// edges and records a delete in the changelog, atomically, then dispatches the
+// webhook event after commit.
 func (rs resource[T]) deleteEntity(d handlerDeps, id int64, actor string) error {
-	return store.WithTx(d.db, func(tx *sql.Tx) error {
+	var events []webhook.Event
+	err := store.WithTx(d.db, func(tx *sql.Tx) error {
 		item, err := rs.repo.GetTx(tx, id)
 		if err != nil {
 			return err
@@ -319,12 +356,26 @@ func (rs resource[T]) deleteEntity(d handlerDeps, id int64, actor string) error 
 		if err := d.attachments.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
 			return err
 		}
-		return d.changelog.WithTx(tx).Create(store.ChangeEvent{
+		now := nowRFC3339()
+		if err := d.changelog.WithTx(tx).Create(store.ChangeEvent{
 			EntityType: rs.sing, EntityID: id, Label: label,
 			Action: domain.ActionDelete, Actor: actor,
-			Changes: nil, CreatedAt: nowRFC3339(),
-		})
+			Changes: nil, CreatedAt: now,
+		}); err != nil {
+			return err
+		}
+		ev, err := webhook.NewEvent(rs.sing, id, webhook.ActionDeleted, actor, now, nil)
+		if err != nil {
+			return err
+		}
+		events = append(events, ev)
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+	d.webhooks.Dispatch(events...)
+	return nil
 }
 
 func (rs resource[T]) create(d handlerDeps) http.HandlerFunc {
