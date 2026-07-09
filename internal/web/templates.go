@@ -15,7 +15,7 @@ var templatesFS embed.FS
 // templates referencing {{ csrfField }} parse; render rebinds it per request.
 var pages = func() map[string]*template.Template {
 	m := map[string]*template.Template{}
-	for _, page := range []string{"hosts.html", "host_form.html", "services.html", "service_form.html", "networks.html", "network_form.html", "vlans.html", "vlan_form.html", "domains.html", "domain_form.html", "certificates.html", "certificate_form.html", "backups.html", "backup_form.html", "hardware.html", "hardware_form.html", "subscriptions.html", "subscription_form.html", "accounts.html", "account_form.html", "sites.html", "site_form.html", "locations.html", "location_form.html", "racks.html", "rack_form.html", "contacts.html", "contact_form.html", "relationships.html", "impact.html", "checks.html", "detail.html", "tags_overview.html", "search.html", "data.html", "dashboard.html", "discovery.html", "discovery_docker.html", "discovery_network.html", "discovery_proxmox.html", "history.html", "users.html", "password.html", "tokens.html", "reservations.html", "reservation_form.html", "custom_fields.html", "webhooks.html", "webhook_edit.html"} {
+	for _, page := range []string{"hosts.html", "host_form.html", "services.html", "service_form.html", "networks.html", "network_form.html", "vlans.html", "vlan_form.html", "domains.html", "domain_form.html", "certificates.html", "certificate_form.html", "backups.html", "backup_form.html", "hardware.html", "hardware_form.html", "subscriptions.html", "subscription_form.html", "accounts.html", "account_form.html", "sites.html", "site_form.html", "locations.html", "location_form.html", "racks.html", "rack_form.html", "contacts.html", "contact_form.html", "relationships.html", "impact.html", "checks.html", "detail.html", "tags_overview.html", "search.html", "data.html", "dashboard.html", "discovery.html", "discovery_docker.html", "discovery_network.html", "discovery_proxmox.html", "history.html", "users.html", "password.html", "tokens.html", "reservations.html", "reservation_form.html", "custom_fields.html", "webhooks.html", "webhook_edit.html", "kuma.html"} {
 		m[page] = template.Must(
 			template.New("layout.html").
 				Funcs(template.FuncMap{
@@ -25,6 +25,7 @@ var pages = func() map[string]*template.Template {
 					"currentUser": func() string { return "" },
 					"canWrite":    func() bool { return false },
 					"isAdmin":     func() bool { return false },
+					"kumaEnabled": func() bool { return false },
 				}).
 				ParseFS(templatesFS, "templates/layout.html", "templates/custom_fields_form.html", "templates/webhook_form_fields.html", "templates/"+page),
 		)
@@ -86,6 +87,7 @@ func render(w http.ResponseWriter, r *http.Request, page string, data any) {
 			}
 			return effectiveIsAdmin(r.Context())
 		},
+		"kumaEnabled": func() bool { return kumaEnabledFrom(r.Context()) },
 	})
 	var buf bytes.Buffer
 	if err := clone.ExecuteTemplate(&buf, "layout", data); err != nil {
