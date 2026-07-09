@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/coder/websocket"
 )
@@ -23,6 +24,11 @@ type fakeKuma struct {
 	mu       sync.Mutex
 	monitors map[int64]map[string]any
 	nextID   int64
+
+	pongMu   sync.Mutex
+	pongSeen int // count of "3" (pong) frames the client has sent back to us
+
+	writeMu sync.Mutex // serializes writes once the login handler runs on its own goroutine
 }
 
 func newFakeKuma(t *testing.T) *fakeKuma {
@@ -57,6 +63,34 @@ func (f *fakeKuma) getMonitor(id int64) (map[string]any, bool) {
 	return m, ok
 }
 
+// recordPong tallies a "3" (pong) frame received from the client. The login
+// handler and tests use this to confirm the client actually answers our
+// engine.io pings instead of ignoring them.
+func (f *fakeKuma) recordPong() {
+	f.pongMu.Lock()
+	f.pongSeen++
+	f.pongMu.Unlock()
+}
+
+// waitForPong polls (bounded by timeout) until at least n pongs have been
+// recorded, returning false if the deadline passes first. No arbitrary
+// sleeps: this is a condition-poll with a short interval and a hard cap.
+func (f *fakeKuma) waitForPong(n int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		f.pongMu.Lock()
+		ok := f.pongSeen >= n
+		f.pongMu.Unlock()
+		if ok {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func (f *fakeKuma) handle(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(r.URL.Path, "/socket.io/") {
 		http.NotFound(w, r)
@@ -69,7 +103,12 @@ func (f *fakeKuma) handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	defer conn.CloseNow()
 
+	// The login handler waits for a pong on its own goroutine (see below) so
+	// the read loop stays free to receive that pong; writeMu keeps its ack
+	// from racing with anything the read loop writes concurrently.
 	write := func(s string) {
+		f.writeMu.Lock()
+		defer f.writeMu.Unlock()
 		if err := conn.Write(ctx, websocket.MessageText, []byte(s)); err != nil {
 			panic(http.ErrAbortHandler) // client went away; kill this handler
 		}
@@ -84,7 +123,12 @@ func (f *fakeKuma) handle(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case msg == "40": // socket.io connect
 			write(`40{"sid":"fake"}`)
-		case msg == "3": // pong — ignore
+			// Ping right away: the login handler below requires the client
+			// to have answered this before it will accept credentials, so
+			// deleting the client's ping/pong handling fails the test.
+			write("2")
+		case msg == "3": // pong from the client
+			f.recordPong()
 		case strings.HasPrefix(msg, "42"):
 			f.handleEvent(msg, write)
 		}
@@ -119,11 +163,27 @@ func (f *fakeKuma) handleEvent(msg string, write func(string)) {
 			ack(`{"ok":false,"msg":"Incorrect username or password."}`)
 			return
 		}
-		ack(`{"ok":true}`)
-		f.mu.Lock()
-		list, _ := json.Marshal(f.keyedMonitors())
-		f.mu.Unlock()
-		write(`42["monitorList",` + string(list) + `]`)
+		// The pong wait runs on its own goroutine: handleEvent is called
+		// synchronously from the read loop in handle() below, so blocking
+		// here would stop that same loop from ever reading the pong frame
+		// we're waiting for — a self-deadlock. Off-loading it lets the read
+		// loop keep consuming frames (and recording pongs) concurrently.
+		go func() {
+			defer func() { recover() }() // conn may be gone by the time we write; don't crash the test binary
+			if !f.waitForPong(1, 2*time.Second) {
+				ack(`{"ok":false,"msg":"no pong received"}`)
+				return
+			}
+			ack(`{"ok":true}`)
+			f.mu.Lock()
+			list, _ := json.Marshal(f.keyedMonitors())
+			f.mu.Unlock()
+			write(`42["monitorList",` + string(list) + `]`)
+			// Second ping, post-login: exercises the read loop's pong
+			// handling again on a well-established connection (as opposed
+			// to the very first ping, which lands right at the login race).
+			write("2")
+		}()
 	case "add":
 		var m map[string]any
 		_ = json.Unmarshal(arr[1], &m)

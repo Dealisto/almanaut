@@ -226,7 +226,10 @@ func (s *Session) resolveAck(msg string) {
 	ch := s.acks[id]
 	s.ackMu.Unlock()
 	if ch != nil {
-		ch <- arr[0]
+		select {
+		case ch <- arr[0]:
+		default: // duplicate ack for an id whose buffer is full — drop it
+		}
 	}
 }
 

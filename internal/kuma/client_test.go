@@ -32,6 +32,12 @@ func TestConnectAndLogin(t *testing.T) {
 			t.Fatalf("monitor = %+v", m)
 		}
 	}
+
+	// The fake sent a second ping right after monitorList; if the client's
+	// read-loop pong handling were removed, this would time out.
+	if !f.waitForPong(2, 2*time.Second) {
+		t.Fatal("fake never observed a second pong from the client")
+	}
 }
 
 func TestConnectBadPassword(t *testing.T) {
