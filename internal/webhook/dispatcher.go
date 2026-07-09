@@ -221,3 +221,14 @@ func (q *Queue) post(url string, body []byte, sig, deliveryID string) error {
 	}
 	return nil
 }
+
+// Multi fans events out to several dispatchers (e.g. the delivery Queue and
+// the Uptime Kuma sync trigger). Each dispatcher must itself be non-blocking.
+type Multi []Dispatcher
+
+// Dispatch forwards the events to every dispatcher in order.
+func (m Multi) Dispatch(events ...Event) {
+	for _, d := range m {
+		d.Dispatch(events...)
+	}
+}
