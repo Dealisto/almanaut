@@ -43,7 +43,7 @@
   <label>Password<input name="password" type="password" required></label>
   <label>Role
     <select name="role">
-      {{range .Roles}}<option value="{{.}}">{{.}}</option>{{end}}
+      {{range .Roles}}<option value="{{.}}"{{if eq . $.NewRole}} selected{{end}}>{{.}}</option>{{end}}
     </select>
   </label>
   <div class="actions">

@@ -17,10 +17,11 @@ import (
 var errLastUser = errors.New("cannot delete the last remaining user")
 
 type usersPageData struct {
-	Title string
-	Users []domain.User
-	Roles []domain.Role
-	Error string
+	Title   string
+	Users   []domain.User
+	Roles   []domain.Role
+	NewRole domain.Role // default selection for the create-user form (least privilege)
+	Error   string
 }
 
 type passwordPageData struct {
@@ -36,7 +37,7 @@ func renderUsers(w http.ResponseWriter, r *http.Request, users *store.UserRepo, 
 		serverError(w, r, err)
 		return
 	}
-	render(w, r, "users.html", usersPageData{Title: "Users", Users: list, Roles: domain.Roles, Error: errMsg})
+	render(w, r, "users.html", usersPageData{Title: "Users", Users: list, Roles: domain.Roles, NewRole: domain.RoleViewer, Error: errMsg})
 }
 
 func listUsers(users *store.UserRepo) http.HandlerFunc {
