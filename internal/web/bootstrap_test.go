@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
 )
 
@@ -57,6 +58,29 @@ func TestBootstrapIdempotentWhenUsersExist(t *testing.T) {
 	}
 	if n, _ := users.Count(); n != 1 {
 		t.Fatalf("Count = %d, want 1 (no duplicate admin)", n)
+	}
+}
+
+func TestBootstrapAdminSeedsAdminRole(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := store.Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	users := store.NewUserRepo(db)
+	if err := BootstrapAdmin(users, testLogger(), "root", "password123", false); err != nil {
+		t.Fatalf("BootstrapAdmin: %v", err)
+	}
+	u, err := users.GetByUsername("root")
+	if err != nil {
+		t.Fatalf("GetByUsername: %v", err)
+	}
+	if u.Role != domain.RoleAdmin {
+		t.Fatalf("bootstrap role = %q, want admin", u.Role)
 	}
 }
 
