@@ -96,6 +96,61 @@ func TestPlanEditsChanged(t *testing.T) {
 	}
 }
 
+func TestPlanEditsNameOnly(t *testing.T) {
+	// Name changed but URL identical: must emit edit (OR logic, not AND).
+	actions, _ := plan(
+		[]domain.Service{svc(1, "jellyfin-renamed", "http://jellyfin.lan:8096")},
+		map[int64]int64{1: 100},
+		map[int64]Monitor{100: {ID: 100, Name: "jellyfin", URL: "http://jellyfin.lan:8096"}},
+	)
+	a, ok := find(actions, actEdit)
+	if !ok || len(actions) != 1 {
+		t.Fatalf("actions = %+v, want one edit", actions)
+	}
+	if a.monitor.ID != 100 || a.monitor.Name != "jellyfin-renamed" || a.monitor.URL != "http://jellyfin.lan:8096" {
+		t.Fatalf("edit action = %+v", a)
+	}
+}
+
+func TestPlanEditsURLOnly(t *testing.T) {
+	// URL changed but name identical: must emit edit (OR logic, not AND).
+	actions, _ := plan(
+		[]domain.Service{svc(1, "jellyfin", "http://jellyfin.lan:9999")},
+		map[int64]int64{1: 100},
+		map[int64]Monitor{100: {ID: 100, Name: "jellyfin", URL: "http://jellyfin.lan:8096"}},
+	)
+	a, ok := find(actions, actEdit)
+	if !ok || len(actions) != 1 {
+		t.Fatalf("actions = %+v, want one edit", actions)
+	}
+	if a.monitor.ID != 100 || a.monitor.Name != "jellyfin" || a.monitor.URL != "http://jellyfin.lan:9999" {
+		t.Fatalf("edit action = %+v", a)
+	}
+}
+
+func TestPlanEditsRawRoundTrip(t *testing.T) {
+	// Edit action must carry the existing monitor's raw map and ID.
+	rawData := map[string]any{"interval": float64(120)}
+	actions, _ := plan(
+		[]domain.Service{svc(1, "jellyfin-new", "http://jellyfin.lan:9999")},
+		map[int64]int64{1: 100},
+		map[int64]Monitor{100: {ID: 100, Name: "jellyfin", URL: "http://jellyfin.lan:8096", raw: rawData}},
+	)
+	a, ok := find(actions, actEdit)
+	if !ok || len(actions) != 1 {
+		t.Fatalf("actions = %+v, want one edit", actions)
+	}
+	if a.monitor.ID != 100 {
+		t.Fatalf("edit action monitor.ID = %d, want 100", a.monitor.ID)
+	}
+	if a.monitor.raw == nil {
+		t.Fatalf("edit action monitor.raw is nil, want non-nil")
+	}
+	if len(a.monitor.raw) != 1 || a.monitor.raw["interval"] != float64(120) {
+		t.Fatalf("edit action monitor.raw = %v, want {interval: 120}", a.monitor.raw)
+	}
+}
+
 func TestPlanRecreatesManuallyDeleted(t *testing.T) {
 	// Mapping exists but the monitor is gone from Kuma: create it again.
 	actions, _ := plan(
