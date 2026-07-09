@@ -208,3 +208,35 @@ func TestGetenvIntAndDurationFallBackOnGarbage(t *testing.T) {
 		t.Errorf("garbage interval should fall back to 24h, got %v", c.NotifyInterval)
 	}
 }
+
+func TestLoadWebhookDefaults(t *testing.T) {
+	t.Setenv("ALMANAUT_WEBHOOKS_ENABLED", "")
+	t.Setenv("ALMANAUT_WEBHOOK_TIMEOUT", "")
+	t.Setenv("ALMANAUT_WEBHOOK_MAX_ATTEMPTS", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.WebhooksEnabled {
+		t.Errorf("WebhooksEnabled default = true, want false")
+	}
+	if cfg.WebhookTimeout != 10*time.Second {
+		t.Errorf("WebhookTimeout default = %v, want 10s", cfg.WebhookTimeout)
+	}
+	if cfg.WebhookMaxAttempts != 5 {
+		t.Errorf("WebhookMaxAttempts default = %d, want 5", cfg.WebhookMaxAttempts)
+	}
+}
+
+func TestLoadWebhookOverrides(t *testing.T) {
+	t.Setenv("ALMANAUT_WEBHOOKS_ENABLED", "true")
+	t.Setenv("ALMANAUT_WEBHOOK_TIMEOUT", "3s")
+	t.Setenv("ALMANAUT_WEBHOOK_MAX_ATTEMPTS", "2")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.WebhooksEnabled || cfg.WebhookTimeout != 3*time.Second || cfg.WebhookMaxAttempts != 2 {
+		t.Errorf("overrides not applied: %+v", cfg)
+	}
+}

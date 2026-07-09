@@ -8,11 +8,12 @@ import (
 
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
+	"github.com/Dealisto/almanaut/internal/webhook"
 )
 
 // hostResourceForTest builds a resource[domain.Host] wired to a fresh,
 // migrated on-disk SQLite db, plus a handlerDeps with just the fields
-// importCSV/createEntityTx/updateEntityTx touch (db, changelog).
+// importCSV/createEntityTx/updateEntityTx touch (db, changelog, webhooks).
 func hostResourceForTest(t *testing.T) (resource[domain.Host], handlerDeps) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
@@ -47,7 +48,7 @@ func hostResourceForTest(t *testing.T) (resource[domain.Host], handlerDeps) {
 		listTmpl: "hosts.html", formTmpl: "host_form.html",
 	}
 
-	deps := handlerDeps{db: db, changelog: store.NewChangelogRepo(db)}
+	deps := handlerDeps{db: db, changelog: store.NewChangelogRepo(db), webhooks: webhook.Noop{}}
 	return rs, deps
 }
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
+	"github.com/Dealisto/almanaut/internal/webhook"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -46,10 +47,16 @@ type Config struct {
 	AuthEnabled   bool   // require login (main.go always sets this true; tests leave it false)
 	SecureCookies bool   // force the Secure flag on cookies (TLS-terminating proxy)
 	Version       string // build version, surfaced at /version (defaults to "dev")
+	// Webhooks receives entity-change events for outbound delivery. Nil defaults
+	// to a no-op dispatcher (webhooks disabled).
+	Webhooks webhook.Dispatcher
 }
 
 // New builds the HTTP handler with all routes wired to the given repos.
 func New(cfg Config) http.Handler {
+	if cfg.Webhooks == nil {
+		cfg.Webhooks = webhook.Noop{}
+	}
 	hosts, services, networks := cfg.Hosts, cfg.Services, cfg.Networks
 	domains, certificates, backups := cfg.Domains, cfg.Certificates, cfg.Backups
 	hardware, subscriptions, accounts := cfg.Hardware, cfg.Subscriptions, cfg.Accounts
@@ -481,7 +488,7 @@ func New(cfg Config) http.Handler {
 	customFields := store.NewCustomFieldRepo(db)
 	attachments := store.NewAttachmentRepo(db)
 	cat := entityCatalog{resources: resources}
-	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, customFields: customFields, attachments: attachments, db: db}
+	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, customFields: customFields, attachments: attachments, db: db, webhooks: cfg.Webhooks}
 	r := chi.NewRouter()
 	logger := cfg.Logger
 	if logger == nil {

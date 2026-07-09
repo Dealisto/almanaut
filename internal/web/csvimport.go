@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Dealisto/almanaut/internal/store"
+	"github.com/Dealisto/almanaut/internal/webhook"
 )
 
 // csvFields returns the set of importable CSV column names for an entity: the
@@ -105,16 +106,17 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 	}
 
 	var created, updated int
+	var events []webhook.Event
 	err = store.WithTx(d.db, func(tx *sql.Tx) error {
 		for _, p := range plan {
 			if p.create {
-				if _, e := rs.createEntityTx(tx, d, p.item, nil, actor); e != nil {
+				if _, e := rs.createEntityTx(tx, d, p.item, nil, actor, &events); e != nil {
 					return e
 				}
 				created++
 				continue
 			}
-			if e := rs.updateEntityTx(tx, d, p.item, nil, actor); e != nil {
+			if e := rs.updateEntityTx(tx, d, p.item, nil, actor, &events); e != nil {
 				return e
 			}
 			updated++
@@ -124,5 +126,6 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 	if err != nil {
 		return 0, 0, nil, err
 	}
+	d.webhooks.Dispatch(events...)
 	return created, updated, nil, nil
 }
