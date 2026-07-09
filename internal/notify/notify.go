@@ -1,6 +1,6 @@
-// Package notify sends expiry notifications (ntfy) for certificates, hardware
-// warranties, and subscription renewals, at most once per item until it is
-// renewed or deleted.
+// Package notify sends expiry notifications for certificates, hardware
+// warranties, and subscription renewals to one or more channels (ntfy,
+// Discord), at most once per item until it is renewed or deleted.
 package notify
 
 import (
@@ -60,8 +60,8 @@ func decide(expiring []Item, sent map[Key]bool) (toNotify []Item, toClear []Key)
 }
 
 // Notifier gathers expiring certificates, hardware warranties, and subscription
-// renewals, and sends each an ntfy notification at most once until it is
-// renewed or deleted.
+// renewals, and sends each a notification (via the configured Sender) at most
+// once until it is renewed or deleted.
 type Notifier struct {
 	certs      *store.CertificateRepo
 	hw         *store.HardwareRepo

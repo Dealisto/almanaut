@@ -246,6 +246,7 @@ and set `ALMANAUT_SECURE_COOKIES=true` once you do.
 | `ALMANAUT_SECURE_COOKIES`     | `false`              | Force the `Secure` flag on cookies; set to `true` when serving HTTPS through a TLS-terminating reverse proxy |
 | `ALMANAUT_NTFY_URL`           | (empty)              | ntfy topic URL for expiry alerts (e.g. `https://ntfy.sh/my-homelab`); empty disables notifications |
 | `ALMANAUT_NTFY_TOKEN`         | (empty)              | Optional bearer token for a protected ntfy topic (supports the `_FILE` convention) |
+| `ALMANAUT_DISCORD_WEBHOOK_URL` | (empty)             | Discord incoming-webhook URL for expiry alerts; empty disables the channel (supports the `_FILE` convention) |
 | `ALMANAUT_NOTIFY_WITHIN_DAYS` | `30`                 | Days ahead to treat certificates/warranties/renewals as "expiring soon" |
 | `ALMANAUT_NOTIFY_INTERVAL`    | `24h`                | How often the notifier checks (Go duration, e.g. `12h`) |
 | `ALMANAUT_WEBHOOKS_ENABLED`   | `false`              | Master switch for outbound webhooks; disabled leaves delivery off |
@@ -312,7 +313,11 @@ pushes a notification when a certificate, hardware warranty, or subscription
 renewal falls within `ALMANAUT_NOTIFY_WITHIN_DAYS` (default 30). Each item
 notifies **once**; renewing it (pushing the date beyond the window) re-arms it
 for next time. The check runs at startup and every `ALMANAUT_NOTIFY_INTERVAL`.
-Leave `ALMANAUT_NTFY_URL` unset to disable notifications entirely.
+
+Set `ALMANAUT_DISCORD_WEBHOOK_URL` to a Discord [incoming-webhook](https://support.discord.com/hc/en-us/articles/228383668)
+URL to post the same alerts to a Discord channel as an embed. ntfy and Discord
+can be enabled together or independently; each configured channel receives every
+alert once. Leave both unset to disable notifications entirely.
 
 ### Outbound webhooks
 

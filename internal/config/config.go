@@ -24,10 +24,11 @@ type Config struct {
 	SecureCookies      bool   // force the Secure flag on cookies (set behind a TLS-terminating proxy)
 	ResetAdmin         bool   // ALMANAUT_RESET_ADMIN — reset the admin password at startup (lockout recovery)
 
-	NtfyURL          string        // ALMANAUT_NTFY_URL — ntfy topic URL; empty disables notifications
-	NtfyToken        string        // ALMANAUT_NTFY_TOKEN — optional bearer for a protected topic
-	NotifyWithinDays int           // ALMANAUT_NOTIFY_WITHIN_DAYS — "expiring soon" window
-	NotifyInterval   time.Duration // ALMANAUT_NOTIFY_INTERVAL — how often the scheduler checks
+	NtfyURL           string        // ALMANAUT_NTFY_URL — ntfy topic URL; empty disables notifications
+	NtfyToken         string        // ALMANAUT_NTFY_TOKEN — optional bearer for a protected topic
+	DiscordWebhookURL string        // ALMANAUT_DISCORD_WEBHOOK_URL — Discord incoming-webhook URL; empty disables the channel
+	NotifyWithinDays  int           // ALMANAUT_NOTIFY_WITHIN_DAYS — "expiring soon" window
+	NotifyInterval    time.Duration // ALMANAUT_NOTIFY_INTERVAL — how often the scheduler checks
 
 	WebhooksEnabled    bool          // ALMANAUT_WEBHOOKS_ENABLED — master switch for outbound webhooks
 	WebhookTimeout     time.Duration // ALMANAUT_WEBHOOK_TIMEOUT — per-delivery HTTP timeout
@@ -50,6 +51,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	discordWebhookURL, err := secretFromEnv("ALMANAUT_DISCORD_WEBHOOK_URL")
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
 		Addr:               getenv("ALMANAUT_ADDR", ":8080"),
 		DataDir:            getenv("ALMANAUT_DATA_DIR", "./data"),
@@ -65,6 +70,7 @@ func Load() (Config, error) {
 		ResetAdmin:         getenvBool("ALMANAUT_RESET_ADMIN", false),
 		NtfyURL:            getenv("ALMANAUT_NTFY_URL", ""),
 		NtfyToken:          ntfyToken,
+		DiscordWebhookURL:  discordWebhookURL,
 		NotifyWithinDays:   getenvInt("ALMANAUT_NOTIFY_WITHIN_DAYS", 30),
 		NotifyInterval:     getenvDuration("ALMANAUT_NOTIFY_INTERVAL", 24*time.Hour),
 		WebhooksEnabled:    getenvBool("ALMANAUT_WEBHOOKS_ENABLED", false),
