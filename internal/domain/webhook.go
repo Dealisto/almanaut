@@ -15,17 +15,6 @@ type Webhook struct {
 // Matches reports whether this webhook should receive an event for the given
 // entity type and action ("created"/"updated"/"deleted").
 func (w Webhook) Matches(entityType, action string) bool {
-	return inSetOrEmpty(w.EntityTypes, entityType) && inSetOrEmpty(w.Events, action)
-}
-
-func inSetOrEmpty(set []string, v string) bool {
-	if len(set) == 0 {
-		return true
-	}
-	for _, s := range set {
-		if s == v {
-			return true
-		}
-	}
-	return false
+	return (len(w.EntityTypes) == 0 || contains(w.EntityTypes, entityType)) &&
+		(len(w.Events) == 0 || contains(w.Events, action))
 }
