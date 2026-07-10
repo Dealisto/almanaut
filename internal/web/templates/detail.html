@@ -50,6 +50,10 @@
 {{with .IPAM}}
 <section class="panel">
   <h2>IP allocations</h2>
+  {{if .Overlaps}}
+  <p class="ipam-stats"><span class="badge badge-warn">overlap</span> This network shares its CIDR block with:</p>
+  <ul class="related">{{range .Overlaps}}<li><a href="{{.URL}}">{{.Name}}</a> <code>{{.CIDR}}</code></li>{{end}}</ul>
+  {{end}}
   <p class="ipam-stats">
     {{.UsedCount}} used{{if not .Unbounded}} / {{.TotalUsable}} usable ({{.FreeCount}} free){{end}}.
     {{if .NextFree}}Next free: <code>{{.NextFree}}</code>.{{end}}

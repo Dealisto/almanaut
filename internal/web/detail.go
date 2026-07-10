@@ -93,12 +93,21 @@ type ipamSection struct {
 	Rows          []ipamRow
 	ReservedCount int
 	Reserved      []reservedRangeView
+	Overlaps      []overlapView // other networks sharing this CIDR block
 }
 
 // reservedRangeView is one reservation range shown in the IPAM section.
 type reservedRangeView struct {
 	Name  string
 	Range string
+}
+
+// overlapView is one network that occupies the same CIDR block as the one being
+// viewed, shown as a conflict warning on the network detail page.
+type overlapView struct {
+	Name string
+	CIDR string
+	URL  string
 }
 
 // buildIPAMSection converts a domain.NetworkUsage into the detail-page view.
