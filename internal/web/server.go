@@ -68,6 +68,9 @@ type Config struct {
 	// changelog activity (edit, discovery import, or acknowledgement) for longer
 	// than this is reported as stale. 0 disables the rule.
 	StaleAfterDays int
+	// AuthAuditRetentionDays bounds how long authentication audit events are kept;
+	// older events are pruned opportunistically. 0 disables pruning (keep forever).
+	AuthAuditRetentionDays int
 }
 
 // New builds the HTTP handler with all routes wired to the given repos.
@@ -518,6 +521,8 @@ func New(cfg Config) http.Handler {
 	attachments := store.NewAttachmentRepo(db)
 	webhooks := store.NewWebhookRepo(db)
 	savedViews := store.NewSavedViewRepo(db)
+	authEvents := store.NewAuthEventRepo(db)
+	tokenUses := newTokenUseLog()
 	cat := entityCatalog{resources: resources}
 	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, customFields: customFields, attachments: attachments, db: db, webhooks: cfg.Webhooks}
 	r := chi.NewRouter()
@@ -549,7 +554,7 @@ func New(cfg Config) http.Handler {
 			r.Use(limitBody)
 			r.Use(csrfProtect(cfg.SecureCookies))
 			r.Get("/login", loginForm)
-			r.Post("/login", login(users, sessions, throttle, cfg.SecureCookies))
+			r.Post("/login", login(users, sessions, throttle, authEvents, cfg.AuthAuditRetentionDays, cfg.SecureCookies))
 		})
 	}
 
@@ -585,7 +590,7 @@ func New(cfg Config) http.Handler {
 
 		// Self-service: available to every authenticated user regardless of role.
 		if cfg.AuthEnabled {
-			r.Post("/logout", logout(sessions, cfg.SecureCookies))
+			r.Post("/logout", logout(sessions, authEvents, cfg.SecureCookies))
 			r.Get("/account/password", changePasswordForm)
 			r.Post("/account/password", changePassword(users))
 			r.Get("/account/tokens", listTokens(tokens))
@@ -600,7 +605,8 @@ func New(cfg Config) http.Handler {
 				r.Use(requireAdmin)
 				r.Get("/users", listUsers(users))
 				r.Post("/users", createUser(users))
-				r.Post("/users/{id}/delete", deleteUser(users, db))
+				r.Post("/users/{id}/delete", deleteUser(users, db, authEvents))
+				r.Get("/audit", auditLogPage(authEvents, users))
 				r.Post("/users/{id}/password", resetUserPassword(users))
 				r.Post("/users/{id}/role", updateUserRole(users))
 
@@ -681,7 +687,7 @@ func New(cfg Config) http.Handler {
 	r.Group(func(r chi.Router) {
 		r.Use(limitBody)
 		if cfg.AuthEnabled {
-			r.Use(apiAuth(tokens, sessions))
+			r.Use(apiAuth(tokens, sessions, authEvents, tokenUses))
 			r.Use(requireWrite)
 		}
 		for _, rs := range resources {

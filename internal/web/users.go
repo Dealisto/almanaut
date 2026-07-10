@@ -103,12 +103,15 @@ func updateUserRole(users *store.UserRepo) http.HandlerFunc {
 	}
 }
 
-func deleteUser(users *store.UserRepo, db *sql.DB) http.HandlerFunc {
+func deleteUser(users *store.UserRepo, db *sql.DB, audit *store.AuthEventRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := userIDParam(w, r)
 		if !ok {
 			return
 		}
+		// Capture the target's name before deletion so the audit event can name
+		// the user whose access was revoked.
+		target, _ := users.Get(id)
 		// Guard against locking everyone out: never delete the last account.
 		// The count-check-and-delete runs inside a transaction so two
 		// concurrent deletes can't both observe count > 1 and both proceed.
@@ -131,6 +134,7 @@ func deleteUser(users *store.UserRepo, db *sql.DB) http.HandlerFunc {
 			serverError(w, r, err)
 			return
 		}
+		recordAuth(audit, r, domain.AuthSessionRevoked, target.Username, id, "user deleted by "+actor(r))
 		http.Redirect(w, r, "/users", http.StatusSeeOther)
 	}
 }
