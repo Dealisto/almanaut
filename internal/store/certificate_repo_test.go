@@ -62,3 +62,19 @@ func TestCertificateRepoCRUD(t *testing.T) {
 		t.Fatalf("List len after delete = %d, want 0", len(list))
 	}
 }
+
+func TestCertificateRepoProbeTargetRoundTrip(t *testing.T) {
+	db := newTestDB(t)
+	repo := NewCertificateRepo(db)
+	id, err := repo.Create(domain.Certificate{Subject: "example.com", ExpiresOn: "2027-01-01", ProbeTarget: "example.com:443"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, err := repo.Get(id)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.ProbeTarget != "example.com:443" {
+		t.Fatalf("probe_target not persisted: %q", got.ProbeTarget)
+	}
+}
