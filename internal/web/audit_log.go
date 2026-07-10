@@ -115,7 +115,7 @@ func auditLogPage(audit *store.AuthEventRepo, users *store.UserRepo) http.Handle
 			Until:    strings.TrimSpace(q.Get("until")),
 		}
 		if n, err := strconv.Atoi(q.Get("limit")); err == nil && n > 0 {
-			filter.Limit = n
+			filter.Limit = min(n, 5000) // cap so a huge limit can't materialize the whole table
 		}
 		events, err := audit.List(filter)
 		if err != nil {
