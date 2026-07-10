@@ -143,7 +143,7 @@ func (d *Detector) RunProxmox(ctx context.Context) error {
 func (d *Detector) finish(ctx context.Context, source string, start time.Time, found int, newKeys []string, scanErr error) error {
 	var fresh []string
 	if scanErr == nil {
-		prev, err := d.runs.Latest(source)
+		prev, err := d.runs.LatestSuccessful(source)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			d.log.Error("discovery: read latest run", "source", source, "err", err)
 		} else if err == nil {

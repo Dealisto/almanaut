@@ -55,6 +55,18 @@ func (r *DiscoveryRunRepo) Latest(source string) (DiscoveryRun, error) {
 	return scanDiscoveryRun(row)
 }
 
+// LatestSuccessful returns the most recent error-free run for source, or
+// store.ErrNotFound if source has no successful runs (its runs are all
+// failures, or it has never run). Used as the diff baseline so a transient
+// scan failure doesn't reset newly-appeared findings back to "fresh".
+func (r *DiscoveryRunRepo) LatestSuccessful(source string) (DiscoveryRun, error) {
+	row := r.db.QueryRow(
+		`SELECT id, source, started_at, finished_at, found_count, new_count, error, new_keys
+		 FROM discovery_runs WHERE source = ? AND error = '' ORDER BY id DESC LIMIT 1`, source,
+	)
+	return scanDiscoveryRun(row)
+}
+
 // List returns up to limit runs, most recent first.
 func (r *DiscoveryRunRepo) List(limit int) ([]DiscoveryRun, error) {
 	rows, err := r.db.Query(
