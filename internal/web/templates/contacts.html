@@ -10,12 +10,13 @@
 </div>
 {{template "listcontrols" .Controls}}
 {{if .Items}}
+{{template "bulkactions" .Controls}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Name</th><th>Role</th><th>Organization</th><th></th></tr></thead>
+  <thead><tr><th class="bulk-col"></th><th>Name</th><th>Role</th><th>Organization</th><th></th></tr></thead>
   <tbody>
   {{range .Items}}
-    <tr>
+    <tr><td class="bulk-col"><input type="checkbox" name="ids" value="{{.ID}}" form="bulkform"></td>
       <td><a href="/contacts/{{.ID}}">{{.Name}}</a></td>
       <td>{{.Role}}</td>
       <td>{{.Organization}}</td>

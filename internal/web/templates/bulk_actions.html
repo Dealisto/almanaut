@@ -1,0 +1,18 @@
+{{define "bulkactions"}}
+{{if canWrite}}
+<form id="bulkform" class="bulk-actions" method="post" action="{{.BasePath}}/bulk">
+  {{ csrfField }}
+  <span class="bulk-hint">With selected:</span>
+  <input name="tag" placeholder="tag" aria-label="Tag name">
+  <button class="btn" name="action" value="tag-add" type="submit">Add tag</button>
+  <button class="btn" name="action" value="tag-remove" type="submit">Remove tag</button>
+  {{if .SetFields}}
+  <select name="field" aria-label="Field to set">{{range .SetFields}}<option value="{{.}}">{{.}}</option>{{end}}</select>
+  <input name="value" placeholder="value" aria-label="Field value">
+  <button class="btn" name="action" value="set-field" type="submit">Set field</button>
+  {{end}}
+  <button class="btn btn-danger" name="action" value="delete" type="submit"
+          onclick="return confirm('Delete the selected items? This cannot be undone.');">Delete</button>
+</form>
+{{end}}
+{{end}}

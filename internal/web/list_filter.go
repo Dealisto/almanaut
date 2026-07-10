@@ -19,6 +19,7 @@ type listControls struct {
 	Tag         string   // current tag filter ("" = none)
 	FilterField string   // current filter column ("" = none)
 	FilterValue string   // current filter substring
+	SetFields   []string // string field keys offered by the bulk "set field" action
 }
 
 // Active reports whether any filter or sort is applied, so the template can show
@@ -37,6 +38,7 @@ func (rs resource[T]) filterSort(items []T, req *http.Request, d handlerDeps) ([
 	q := req.URL.Query()
 	ctrl := listControls{
 		BasePath:    rs.basePath(),
+		SetFields:   rs.stringFields(),
 		Sort:        strings.TrimSpace(q.Get("sort")),
 		Dir:         strings.TrimSpace(q.Get("dir")),
 		Tag:         strings.TrimSpace(q.Get("tag")),
