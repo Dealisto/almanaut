@@ -51,7 +51,7 @@ type dashboardData struct {
 
 // dashboard renders the landing page: per-entity counts and attention groups
 // (expiring certs, services without backup, hosts down).
-func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalog, changelog *store.ChangelogRepo) http.HandlerFunc {
+func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalog, changelog *store.ChangelogRepo, staleDays int) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		fail := func(err error) { serverError(w, req, err) }
 
@@ -191,7 +191,7 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalo
 			})
 		}
 
-		_, healthTotal, err := buildAuditRules(repos, rels, cat)
+		_, healthTotal, err := buildAuditRules(repos, rels, cat, changelog, staleDays)
 		if err != nil {
 			fail(err)
 			return

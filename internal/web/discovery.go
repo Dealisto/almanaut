@@ -194,6 +194,20 @@ func scanNetwork(netscan networkScanner, hosts *store.HostRepo, opts NetDiscover
 	}
 }
 
+// recordImport writes an "import" changelog event for an entity created by a
+// discovery import, so the import counts as a sighting for stale detection and
+// shows up in the entity's history. cl must be bound to the import transaction.
+func recordImport(cl *store.ChangelogRepo, entityType string, id int64, label, actor string) error {
+	return cl.Create(store.ChangeEvent{
+		EntityType: entityType,
+		EntityID:   id,
+		Label:      label,
+		Action:     domain.ActionImport,
+		Actor:      actor,
+		CreatedAt:  nowRFC3339(),
+	})
+}
+
 func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if !opts.Enabled {
@@ -207,6 +221,7 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) 
 		hostType := req.FormValue("type")
 		txErr := store.WithTx(db, func(tx *sql.Tx) error {
 			hr := hosts.WithTx(tx)
+			cl := store.NewChangelogRepo(db).WithTx(tx)
 			// Build the tracked-IP set inside the transaction so the uniqueness
 			// check and the inserts share one consistent view. Listing outside the
 			// tx let two concurrent submits (or a double-click) each read "IP absent"
@@ -241,7 +256,11 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) 
 				if err := h.Validate(); err != nil {
 					continue
 				}
-				if _, err := hr.Create(h); err != nil {
+				newID, err := hr.Create(h)
+				if err != nil {
+					return err
+				}
+				if err := recordImport(cl, "host", newID, h.Name, actor(req)); err != nil {
 					return err
 				}
 				tracked[ip] = true // avoid a duplicate within the same submit
@@ -333,6 +352,7 @@ func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.Re
 		txErr := store.WithTx(db, func(tx *sql.Tx) error {
 			hr := hosts.WithTx(tx)
 			rl := rels.WithTx(tx)
+			cl := store.NewChangelogRepo(db).WithTx(tx)
 
 			// List inside the tx so AlreadyTracked and the inserts share one
 			// consistent view; listing outside let a concurrent submit or a
@@ -359,6 +379,9 @@ func importProxmox(scanner proxmoxScanner, hosts *store.HostRepo, rels *store.Re
 				}
 				newID, err := hr.Create(p.Host)
 				if err != nil {
+					return err
+				}
+				if err := recordImport(cl, "host", newID, p.Host.Name, actor(req)); err != nil {
 					return err
 				}
 				createdID[p.ID] = newID
@@ -448,6 +471,7 @@ func importDocker(scanner dockerScanner, services *store.ServiceRepo, rels *stor
 		txErr := store.WithTx(db, func(tx *sql.Tx) error {
 			svc := services.WithTx(tx)
 			rl := rels.WithTx(tx)
+			cl := store.NewChangelogRepo(db).WithTx(tx)
 			// List inside the tx so AlreadyTracked and the inserts share one
 			// consistent view; listing outside let a concurrent submit or a
 			// double-click import the same container twice.
@@ -469,6 +493,9 @@ func importDocker(scanner dockerScanner, services *store.ServiceRepo, rels *stor
 				}
 				newID, err := svc.Create(p.Service)
 				if err != nil {
+					return err
+				}
+				if err := recordImport(cl, "service", newID, p.Service.Name, actor(req)); err != nil {
 					return err
 				}
 				if hostID > 0 {

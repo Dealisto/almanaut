@@ -50,6 +50,8 @@ type Config struct {
 	DiscoveryDockerInterval  time.Duration // ALMANAUT_DISCOVERY_DOCKER_INTERVAL — >0 enables scheduled Docker discovery
 	DiscoveryNetworkInterval time.Duration // ALMANAUT_DISCOVERY_NETWORK_INTERVAL — >0 enables scheduled network discovery (also needs the network scan enabled + a subnet)
 	DiscoveryProxmoxInterval time.Duration // ALMANAUT_DISCOVERY_PROXMOX_INTERVAL — >0 enables scheduled Proxmox discovery (also needs Proxmox configured)
+
+	StaleAfterDays int // ALMANAUT_STALE_AFTER_DAYS — inventory-health staleness window in days (0 disables the stale-entity rule)
 }
 
 // Load reads configuration from the environment, falling back to defaults. It
@@ -110,6 +112,8 @@ func Load() (Config, error) {
 		DiscoveryDockerInterval:  getenvDuration("ALMANAUT_DISCOVERY_DOCKER_INTERVAL", 0),
 		DiscoveryNetworkInterval: getenvDuration("ALMANAUT_DISCOVERY_NETWORK_INTERVAL", 0),
 		DiscoveryProxmoxInterval: getenvDuration("ALMANAUT_DISCOVERY_PROXMOX_INTERVAL", 0),
+
+		StaleAfterDays: getenvInt("ALMANAUT_STALE_AFTER_DAYS", 90),
 	}, nil
 }
 

@@ -10,9 +10,12 @@ import (
 )
 
 // auditFinding is one offending entity in an audit rule, rendered as a link.
+// AckRef, when set to a "type:id" reference, makes the page render an
+// "acknowledge" button next to the finding (used by the stale-entity rule).
 type auditFinding struct {
-	Label string
-	URL   string
+	Label  string
+	URL    string
+	AckRef string
 }
 
 // auditRule is one fixed audit rule with its offenders. Count drives both the
@@ -36,7 +39,7 @@ type healthReportData struct {
 // together with the total finding count. It is the single source of truth for
 // both the /health-report page and the dashboard summary counter, so the two can
 // never disagree.
-func buildAuditRules(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalog) ([]auditRule, int, error) {
+func buildAuditRules(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalog, changelog *store.ChangelogRepo, staleDays int) ([]auditRule, int, error) {
 	hosts, err := repos.hosts.List()
 	if err != nil {
 		return nil, 0, err
@@ -70,6 +73,12 @@ func buildAuditRules(repos entityRepos, rels *store.RelationshipRepo, cat entity
 		return nil, 0, err
 	}
 	ipam := domain.BuildIPAMConflicts(networks, hosts)
+
+	lastActivity, err := changelog.LastActivity()
+	if err != nil {
+		return nil, 0, err
+	}
+	staleRefs := domain.StaleRefs(entityRefs(opts), lastActivity, time.Now(), staleDays)
 
 	rules := []auditRule{
 		{
@@ -124,6 +133,11 @@ func buildAuditRules(repos entityRepos, rels *store.RelationshipRepo, cat entity
 			Description: "Networks that occupy the same CIDR block (parent/child subnets excluded).",
 			Findings:    overlapFindings(ipam.Overlaps, cat),
 		},
+		{
+			Title:       "Stale entities",
+			Description: staleDescription(staleDays),
+			Findings:    staleFindings(opts, staleRefs, cat),
+		},
 	}
 
 	total := 0
@@ -135,9 +149,9 @@ func buildAuditRules(repos entityRepos, rels *store.RelationshipRepo, cat entity
 
 // healthReport renders the inventory health page: every fixed audit rule with
 // its offender count and a drill-down list.
-func healthReport(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFunc {
+func healthReport(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalog, changelog *store.ChangelogRepo, staleDays int) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		rules, total, err := buildAuditRules(repos, rels, cat)
+		rules, total, err := buildAuditRules(repos, rels, cat, changelog, staleDays)
 		if err != nil {
 			serverError(w, req, err)
 			return
@@ -148,6 +162,84 @@ func healthReport(repos entityRepos, rels *store.RelationshipRepo, cat entityCat
 			Total: total,
 		})
 	}
+}
+
+// acknowledgeStale records an "acknowledge" changelog event for an entity,
+// resetting its staleness clock and leaving a trail in the entity's history.
+func acknowledgeStale(cat entityCatalog, changelog *store.ChangelogRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		typ, id, err := parseRef(req.FormValue("ref"))
+		if err != nil {
+			http.Error(w, "invalid entity reference", http.StatusBadRequest)
+			return
+		}
+		if _, ok := cat.resource(typ); !ok {
+			http.Error(w, "unknown entity type", http.StatusBadRequest)
+			return
+		}
+		// Only acknowledge an entity that actually exists, so a stray ref can't
+		// append a phantom row to the append-only changelog.
+		opts, err := cat.options()
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
+		labels := labelMap(opts)
+		label, ok := labels[fmt.Sprintf("%s:%d", typ, id)]
+		if !ok {
+			http.NotFound(w, req)
+			return
+		}
+		if err := changelog.Create(store.ChangeEvent{
+			EntityType: typ,
+			EntityID:   id,
+			Label:      label,
+			Action:     domain.ActionAcknowledge,
+			Actor:      actor(req),
+			Changes:    []domain.FieldChange{{Field: "stale", Old: "stale", New: "acknowledged"}},
+			CreatedAt:  nowRFC3339(),
+		}); err != nil {
+			serverError(w, req, err)
+			return
+		}
+		http.Redirect(w, req, "/health-report", http.StatusSeeOther)
+	}
+}
+
+// entityRefs projects catalog options to plain entity references.
+func entityRefs(opts []entityOption) []domain.EntityRef {
+	out := make([]domain.EntityRef, 0, len(opts))
+	for _, o := range opts {
+		out = append(out, domain.EntityRef{Type: o.Type, ID: o.ID})
+	}
+	return out
+}
+
+// staleDescription renders the rule's human description with its configured
+// window.
+func staleDescription(days int) string {
+	if days <= 0 {
+		return "Stale detection is disabled (set ALMANAUT_STALE_AFTER_DAYS)."
+	}
+	return fmt.Sprintf("Entities untouched — no edit or discovery sighting — for over %d days. Acknowledge to confirm one is still valid and reset its clock.", days)
+}
+
+// staleFindings renders the stale entities, each with an acknowledge button
+// (via AckRef), drawn from the catalog option list so labels match the rest of
+// the app.
+func staleFindings(opts []entityOption, stale []domain.EntityRef, cat entityCatalog) []auditFinding {
+	staleSet := make(map[domain.EntityRef]bool, len(stale))
+	for _, r := range stale {
+		staleSet[r] = true
+	}
+	out := []auditFinding{}
+	for _, o := range opts {
+		ref := domain.EntityRef{Type: o.Type, ID: o.ID}
+		if staleSet[ref] {
+			out = append(out, auditFinding{Label: o.Label, URL: cat.path(o.Type, o.ID), AckRef: o.Value})
+		}
+	}
+	return out
 }
 
 // certsLinkedToNothing returns the certificates that appear in no relationship.

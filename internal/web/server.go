@@ -64,6 +64,10 @@ type Config struct {
 	// CertProbes stores/reads each certificate's latest TLS probe result,
 	// surfaced on the certificate detail page.
 	CertProbes *store.CertProbeRepo
+	// StaleAfterDays is the inventory-health staleness window: an entity with no
+	// changelog activity (edit, discovery import, or acknowledgement) for longer
+	// than this is reported as stale. 0 disables the rule.
+	StaleAfterDays int
 }
 
 // New builds the HTTP handler with all routes wired to the given repos.
@@ -619,7 +623,7 @@ func New(cfg Config) http.Handler {
 			if cfg.AuthEnabled {
 				r.Use(requireWrite)
 			}
-			r.Get("/", dashboard(repos, relationships, cat, changelog))
+			r.Get("/", dashboard(repos, relationships, cat, changelog, cfg.StaleAfterDays))
 			for _, rs := range resources {
 				rs.mount(r, deps)
 			}
@@ -641,7 +645,8 @@ func New(cfg Config) http.Handler {
 			r.Get("/impact", impactView(relationships, cat))
 			r.Get("/history", history(cat, changelog))
 			r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
-			r.Get("/health-report", healthReport(repos, relationships, cat))
+			r.Get("/health-report", healthReport(repos, relationships, cat, changelog, cfg.StaleAfterDays))
+			r.Post("/health-report/acknowledge", acknowledgeStale(cat, changelog))
 			r.Get("/search", searchEntities(cat, tags, customFields))
 			r.Get("/data", showData(cat))
 			r.Get("/export", exportData(db))

@@ -14,6 +14,9 @@ const (
 	ActionUpdate = "update"
 	ActionDelete = "delete"
 	ActionImport = "import"
+	// ActionAcknowledge marks a stale entity as reviewed and still valid; it
+	// carries no field changes beyond resetting the entity's activity clock.
+	ActionAcknowledge = "acknowledge"
 )
 
 // FieldChange is one field's before/after value. For a create, Old is empty and
