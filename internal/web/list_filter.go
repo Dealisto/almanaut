@@ -11,7 +11,10 @@ import (
 // "listcontrols" partial and used to build shareable query-string URLs. All
 // state lives in query params so a filtered/sorted list is a plain link.
 type listControls struct {
-	BasePath    string   // e.g. "/hosts"
+	BasePath     string // e.g. "/hosts"
+	Type         string // singular type key, e.g. "host" (for saving a view)
+	CurrentQuery string // the request's raw query string (for saving a view)
+
 	Columns     []string // filterable/sortable column labels ("Name" + fields + custom fields)
 	Tags        []string // tag names present on this entity type
 	Sort        string   // current sort column ("" = none)
@@ -37,13 +40,15 @@ func (c listControls) Active() bool {
 func (rs resource[T]) filterSort(items []T, req *http.Request, d handlerDeps) ([]T, listControls, error) {
 	q := req.URL.Query()
 	ctrl := listControls{
-		BasePath:    rs.basePath(),
-		SetFields:   rs.stringFields(),
-		Sort:        strings.TrimSpace(q.Get("sort")),
-		Dir:         strings.TrimSpace(q.Get("dir")),
-		Tag:         strings.TrimSpace(q.Get("tag")),
-		FilterField: strings.TrimSpace(q.Get("field")),
-		FilterValue: strings.TrimSpace(q.Get("value")),
+		BasePath:     rs.basePath(),
+		Type:         rs.sing,
+		CurrentQuery: req.URL.RawQuery,
+		SetFields:    rs.stringFields(),
+		Sort:         strings.TrimSpace(q.Get("sort")),
+		Dir:          strings.TrimSpace(q.Get("dir")),
+		Tag:          strings.TrimSpace(q.Get("tag")),
+		FilterField:  strings.TrimSpace(q.Get("field")),
+		FilterValue:  strings.TrimSpace(q.Get("value")),
 	}
 	if ctrl.Dir != "desc" {
 		ctrl.Dir = "asc"

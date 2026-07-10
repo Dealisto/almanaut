@@ -50,6 +50,13 @@
         <a href="/tags" class="{{if isActive "/tags"}}active{{end}}">Tags</a>
         <a href="/history" class="{{if isActive "/history"}}active{{end}}">History</a>
       </details>
+      {{if savedViews}}
+      <details class="nav-group nav-tools" open>
+        <summary class="nav-label">Saved views</summary>
+        {{range savedViews}}{{$title := .TypeTitle}}{{range .Views}}<a href="{{.URL}}">{{$title}}: {{.Name}}</a>{{end}}{{end}}
+        <a href="/views" class="{{if isActive "/views"}}active{{end}}">Manage views</a>
+      </details>
+      {{end}}
       <details class="nav-group nav-tools" open>
         <summary class="nav-label">Admin</summary>
         {{if canWrite}}<a href="/custom-fields" class="{{if isActive "/custom-fields"}}active{{end}}">Custom fields</a>{{end}}
