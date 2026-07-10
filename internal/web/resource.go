@@ -742,6 +742,7 @@ type mountable interface {
 	options() ([]entityOption, error)
 	singular() string
 	basePath() string
+	apiResource() apiResourceInfo
 	searchHeading() string
 	searchEntries(cf *store.CustomFieldRepo) ([]searchEntry, error)
 	importCSV(d handlerDeps, r io.Reader, actor string) (int, int, []string, error)

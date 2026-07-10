@@ -59,7 +59,8 @@ server-rendered UI. Back it up by copying one file (or one YAML export).
   certificates, warranties, and renewals
 - **Outbound webhooks** — signed HTTP payloads on entity create/update/delete
 - **Uptime Kuma sync** — one-way sync of your services to Kuma HTTP monitors
-- **Read-write JSON API** with per-user, scoped API tokens
+- **Read-write JSON API** with per-user, scoped API tokens, a built-in
+  reference page, and a generated OpenAPI 3 spec
 - **Prometheus `/metrics`** endpoint
 
 **Operations**
@@ -567,6 +568,7 @@ curl -X POST http://localhost:8080/api/hosts \
 | `DELETE /api/{type}/{id}` | `204` on success, `404` if absent |
 | `GET /api/search?q=<term>` | Flat array of matches: `[{"type","id","label","path"}]` |
 | `GET /api/relationships` | All relationships |
+| `GET /api/openapi.json` | The OpenAPI 3 document describing every route and schema |
 
 `{type}` bases mirror the web UI's routes, not a naive plural of the entity
 name — `hardware`, not `hardwares` (see [The inventory model](#the-inventory-model)
@@ -581,6 +583,15 @@ entity's Change history show exactly who made a scripted change.
 curl -s http://localhost:8080/api/certificates \
   -H "Authorization: Bearer alm_..." | jq '.[] | {subject, expires_on}'
 ```
+
+### API reference
+
+A browsable reference lives at **API docs** (`/api/docs`) — every endpoint and
+entity schema, rendered server-side (no external JS). The same information is
+served as a machine-readable [OpenAPI 3](https://spec.openapis.org/oas/v3.0.3)
+document at `/api/openapi.json`, suitable for client generators or import into
+tools like Postman. Both are generated from the entity catalog, so they always
+match the running build.
 
 ## Metrics
 
