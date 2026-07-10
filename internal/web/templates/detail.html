@@ -127,7 +127,7 @@
   {{end}}
   {{else}}<p class="muted"><em>Not probed yet.</em></p>{{end}}
   {{if canWrite}}
-  <form class="form-inline" method="post" action="/certificates/{{$.EntityID}}/probe">
+  <form class="form-inline" method="post" action="{{$.ListURL}}/{{$.EntityID}}/probe">
     {{ csrfField }}
     <button class="btn btn-primary" type="submit">Probe now</button>
   </form>

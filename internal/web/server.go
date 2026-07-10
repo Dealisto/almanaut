@@ -640,7 +640,7 @@ func New(cfg Config) http.Handler {
 			r.Post("/discovery/network/import", importNetwork(hosts, netOpts, db))
 			r.Get("/discovery/proxmox", scanProxmox(proxmox, hosts, pveOpts))
 			r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts, db))
-			r.Post("/certificates/{id}/probe", probeCertificate(cfg.CertProber, certificates))
+			r.Post("/certificates/{id}/probe", probeCertificate(cat, cfg.CertProber, certificates))
 		})
 	})
 

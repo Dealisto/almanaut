@@ -41,7 +41,7 @@ func certProbeSection(probes *store.CertProbeRepo) func(domain.Certificate) *pro
 // page. It is not a resource[T] method (probeSection/CertProber live outside
 // the generic CRUD surface), so it parses the id param directly, matching
 // attachment.go's non-resource sub-handlers.
-func probeCertificate(prober CertProber, certs *store.CertificateRepo) http.HandlerFunc {
+func probeCertificate(cat entityCatalog, prober CertProber, certs *store.CertificateRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 		if err != nil {
@@ -59,6 +59,6 @@ func probeCertificate(prober CertProber, certs *store.CertificateRepo) http.Hand
 				return
 			}
 		}
-		http.Redirect(w, r, "/certificates/"+chi.URLParam(r, "id"), http.StatusSeeOther)
+		http.Redirect(w, r, cat.path("certificate", id), http.StatusSeeOther)
 	}
 }
