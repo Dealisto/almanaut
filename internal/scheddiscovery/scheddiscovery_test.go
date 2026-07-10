@@ -32,10 +32,6 @@ type svcList []domain.Service
 
 func (s svcList) List() ([]domain.Service, error) { return []domain.Service(s), nil }
 
-type hostList []domain.Host
-
-func (h hostList) List() ([]domain.Host, error) { return []domain.Host(h), nil }
-
 type countSender struct {
 	mu sync.Mutex
 	n  int
