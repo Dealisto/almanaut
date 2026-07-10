@@ -23,6 +23,9 @@ type Host struct {
 	IPs    []string `yaml:"ips" json:"ips"`
 	Notes  string   `yaml:"notes" json:"notes"`
 
+	CheckAddress string          `yaml:"check_address" json:"check_address"` // optional host:port for TCP liveness checks; empty = not monitored
+	Liveness     *LivenessStatus `yaml:"-" json:"liveness,omitempty"`        // derived, populated by the repo join
+
 	RackID       int64 `yaml:"rack_id" json:"rack_id"`
 	RackPosition int   `yaml:"rack_position" json:"rack_position"`
 	UHeight      int   `yaml:"u_height" json:"u_height"`
@@ -40,6 +43,9 @@ func (h Host) Validate() error {
 		if net.ParseIP(ip) == nil {
 			return fmt.Errorf("invalid IP address: %q", ip)
 		}
+	}
+	if err := ValidateCheckAddress(h.CheckAddress); err != nil {
+		return err
 	}
 	return validateRackPlacement(h.RackID, h.RackPosition, h.UHeight)
 }
