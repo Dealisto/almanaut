@@ -71,6 +71,12 @@ type Config struct {
 	// AuthAuditRetentionDays bounds how long authentication audit events are kept;
 	// older events are pruned opportunistically. 0 disables pruning (keep forever).
 	AuthAuditRetentionDays int
+	// Reverse-proxy header authentication (SSO). ProxyAuthHeader empty disables it.
+	// The header is trusted only from ProxyAuthAllowlist source addresses.
+	ProxyAuthHeader        string
+	ProxyAuthAllowlist     string // comma-separated IPs/CIDRs
+	ProxyAuthAutoProvision bool
+	ProxyAuthDefaultRole   string // role for auto-provisioned users (default "viewer")
 }
 
 // New builds the HTTP handler with all routes wired to the given repos.
@@ -524,6 +530,7 @@ func New(cfg Config) http.Handler {
 	authEvents := store.NewAuthEventRepo(db)
 	totp := store.NewTOTPRepo(db)
 	tokenUses := newTokenUseLog()
+	ssoLog := newTokenUseLog()
 	cat := entityCatalog{resources: resources}
 	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, customFields: customFields, attachments: attachments, db: db, webhooks: cfg.Webhooks}
 	r := chi.NewRouter()
@@ -575,6 +582,19 @@ func New(cfg Config) http.Handler {
 	// while inheriting the request-id/logging/recovery stack above.
 	r.Group(func(r chi.Router) {
 		if cfg.AuthEnabled {
+			// Reverse-proxy SSO runs before session auth: when it resolves an
+			// identity from a trusted proxy, sessionAuth passes the request through.
+			if cfg.ProxyAuthHeader != "" {
+				allow, skipped := parseCIDRList(cfg.ProxyAuthAllowlist)
+				for _, s := range skipped {
+					logger.Printf("proxy-auth: ignoring invalid allowlist entry %q", s)
+				}
+				role := domain.Role(cfg.ProxyAuthDefaultRole)
+				if !role.Valid() {
+					role = domain.RoleViewer
+				}
+				r.Use(proxyAuth(cfg.ProxyAuthHeader, allow, cfg.ProxyAuthAutoProvision, role, users, authEvents, ssoLog))
+			}
 			r.Use(sessionAuth(sessions))
 		}
 		// Bound the request body before csrfProtect reads the form of every

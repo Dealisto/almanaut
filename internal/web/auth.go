@@ -110,6 +110,12 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request, forceSecure bool
 func sessionAuth(sessions *store.SessionRepo) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// A prior middleware (proxy/SSO auth) may already have resolved the
+			// user; if so, don't require a session cookie.
+			if _, ok := userFrom(r.Context()); ok {
+				next.ServeHTTP(w, r)
+				return
+			}
 			if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
 				u, err := sessions.UserByToken(hashToken(c.Value), nowRFC3339())
 				if err == nil {

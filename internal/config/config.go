@@ -54,6 +54,11 @@ type Config struct {
 	StaleAfterDays int // ALMANAUT_STALE_AFTER_DAYS — inventory-health staleness window in days (0 disables the stale-entity rule)
 
 	AuthAuditRetentionDays int // ALMANAUT_AUTH_AUDIT_RETENTION_DAYS — days to keep auth audit events (0 keeps forever)
+
+	ProxyAuthHeader        string // ALMANAUT_PROXY_AUTH_HEADER — identity header from a trusted reverse proxy (e.g. "Remote-User"); empty disables SSO
+	ProxyAuthAllowlist     string // ALMANAUT_PROXY_AUTH_ALLOWLIST — comma-separated proxy IPs/CIDRs the header is trusted from
+	ProxyAuthAutoProvision bool   // ALMANAUT_PROXY_AUTH_AUTOPROVISION — create a local user for an unknown proxy identity (default off)
+	ProxyAuthDefaultRole   string // ALMANAUT_PROXY_AUTH_DEFAULT_ROLE — role for auto-provisioned users (default "viewer")
 }
 
 // Load reads configuration from the environment, falling back to defaults. It
@@ -118,6 +123,11 @@ func Load() (Config, error) {
 		StaleAfterDays: getenvInt("ALMANAUT_STALE_AFTER_DAYS", 90),
 
 		AuthAuditRetentionDays: getenvInt("ALMANAUT_AUTH_AUDIT_RETENTION_DAYS", 90),
+
+		ProxyAuthHeader:        getenv("ALMANAUT_PROXY_AUTH_HEADER", ""),
+		ProxyAuthAllowlist:     getenv("ALMANAUT_PROXY_AUTH_ALLOWLIST", ""),
+		ProxyAuthAutoProvision: getenvBool("ALMANAUT_PROXY_AUTH_AUTOPROVISION", false),
+		ProxyAuthDefaultRole:   getenv("ALMANAUT_PROXY_AUTH_DEFAULT_ROLE", "viewer"),
 	}, nil
 }
 
