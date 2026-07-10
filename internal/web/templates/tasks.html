@@ -7,6 +7,8 @@
   </div>
 </div>
 
+<p><a href="/discovery/runs">View discovery run history →</a></p>
+
 {{if .Message}}<div class="notice">
   {{if eq .Message "run-requested"}}Run requested — it runs in the background; reload to see the result.
   {{else if eq .Message "unknown-job"}}That job is no longer registered.

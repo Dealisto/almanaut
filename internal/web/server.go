@@ -55,6 +55,9 @@ type Config struct {
 	// Tasks exposes the background job runner to the Scheduled-tasks admin
 	// page. Nil => the page and routes are not mounted.
 	Tasks jobRunner
+	// DiscoveryRuns backs the read-only discovery run-history admin page.
+	// Nil => the page and route are not mounted.
+	DiscoveryRuns *store.DiscoveryRunRepo
 	// CertProber runs the "Probe now" TLS check from a certificate's detail
 	// page (implemented by *certprobe.Prober).
 	CertProber CertProber
@@ -595,6 +598,10 @@ func New(cfg Config) http.Handler {
 				if cfg.Tasks != nil {
 					r.Get("/tasks", tasksPage(cfg.Tasks))
 					r.Post("/tasks/{name}/run", tasksRun(cfg.Tasks))
+				}
+
+				if cfg.DiscoveryRuns != nil {
+					r.Get("/discovery/runs", discoveryRunsPage(cfg.DiscoveryRuns))
 				}
 			})
 		}
