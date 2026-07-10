@@ -98,3 +98,92 @@ func (r *Runner) Statuses() []Status {
 	}
 	return out
 }
+
+// Trigger requests an immediate extra pass of the named job. It returns false
+// if no job has that name. A trigger arriving mid-pass coalesces into exactly
+// one follow-up pass (the channel buffers a single pending run).
+func (r *Runner) Trigger(name string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, j := range r.jobs {
+		if j.def.Name == name {
+			select {
+			case j.trigger <- struct{}{}:
+			default:
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// Start runs one immediate pass of every job, then a pass on each interval tick
+// and each manual trigger, until ctx is cancelled. Call it in a goroutine; it
+// blocks until ctx ends and all job loops have stopped.
+func (r *Runner) Start(ctx context.Context) {
+	r.mu.Lock()
+	jobs := append([]*job(nil), r.jobs...)
+	r.mu.Unlock()
+
+	var wg sync.WaitGroup
+	for _, j := range jobs {
+		wg.Add(1)
+		go func(j *job) {
+			defer wg.Done()
+			r.loop(ctx, j)
+		}(j)
+	}
+	wg.Wait()
+}
+
+func (r *Runner) loop(ctx context.Context, j *job) {
+	r.pass(ctx, j)
+	// A <=0 interval leaves tick nil, which blocks forever in select: the job
+	// then runs only at startup and on manual triggers.
+	var tick <-chan time.Time
+	if j.def.Interval > 0 {
+		t := time.NewTicker(j.def.Interval)
+		defer t.Stop()
+		tick = t.C
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick:
+			r.pass(ctx, j)
+		case <-j.trigger:
+			r.pass(ctx, j)
+		}
+	}
+}
+
+// pass runs one bounded execution of j and records the outcome. One pass at a
+// time per job (the loop is single-goroutine), so there is no intra-job overlap.
+func (r *Runner) pass(ctx context.Context, j *job) {
+	j.mu.Lock()
+	j.running = true
+	j.mu.Unlock()
+
+	start := time.Now()
+	runCtx, cancel := context.WithTimeout(ctx, j.def.Timeout)
+	err := j.def.Run(runCtx)
+	cancel()
+
+	j.mu.Lock()
+	j.running = false
+	j.runs++
+	j.lastRun = start
+	j.lastDur = time.Since(start)
+	j.nextRun = time.Now().Add(j.def.Interval)
+	if err != nil {
+		j.lastErr = err.Error()
+	} else {
+		j.lastErr = ""
+	}
+	j.mu.Unlock()
+
+	if err != nil {
+		r.log.Printf("job %q: %v", j.def.Name, err)
+	}
+}
