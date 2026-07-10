@@ -173,17 +173,17 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 			return fmt.Errorf("marshal ips for host %d: %w", h.ID, err)
 		}
 		if err := insert("host", h.ID,
-			`INSERT INTO hosts (id, name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			h.ID, h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(raw), h.Notes, h.RackID, h.RackPosition, h.UHeight); err != nil {
+			`INSERT INTO hosts (id, name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height, check_address)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			h.ID, h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(raw), h.Notes, h.RackID, h.RackPosition, h.UHeight, h.CheckAddress); err != nil {
 			return err
 		}
 	}
 	for _, s := range snap.Services {
 		if err := insert("service", s.ID,
-			`INSERT INTO services (id, name, kind, url, ports, category, notes)
-			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			s.ID, s.Name, s.Kind, s.URL, s.Ports, s.Category, s.Notes); err != nil {
+			`INSERT INTO services (id, name, kind, url, ports, category, notes, check_address)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			s.ID, s.Name, s.Kind, s.URL, s.Ports, s.Category, s.Notes, s.CheckAddress); err != nil {
 			return err
 		}
 	}
