@@ -269,3 +269,32 @@ func TestLoadKumaPassFile(t *testing.T) {
 		t.Fatalf("KumaPass = %q, want filepass", cfg.KumaPass)
 	}
 }
+
+func TestLoadLivenessDefaults(t *testing.T) {
+	t.Setenv("ALMANAUT_LIVENESS_ENABLED", "")
+	t.Setenv("ALMANAUT_LIVENESS_INTERVAL", "")
+	t.Setenv("ALMANAUT_LIVENESS_TIMEOUT", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.LivenessEnabled {
+		t.Fatal("liveness should default disabled")
+	}
+	if cfg.LivenessInterval != 60*time.Second {
+		t.Fatalf("interval default = %v", cfg.LivenessInterval)
+	}
+	if cfg.LivenessTimeout != 5*time.Second {
+		t.Fatalf("timeout default = %v", cfg.LivenessTimeout)
+	}
+}
+
+func TestLoadLivenessOverrides(t *testing.T) {
+	t.Setenv("ALMANAUT_LIVENESS_ENABLED", "true")
+	t.Setenv("ALMANAUT_LIVENESS_INTERVAL", "30s")
+	t.Setenv("ALMANAUT_LIVENESS_TIMEOUT", "2s")
+	cfg, _ := Load()
+	if !cfg.LivenessEnabled || cfg.LivenessInterval != 30*time.Second || cfg.LivenessTimeout != 2*time.Second {
+		t.Fatalf("overrides not applied: %+v", cfg)
+	}
+}

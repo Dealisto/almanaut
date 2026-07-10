@@ -38,6 +38,10 @@ type Config struct {
 	KumaUser     string // ALMANAUT_KUMA_USER — Kuma username (socket.io login; API keys don't cover monitor CRUD)
 	KumaPass     string // ALMANAUT_KUMA_PASS — Kuma password (or _FILE)
 	KumaInsecure bool   // ALMANAUT_KUMA_INSECURE — skip TLS verification (self-signed cert)
+
+	LivenessEnabled  bool          // ALMANAUT_LIVENESS_ENABLED — master switch for TCP liveness checks
+	LivenessInterval time.Duration // ALMANAUT_LIVENESS_INTERVAL — time between check passes
+	LivenessTimeout  time.Duration // ALMANAUT_LIVENESS_TIMEOUT — per-address TCP dial timeout
 }
 
 // Load reads configuration from the environment, falling back to defaults. It
@@ -89,6 +93,9 @@ func Load() (Config, error) {
 		KumaUser:           getenv("ALMANAUT_KUMA_USER", ""),
 		KumaPass:           kumaPass,
 		KumaInsecure:       getenvBool("ALMANAUT_KUMA_INSECURE", false),
+		LivenessEnabled:    getenvBool("ALMANAUT_LIVENESS_ENABLED", false),
+		LivenessInterval:   getenvDuration("ALMANAUT_LIVENESS_INTERVAL", 60*time.Second),
+		LivenessTimeout:    getenvDuration("ALMANAUT_LIVENESS_TIMEOUT", 5*time.Second),
 	}, nil
 }
 
