@@ -1,0 +1,45 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Account</span>
+    <h1>Two-factor authentication</h1>
+  </div>
+</div>
+
+{{if .Enabled}}
+<section class="panel">
+  <p><span class="badge badge-ok">Enabled</span> Your account is protected by an authenticator app.</p>
+  <p class="muted">{{.RecoveryLeft}} recovery code(s) remaining.</p>
+  <form method="post" action="/account/2fa/disable" class="stack" onsubmit="return confirm('Disable two-factor authentication?');">
+    {{ csrfField }}
+    <label>Enter a current code (or a recovery code) to disable
+      <input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
+    </label>
+    <input name="recovery" placeholder="or a recovery code" aria-label="Recovery code">
+    <div class="actions"><button class="btn btn-danger" type="submit">Disable 2FA</button></div>
+  </form>
+</section>
+{{else if .Enrolling}}
+<section class="panel">
+  <h2>Scan this QR code</h2>
+  <p class="muted">Scan with your authenticator app (Google Authenticator, Aegis, 1Password, …), or enter the secret manually.</p>
+  <p><img src="{{.QR}}" alt="TOTP QR code" width="220" height="220"></p>
+  <p>Secret: <code>{{.Secret}}</code></p>
+  <form method="post" action="/account/2fa/confirm" class="stack">
+    {{ csrfField }}
+    <label>Enter the 6-digit code to confirm
+      <input name="code" inputmode="numeric" autocomplete="one-time-code" required autofocus placeholder="123456">
+    </label>
+    <div class="actions"><button class="btn btn-primary" type="submit">Confirm &amp; enable</button></div>
+  </form>
+</section>
+{{else}}
+<section class="panel">
+  <p>Add a second factor so a stolen password alone can't sign in.</p>
+  <form method="post" action="/account/2fa/setup">
+    {{ csrfField }}
+    <button class="btn btn-primary" type="submit">Set up 2FA</button>
+  </form>
+</section>
+{{end}}
+{{end}}

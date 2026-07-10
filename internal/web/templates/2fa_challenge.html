@@ -1,0 +1,25 @@
+{{define "layout"}}<!doctype html>
+<html lang="en" data-theme="{{theme}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Almanaut</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="login-body">
+<main class="login-card">
+  <h1 class="brand">Almanaut</h1>
+  <p class="muted">Enter the code from your authenticator app.</p>
+  {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+  <form class="stack" method="post" action="/login/2fa">
+    {{ csrfField }}
+    <input type="hidden" name="next" value="{{.Next}}">
+    <label>Authentication code<input name="code" inputmode="numeric" autocomplete="one-time-code" autofocus placeholder="123456"></label>
+    <label>Recovery code<input name="recovery" placeholder="xxxxx-xxxxx"></label>
+    <div class="actions">
+      <button class="btn btn-primary" type="submit">Verify</button>
+    </div>
+  </form>
+</main>
+</body>
+</html>{{end}}

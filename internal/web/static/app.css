@@ -186,6 +186,8 @@ form.stack input:focus,form.stack select:focus,form.stack textarea:focus{
 .bulk-actions .bulk-hint{font-size:.8rem;color:var(--muted);margin-right:2px}
 .bulk-actions input,.bulk-actions select{padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg)}
 th.bulk-col,td.bulk-col{width:1.6rem;text-align:center}
+.recovery-codes{list-style:none;margin:.5rem 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(9rem,1fr));gap:6px}
+.recovery-codes code{display:block;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);text-align:center}
 ul.related{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
 ul.related li{padding:7px 10px;border-radius:8px}
 ul.related li:hover{background:var(--bg)}
