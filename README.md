@@ -134,6 +134,29 @@ volumes:
 The image ships its own `HEALTHCHECK`, so `docker compose ps` reports the
 container's health directly.
 
+### Prebuilt binaries
+
+Each tagged release has a [GitHub Release](https://github.com/Dealisto/almanaut/releases)
+with prebuilt, statically linked binaries for Linux, macOS, and Windows
+(`amd64` and `arm64`), plus a `checksums.txt`. Download the archive for your
+platform, verify it, and run it:
+
+```bash
+sha256sum -c checksums.txt --ignore-missing
+tar xzf almanaut_1.0.0_linux_amd64.tar.gz
+ALMANAUT_DATA_DIR=./data ./almanaut
+```
+
+Release channels at a glance:
+
+| Channel | What you get |
+|---|---|
+| Container `:X.Y.Z` / `:X.Y` / `:latest` | Multi-arch images on GHCR for a tagged release |
+| Container `:dev` | Rolling image built from `master` |
+| GitHub Release binaries | Versioned archives + checksums for a tagged release |
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
+
 ### From source
 
 Requires Go 1.26+.
@@ -627,7 +650,7 @@ probes can reach them):
 
 | Endpoint    | Response                                                        |
 |-------------|-----------------------------------------------------------------|
-| `/healthz`  | `200 ok` when the database is reachable, `503` otherwise         |
+| `/healthz`  | `200 {"status":"ok","version":"..."}` when the database is reachable, `503` otherwise |
 | `/version`  | `{"version":"..."}` — the build version (`dev` for local builds) |
 
 The Docker image ships a `HEALTHCHECK` that runs `almanaut healthcheck`, a
