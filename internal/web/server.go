@@ -634,6 +634,7 @@ func New(cfg Config) http.Handler {
 			r.Get("/impact", impactView(relationships, cat))
 			r.Get("/history", history(cat, changelog))
 			r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
+			r.Get("/health-report", healthReport(repos, relationships, cat))
 			r.Get("/search", searchEntities(cat, tags, customFields))
 			r.Get("/data", showData(cat))
 			r.Get("/export", exportData(db))
