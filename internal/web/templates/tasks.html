@@ -1,0 +1,51 @@
+{{/* internal/web/templates/tasks.html */}}
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <p class="ph-eyebrow">Administration</p>
+    <h1>Scheduled tasks</h1>
+  </div>
+</div>
+
+{{if .Message}}<div class="notice">
+  {{if eq .Message "run-requested"}}Run requested — it runs in the background; reload to see the result.
+  {{else if eq .Message "unknown-job"}}That job is no longer registered.
+  {{else}}{{.Message}}{{end}}
+</div>{{end}}
+
+<div class="panel">
+  {{if .Jobs}}
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Task</th><th>Interval</th><th>Last run</th><th>Next run</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{range .Jobs}}
+      <tr>
+        <td>{{.Title}}</td>
+        <td class="mono">{{.Interval}}</td>
+        <td>{{if .LastRun.IsZero}}<span class="muted">never</span>{{else}}{{.LastRun.Format "2006-01-02 15:04:05"}}{{end}}</td>
+        <td>{{if .NextRun.IsZero}}<span class="muted">—</span>{{else}}{{.NextRun.Format "2006-01-02 15:04:05"}}{{end}}</td>
+        <td>
+          {{if .Running}}running…
+          {{else if .LastErr}}<span class="badge badge-warn">failed</span> {{.LastErr}}
+          {{else if .LastRun.IsZero}}<span class="muted">—</span>
+          {{else}}ok{{end}}
+        </td>
+        <td>
+          <form method="post" action="/tasks/{{.Name}}/run" class="inline">
+            {{ csrfField }}
+            <button class="btn" type="submit">Run now</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}
+  <p class="muted">No scheduled tasks are registered. Background jobs appear here once configured (e.g. expiry notifications need a notification channel).</p>
+  {{end}}
+</div>
+{{end}}

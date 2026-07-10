@@ -56,6 +56,7 @@
         <a href="/data" class="{{if isActive "/data"}}active{{end}}">Data</a>
         {{if isAdmin}}<a href="/users" class="{{if isActive "/users"}}active{{end}}">Users</a>{{end}}
         {{if isAdmin}}<a href="/webhooks" class="{{if isActive "/webhooks"}}active{{end}}">Webhooks</a>{{end}}
+        {{if isAdmin}}<a href="/tasks" class="{{if isActive "/tasks"}}active{{end}}">Scheduled tasks</a>{{end}}
         {{if isAdmin}}{{if kumaEnabled}}<a href="/kuma" class="{{if isActive "/kuma"}}active{{end}}">Uptime Kuma</a>{{end}}{{end}}
         <a href="/account/tokens" class="{{if isActive "/account/tokens"}}active{{end}}">API tokens</a>
       </details>
