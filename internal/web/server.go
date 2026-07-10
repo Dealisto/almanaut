@@ -173,6 +173,13 @@ func New(cfg Config) http.Handler {
 				}
 				if u, ok := domain.BuildNetworkUsage(n.ID, nets, hostList, resList); ok {
 					s := buildIPAMSection(u)
+					for _, o := range domain.NetworkOverlaps(n, nets) {
+						// Network route base is regular, so build the path directly
+						// (the entity catalog is not yet in scope in this closure).
+						s.Overlaps = append(s.Overlaps, overlapView{
+							Name: o.Name, CIDR: o.CIDR, URL: fmt.Sprintf("/networks/%d", o.ID),
+						})
+					}
 					return &s
 				}
 				return nil

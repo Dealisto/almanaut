@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -56,6 +57,10 @@ func buildAuditRules(repos entityRepos, rels *store.RelationshipRepo, cat entity
 	if err != nil {
 		return nil, 0, err
 	}
+	networks, err := repos.networks.List()
+	if err != nil {
+		return nil, 0, err
+	}
 	relList, err := rels.List()
 	if err != nil {
 		return nil, 0, err
@@ -64,6 +69,7 @@ func buildAuditRules(repos entityRepos, rels *store.RelationshipRepo, cat entity
 	if err != nil {
 		return nil, 0, err
 	}
+	ipam := domain.BuildIPAMConflicts(networks, hosts)
 
 	rules := []auditRule{
 		{
@@ -102,6 +108,21 @@ func buildAuditRules(repos entityRepos, rels *store.RelationshipRepo, cat entity
 			// Certificates get their own rule above, so exclude them here to avoid
 			// listing an unlinked certificate twice.
 			Findings: orphanFindings(opts, relList, cat, "certificate"),
+		},
+		{
+			Title:       "Duplicate IP assignments",
+			Description: "The same IP address claimed by more than one host.",
+			Findings:    duplicateIPFindings(ipam.DuplicateIPs, cat),
+		},
+		{
+			Title:       "Host IPs outside every network",
+			Description: "Host addresses that fall in no known network.",
+			Findings:    allocationFindings(ipam.OutsideNetworks, cat),
+		},
+		{
+			Title:       "Overlapping networks",
+			Description: "Networks that occupy the same CIDR block (parent/child subnets excluded).",
+			Findings:    overlapFindings(ipam.Overlaps, cat),
 		},
 	}
 
@@ -177,6 +198,47 @@ func subscriptionFindings(subs []domain.Subscription, cat entityCatalog) []audit
 	out := make([]auditFinding, 0, len(subs))
 	for _, s := range subs {
 		out = append(out, auditFinding{Label: s.Name, URL: cat.path("subscription", s.ID)})
+	}
+	return out
+}
+
+// duplicateIPFindings lists each colliding host under a shared IP, one finding
+// per host so every offending entity is directly linkable.
+func duplicateIPFindings(dups []domain.IPConflict, cat entityCatalog) []auditFinding {
+	out := []auditFinding{}
+	for _, d := range dups {
+		for _, h := range d.Hosts {
+			out = append(out, auditFinding{
+				Label: fmt.Sprintf("%s — %s", d.IP, h.HostName),
+				URL:   cat.path("host", h.HostID),
+			})
+		}
+	}
+	return out
+}
+
+// allocationFindings renders host IP allocations (used for IPs outside every
+// network), linking to the owning host.
+func allocationFindings(allocs []domain.Allocation, cat entityCatalog) []auditFinding {
+	out := make([]auditFinding, 0, len(allocs))
+	for _, a := range allocs {
+		out = append(out, auditFinding{
+			Label: fmt.Sprintf("%s (%s)", a.HostName, a.IP),
+			URL:   cat.path("host", a.HostID),
+		})
+	}
+	return out
+}
+
+// overlapFindings renders each overlapping network pair, linking to the first
+// network of the pair.
+func overlapFindings(overlaps []domain.NetworkOverlap, cat entityCatalog) []auditFinding {
+	out := make([]auditFinding, 0, len(overlaps))
+	for _, o := range overlaps {
+		out = append(out, auditFinding{
+			Label: fmt.Sprintf("%s (%s) ↔ %s (%s)", o.A.Name, o.A.CIDR, o.B.Name, o.B.CIDR),
+			URL:   cat.path("network", o.A.ID),
+		})
 	}
 	return out
 }

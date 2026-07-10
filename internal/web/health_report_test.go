@@ -17,6 +17,7 @@ func TestHealthReportEmpty(t *testing.T) {
 		"Expired certificates", "Certificates linked to nothing",
 		"Hardware without a warranty date", "Subscriptions without a renewal date",
 		"Orphaned entities",
+		"Duplicate IP assignments", "Host IPs outside every network", "Overlapping networks",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("health report missing %q:\n%s", want, body)
@@ -55,6 +56,54 @@ func TestHealthReportFindings(t *testing.T) {
 	dash := getBody(t, srv, "/")
 	if !strings.Contains(dash, "/health-report") || !strings.Contains(dash, "inventory") {
 		t.Errorf("dashboard missing inventory health summary:\n%s", dash)
+	}
+}
+
+// TestHealthReportIPAMConflicts drives real creates so all three IPAM conflict
+// types surface on the health page.
+func TestHealthReportIPAMConflicts(t *testing.T) {
+	srv, _ := newTestServerDB(t)
+
+	// Two networks with the identical CIDR block -> overlap conflict.
+	if rec := postForm(t, srv, "/networks", url.Values{"name": {"lan"}, "cidr": {"192.168.1.0/24"}}); rec.Code != 303 {
+		t.Fatalf("POST /networks lan = %d", rec.Code)
+	}
+	if rec := postForm(t, srv, "/networks", url.Values{"name": {"lan-dup"}, "cidr": {"192.168.1.0/24"}}); rec.Code != 303 {
+		t.Fatalf("POST /networks lan-dup = %d", rec.Code)
+	}
+	// Two hosts sharing 192.168.1.5 -> duplicate IP; one host on 10.9.9.9 -> outside.
+	if rec := postForm(t, srv, "/hosts", url.Values{"name": {"h1"}, "type": {"physical"}, "ips": {"192.168.1.5"}}); rec.Code != 303 {
+		t.Fatalf("POST /hosts h1 = %d", rec.Code)
+	}
+	if rec := postForm(t, srv, "/hosts", url.Values{"name": {"h2"}, "type": {"physical"}, "ips": {"192.168.1.5, 10.9.9.9"}}); rec.Code != 303 {
+		t.Fatalf("POST /hosts h2 = %d", rec.Code)
+	}
+
+	body := getBody(t, srv, "/health-report")
+	for _, want := range []string{
+		"192.168.1.5 — h1", "192.168.1.5 — h2", // duplicate IP, one link per host
+		"h2 (10.9.9.9)",           // outside every network
+		"lan (192.168.1.0/24) ↔ ", // overlapping networks
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("health report missing %q:\n%s", want, body)
+		}
+	}
+}
+
+// TestNetworkDetailShowsOverlap asserts the affected network's detail page warns
+// about the CIDR it shares.
+func TestNetworkDetailShowsOverlap(t *testing.T) {
+	srv, _ := newTestServerDB(t)
+	if rec := postForm(t, srv, "/networks", url.Values{"name": {"lan"}, "cidr": {"10.0.0.0/24"}}); rec.Code != 303 {
+		t.Fatalf("POST /networks lan = %d", rec.Code)
+	}
+	if rec := postForm(t, srv, "/networks", url.Values{"name": {"lan-dup"}, "cidr": {"10.0.0.0/24"}}); rec.Code != 303 {
+		t.Fatalf("POST /networks lan-dup = %d", rec.Code)
+	}
+	body := getBody(t, srv, "/networks/1")
+	if !strings.Contains(body, "shares its CIDR block") || !strings.Contains(body, "lan-dup") {
+		t.Errorf("network detail missing overlap warning:\n%s", body)
 	}
 }
 
