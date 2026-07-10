@@ -10,6 +10,7 @@
 {{ csrfField }}
   <label>Subject<input name="subject" value="{{.Item.Subject}}" placeholder="*.example.com" required></label>
   <label>Issuer<input name="issuer" value="{{.Item.Issuer}}" placeholder="Let's Encrypt"></label>
+  <label>Probe target (host:port, optional)<input name="probe_target" value="{{.Item.ProbeTarget}}" placeholder="example.com:443"></label>
   <label>Expires on<input type="date" name="expires_on" value="{{.Item.ExpiresOn}}" required></label>
   <label><input type="checkbox" name="auto_renew" {{if .Item.AutoRenew}}checked{{end}}> Auto-renew</label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>

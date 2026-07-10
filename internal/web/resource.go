@@ -78,6 +78,7 @@ type resource[T validatable] struct {
 	ipam      func(T) *ipamSection                              // optional; nil for all but network
 	children  func(T, entityCatalog) (*childrenSection, error)  // optional; nil for all but Site/Location
 	elevation func(T, entityCatalog) (*elevationSection, error) // optional; only Rack
+	probe     func(T) *probeSection                             // optional; only certificates
 	newItem   T                                                 // zero value with form defaults
 	listTmpl  string                                            // "hosts.html"
 	formTmpl  string                                            // "host_form.html"
@@ -483,6 +484,10 @@ func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
 				return
 			}
 		}
+		var probe *probeSection
+		if rs.probe != nil {
+			probe = rs.probe(item)
+		}
 		cfValues, err := d.customFields.ListForEntity(rs.sing, id)
 		if err != nil {
 			serverError(w, req, err)
@@ -502,7 +507,7 @@ func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
 		renderDetailExtra(w, req, d.cat, d.tags, d.rels, d.journal, d.changelog, rs.sing, id,
 			rs.heading+": "+rs.label(item), rs.notes(item),
 			fmt.Sprintf("%s/%d/edit", rs.basePath(), id), rs.basePath(), rs.fields(item),
-			detailExtras{ipam: ipam, children: children, elevation: elevation, customFields: cfValues, attachments: attViews})
+			detailExtras{ipam: ipam, children: children, elevation: elevation, probe: probe, customFields: cfValues, attachments: attViews})
 	}
 }
 
@@ -803,12 +808,13 @@ func parseDomain(get func(string) string, id int64) domain.Domain {
 
 func parseCertificate(get func(string) string, id int64) domain.Certificate {
 	return domain.Certificate{
-		ID:        id,
-		Subject:   strings.TrimSpace(get("subject")),
-		Issuer:    strings.TrimSpace(get("issuer")),
-		ExpiresOn: strings.TrimSpace(get("expires_on")),
-		AutoRenew: parseFormBool(get("auto_renew")),
-		Notes:     get("notes"),
+		ID:          id,
+		Subject:     strings.TrimSpace(get("subject")),
+		Issuer:      strings.TrimSpace(get("issuer")),
+		ExpiresOn:   strings.TrimSpace(get("expires_on")),
+		AutoRenew:   parseFormBool(get("auto_renew")),
+		ProbeTarget: strings.TrimSpace(get("probe_target")),
+		Notes:       get("notes"),
 	}
 }
 
