@@ -144,6 +144,10 @@ func main() {
 		DiscoveryRuns:          discoveryRuns,
 		StaleAfterDays:         cfg.StaleAfterDays,
 		AuthAuditRetentionDays: cfg.AuthAuditRetentionDays,
+		ProxyAuthHeader:        cfg.ProxyAuthHeader,
+		ProxyAuthAllowlist:     cfg.ProxyAuthAllowlist,
+		ProxyAuthAutoProvision: cfg.ProxyAuthAutoProvision,
+		ProxyAuthDefaultRole:   cfg.ProxyAuthDefaultRole,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
