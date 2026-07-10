@@ -106,6 +106,9 @@ func (c *Checker) check(ctx context.Context, entityType string, id int64, label,
 	dialCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	probeErr := c.dial(dialCtx, addr)
 	cancel()
+	if ctx.Err() != nil {
+		return // parent context ended mid-dial; don't record or notify a spurious result
+	}
 
 	status := domain.LivenessUp
 	lastErr := ""

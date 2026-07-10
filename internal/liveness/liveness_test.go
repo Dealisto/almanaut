@@ -211,3 +211,44 @@ func TestCheckerSkipsAlreadyCancelledContext(t *testing.T) {
 		t.Fatalf("cancelled context must not change state: before %+v after %+v", before, after)
 	}
 }
+
+// TestCheckerSkipsWhenParentContextEndsMidDial guards against the parent
+// context (job Timeout deadline, or shutdown) ending while a dial is in
+// flight. Because dialCtx is derived from the parent via
+// context.WithTimeout(ctx, c.timeout), a dial that returns because the parent
+// ended looks identical to a real connection failure unless check() checks
+// the parent ctx again after the dial. Without that guard this would record a
+// spurious "down" for a prior-"up" entity and fire a false DOWN notification.
+func TestCheckerSkipsWhenParentContextEndsMidDial(t *testing.T) {
+	state := newFakeState()
+	sender := &countingSender{}
+	up := func(context.Context, string) error { return nil }
+
+	hosts := hostList{{ID: 1, Name: "web", CheckAddress: "x:1"}}
+	now := time.Now()
+	clock := func() time.Time { return now }
+
+	// Establish a prior "up" observation.
+	c := New(hosts, noServices{}, state, sender, up, time.Second, nil, clock)
+	if err := c.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := state.Get("host", 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	dial := func(dialCtx context.Context, addr string) error {
+		cancel()             // parent ends while "dialing"
+		return dialCtx.Err() // dialCtx derives from parent -> now non-nil
+	}
+
+	c2 := New(hosts, noServices{}, state, sender, dial, time.Second, nil, clock)
+	_ = c2.Run(ctx)
+
+	if sender.count() != 0 {
+		t.Fatalf("parent context ending mid-dial must not notify, got %d", sender.count())
+	}
+	after, _ := state.Get("host", 1)
+	if after != before {
+		t.Fatalf("parent context ending mid-dial must not change state: before %+v after %+v", before, after)
+	}
+}
