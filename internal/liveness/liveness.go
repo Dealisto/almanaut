@@ -100,6 +100,9 @@ func (c *Checker) Run(ctx context.Context) error {
 }
 
 func (c *Checker) check(ctx context.Context, entityType string, id int64, label, addr string) {
+	if ctx.Err() != nil {
+		return
+	}
 	dialCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	probeErr := c.dial(dialCtx, addr)
 	cancel()
