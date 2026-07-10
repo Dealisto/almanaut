@@ -692,6 +692,7 @@ func New(cfg Config) http.Handler {
 			r.Get("/health-report", healthReport(repos, relationships, cat, changelog, cfg.StaleAfterDays))
 			r.Post("/health-report/acknowledge", acknowledgeStale(cat, changelog))
 			r.Get("/search", searchEntities(cat, tags, customFields))
+			r.Get("/api/docs", apiDocsPage(resources, cfg.Version))
 			r.Get("/data", showData(cat))
 			r.Get("/export", exportData(db))
 			r.Post("/import", importData(db))
@@ -723,6 +724,7 @@ func New(cfg Config) http.Handler {
 		}
 		r.Get("/api/search", apiSearch(cat, customFields))
 		r.Get("/api/relationships", apiRelationships(relationships))
+		r.Get("/api/openapi.json", openAPISpec(resources, cfg.Version))
 		// /metrics is a GET: reachable with a bearer API token (Prometheus) or a
 		// session cookie (logged-in browser). Not under CSRF; no creds → 401.
 		r.Get("/metrics", metricsHandler(repos, relationships))

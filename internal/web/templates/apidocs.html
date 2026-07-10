@@ -1,0 +1,52 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Reference</span>
+    <h1>API docs</h1>
+  </div>
+</div>
+<p class="muted">
+  Read-write JSON API, version <code>{{.Version}}</code>. Reads (<code>GET</code>)
+  accept a session cookie or a bearer API token; writes (<code>POST</code>/<code>PUT</code>/<code>DELETE</code>)
+  require a bearer token created at <a href="/account/tokens">API tokens</a>.
+  The machine-readable <a href="{{.SpecURL}}">OpenAPI 3 document</a> is generated
+  from the same catalog as this page.
+</p>
+
+<h2>Endpoints</h2>
+{{range .Sections}}
+<h3>{{.Name}}</h3>
+<table class="list">
+  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <tbody>
+  {{range .Endpoints}}
+    <tr>
+      <td><code>{{.Method}}</code></td>
+      <td><code>{{.Path}}</code></td>
+      <td>{{.Summary}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+
+<h2>Schemas</h2>
+<p class="muted">
+  Field names match the YAML export (snake_case). Every entity also carries a
+  <code>custom_fields</code> object keyed by field name.
+</p>
+{{range .Schemas}}
+<h3>{{.Name}}</h3>
+<table class="list">
+  <thead><tr><th>Field</th><th>Type</th></tr></thead>
+  <tbody>
+  {{range .Fields}}
+    <tr>
+      <td><code>{{.Name}}</code></td>
+      <td>{{.Type}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+{{end}}
+{{end}}
