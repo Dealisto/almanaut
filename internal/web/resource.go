@@ -342,48 +342,56 @@ func (rs resource[T]) updateEntity(d handlerDeps, item T, cf map[int64]string, a
 func (rs resource[T]) deleteEntity(d handlerDeps, id int64, actor string) error {
 	var events []webhook.Event
 	err := store.WithTx(d.db, func(tx *sql.Tx) error {
-		item, err := rs.repo.GetTx(tx, id)
-		if err != nil {
-			return err
-		}
-		label := rs.label(item)
-		if err := rs.repo.DeleteTx(tx, id); err != nil {
-			return err
-		}
-		if err := d.rels.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
-			return err
-		}
-		if err := d.tags.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
-			return err
-		}
-		if err := d.journal.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
-			return err
-		}
-		if err := d.customFields.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
-			return err
-		}
-		if err := d.attachments.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
-			return err
-		}
-		now := nowRFC3339()
-		if err := d.changelog.WithTx(tx).Create(store.ChangeEvent{
-			EntityType: rs.sing, EntityID: id, Label: label,
-			Action: domain.ActionDelete, Actor: actor,
-			Changes: nil, CreatedAt: now,
-		}); err != nil {
-			return err
-		}
-		ev, err := webhook.NewEvent(rs.sing, id, webhook.ActionDeleted, actor, now, nil)
-		if err != nil {
-			return err
-		}
-		events = append(events, ev)
-		return nil
+		return rs.deleteEntityTx(tx, d, id, actor, &events)
 	})
 	if err != nil {
 		return err
 	}
 	d.webhooks.Dispatch(events...)
+	return nil
+}
+
+// deleteEntityTx removes the entity and its relationship/tag/journal/custom-field/
+// attachment edges and records a delete in the changelog on the given
+// transaction, appending the webhook event to events for the caller to dispatch
+// after commit. It is the shared core of single and bulk delete.
+func (rs resource[T]) deleteEntityTx(tx *sql.Tx, d handlerDeps, id int64, actor string, events *[]webhook.Event) error {
+	item, err := rs.repo.GetTx(tx, id)
+	if err != nil {
+		return err
+	}
+	label := rs.label(item)
+	if err := rs.repo.DeleteTx(tx, id); err != nil {
+		return err
+	}
+	if err := d.rels.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
+		return err
+	}
+	if err := d.tags.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
+		return err
+	}
+	if err := d.journal.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
+		return err
+	}
+	if err := d.customFields.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
+		return err
+	}
+	if err := d.attachments.WithTx(tx).DeleteByEntity(rs.sing, id); err != nil {
+		return err
+	}
+	now := nowRFC3339()
+	if err := d.changelog.WithTx(tx).Create(store.ChangeEvent{
+		EntityType: rs.sing, EntityID: id, Label: label,
+		Action: domain.ActionDelete, Actor: actor,
+		Changes: nil, CreatedAt: now,
+	}); err != nil {
+		return err
+	}
+	ev, err := webhook.NewEvent(rs.sing, id, webhook.ActionDeleted, actor, now, nil)
+	if err != nil {
+		return err
+	}
+	*events = append(*events, ev)
 	return nil
 }
 
@@ -541,6 +549,7 @@ func (rs resource[T]) mount(r chi.Router, d handlerDeps) {
 	r.Get(rs.basePath()+"/{id}", rs.show(d))
 	r.Get(rs.basePath()+"/{id}/edit", rs.editForm(d))
 	r.Post(rs.basePath()+"/{id}", rs.update(d))
+	r.Post(rs.basePath()+"/bulk", rs.bulk(d))
 	r.Post(rs.basePath()+"/{id}/delete", rs.del(d))
 	r.Post(rs.basePath()+"/{id}/journal", rs.addJournal(d))
 	r.Post(rs.basePath()+"/{id}/attachments", rs.addAttachment(d))

@@ -57,6 +57,20 @@ func (r *TagRepo) DeleteByEntity(entityType string, id int64) error {
 	return nil
 }
 
+// RemoveByName removes the tag with the given name from (entityType, id), if
+// present. Removing a tag the entity does not carry is a no-op (not an error).
+// Used by bulk tag removal. The tag name is normalized to match how Add stores
+// it.
+func (r *TagRepo) RemoveByName(entityType string, id int64, name string) error {
+	if _, err := r.db.Exec(
+		`DELETE FROM tags WHERE entity_type = ? AND entity_id = ? AND name = ?`,
+		entityType, id, domain.NormalizeTag(name),
+	); err != nil {
+		return fmt.Errorf("remove tag by name: %w", err)
+	}
+	return nil
+}
+
 // ListForEntity returns the tags attached to (entityType, entityID), ordered by name.
 func (r *TagRepo) ListForEntity(entityType string, entityID int64) ([]domain.Tag, error) {
 	return r.query(
