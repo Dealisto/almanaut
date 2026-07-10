@@ -16,10 +16,13 @@
 {{if .Findings}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Entity</th></tr></thead>
+  <thead><tr><th>Entity</th><th></th></tr></thead>
   <tbody>
   {{range .Findings}}
-    <tr><td><a href="{{.URL}}">{{.Label}}</a></td></tr>
+    <tr>
+      <td><a href="{{.URL}}">{{.Label}}</a></td>
+      <td>{{if .AckRef}}<form method="post" action="/health-report/acknowledge" class="inline">{{ csrfField }}<input type="hidden" name="ref" value="{{.AckRef}}"><button class="btn btn-link" type="submit">Acknowledge</button></form>{{end}}</td>
+    </tr>
   {{end}}
   </tbody>
 </table>

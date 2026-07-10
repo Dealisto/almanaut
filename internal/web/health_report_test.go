@@ -1,10 +1,45 @@
 package web
 
 import (
+	"database/sql"
+	"io"
+	"log"
+	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Dealisto/almanaut/internal/discovery"
+	"github.com/Dealisto/almanaut/internal/store"
 )
+
+// newStaleTestServer builds a server with the stale-entity rule enabled at the
+// given window, returning the db so a test can age changelog rows.
+func newStaleTestServer(t *testing.T, days int) (http.Handler, *sql.DB) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := store.Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	srv := New(Config{
+		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
+		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
+		Hardware: store.NewHardwareRepo(db), Subscriptions: store.NewSubscriptionRepo(db), Accounts: store.NewAccountRepo(db),
+		Sites: store.NewSiteRepo(db), Locations: store.NewLocationRepo(db), Racks: store.NewRackRepo(db),
+		Contacts:      store.NewContactRepo(db),
+		Relationships: store.NewRelationshipRepo(db), Tags: store.NewTagRepo(db), VLANs: store.NewVLANRepo(db), Reservations: store.NewReservationRepo(db), DB: db,
+		Logger: log.New(io.Discard, "", 0),
+		Docker: fakeScanner{}, NetScan: fakeNetworkScanner{}, NetOpts: NetDiscoveryOptions{}, Proxmox: fakeProxmoxScanner{}, PVEOpts: ProxmoxOptions{},
+		StaleAfterDays: days,
+	})
+	return srv, db
+}
 
 // TestHealthReportEmpty asserts an empty inventory renders every rule and the
 // "All clear" summary badge.
@@ -18,6 +53,7 @@ func TestHealthReportEmpty(t *testing.T) {
 		"Hardware without a warranty date", "Subscriptions without a renewal date",
 		"Orphaned entities",
 		"Duplicate IP assignments", "Host IPs outside every network", "Overlapping networks",
+		"Stale entities",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("health report missing %q:\n%s", want, body)
@@ -104,6 +140,90 @@ func TestNetworkDetailShowsOverlap(t *testing.T) {
 	body := getBody(t, srv, "/networks/1")
 	if !strings.Contains(body, "shares its CIDR block") || !strings.Contains(body, "lan-dup") {
 		t.Errorf("network detail missing overlap warning:\n%s", body)
+	}
+}
+
+// TestHealthReportStaleAndAcknowledge drives the stale rule end to end: an aged
+// entity shows up with an acknowledge button, and acknowledging it (recorded in
+// history) resets its clock so the button disappears.
+func TestHealthReportStaleAndAcknowledge(t *testing.T) {
+	srv, db := newStaleTestServer(t, 90)
+
+	if rec := postForm(t, srv, "/hosts", url.Values{"name": {"old-host"}, "type": {"physical"}}); rec.Code != 303 {
+		t.Fatalf("POST /hosts = %d", rec.Code)
+	}
+	// Age the host's only changelog event well past the window.
+	if _, err := db.Exec(
+		`UPDATE changelog SET created_at = ? WHERE entity_type = 'host' AND entity_id = 1`,
+		"2000-01-01T00:00:00Z",
+	); err != nil {
+		t.Fatalf("age changelog: %v", err)
+	}
+
+	body := getBody(t, srv, "/health-report")
+	if !strings.Contains(body, "Stale entities") || !strings.Contains(body, "old-host") {
+		t.Fatalf("stale rule missing the aged host:\n%s", body)
+	}
+	if !strings.Contains(body, `value="host:1"`) || !strings.Contains(body, "Acknowledge") {
+		t.Fatalf("expected an acknowledge button for host:1:\n%s", body)
+	}
+
+	if rec := postForm(t, srv, "/health-report/acknowledge", url.Values{"ref": {"host:1"}}); rec.Code != 303 {
+		t.Fatalf("POST acknowledge = %d", rec.Code)
+	}
+
+	// The acknowledgement is recorded in history...
+	var n int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM changelog WHERE entity_type='host' AND entity_id=1 AND action='acknowledge'`,
+	).Scan(&n); err != nil {
+		t.Fatalf("count ack: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("acknowledge events = %d, want 1", n)
+	}
+	// ...and it resets the clock, so the acknowledge button is gone.
+	if body := getBody(t, srv, "/health-report"); strings.Contains(body, `value="host:1"`) {
+		t.Errorf("host:1 still stale after acknowledge:\n%s", body)
+	}
+}
+
+// TestHealthReportStaleDisabled verifies the rule reports nothing when the
+// window is 0, even for a very old entity.
+func TestHealthReportStaleDisabled(t *testing.T) {
+	srv, db := newStaleTestServer(t, 0)
+	if rec := postForm(t, srv, "/hosts", url.Values{"name": {"ancient"}, "type": {"physical"}}); rec.Code != 303 {
+		t.Fatalf("POST /hosts = %d", rec.Code)
+	}
+	if _, err := db.Exec(
+		`UPDATE changelog SET created_at = ? WHERE entity_type='host' AND entity_id=1`,
+		"2000-01-01T00:00:00Z",
+	); err != nil {
+		t.Fatalf("age changelog: %v", err)
+	}
+	body := getBody(t, srv, "/health-report")
+	if strings.Contains(body, `value="host:1"`) {
+		t.Errorf("stale rule should be disabled at 0 days:\n%s", body)
+	}
+}
+
+// TestDiscoveryImportRecordsSighting verifies a discovery import writes an
+// "import" changelog event, so the import counts as a sighting for stale
+// detection and appears in history.
+func TestDiscoveryImportRecordsSighting(t *testing.T) {
+	scanner := fakeScanner{containers: []discovery.Container{{ID: "c1", Name: "jellyfin"}}}
+	srv, db := newTestServerDockerDB(t, scanner)
+	if rec := postForm(t, srv, "/discovery/docker/import", url.Values{"id": {"c1"}}); rec.Code != 303 {
+		t.Fatalf("docker import = %d", rec.Code)
+	}
+	var n int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM changelog WHERE entity_type='service' AND action='import'`,
+	).Scan(&n); err != nil {
+		t.Fatalf("count import events: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("import changelog events = %d, want 1", n)
 	}
 }
 

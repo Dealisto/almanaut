@@ -65,6 +65,32 @@ func (r *ChangelogRepo) ListRecent(limit int) ([]ChangeEvent, error) {
 	)
 }
 
+// LastActivity returns, per entity, the timestamp of its most recent changelog
+// event (create/update/import/acknowledge/…) as an RFC3339 string. Timestamps
+// are written in UTC (see nowRFC3339), so MAX over the text column is also the
+// chronological maximum. Entities with no changelog event are absent from the
+// map. It backs the stale-entity audit rule with a single grouped query.
+func (r *ChangelogRepo) LastActivity() (map[domain.EntityRef]string, error) {
+	rows, err := r.db.Query(
+		`SELECT entity_type, entity_id, MAX(created_at)
+		 FROM changelog GROUP BY entity_type, entity_id`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query last activity: %w", err)
+	}
+	defer rows.Close()
+	out := map[domain.EntityRef]string{}
+	for rows.Next() {
+		var ref domain.EntityRef
+		var last string
+		if err := rows.Scan(&ref.Type, &ref.ID, &last); err != nil {
+			return nil, fmt.Errorf("scan last activity: %w", err)
+		}
+		out[ref] = last
+	}
+	return out, rows.Err()
+}
+
 func (r *ChangelogRepo) query(sqlStr string, args ...any) ([]ChangeEvent, error) {
 	rows, err := r.db.Query(sqlStr, args...)
 	if err != nil {
