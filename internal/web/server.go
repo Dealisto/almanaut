@@ -52,6 +52,9 @@ type Config struct {
 	Webhooks webhook.Dispatcher
 	// Kuma wires the Uptime Kuma sync admin page. Zero value = disabled.
 	Kuma KumaOptions
+	// Tasks exposes the background job runner to the Scheduled-tasks admin
+	// page. Nil => the page and routes are not mounted.
+	Tasks jobRunner
 }
 
 // New builds the HTTP handler with all routes wired to the given repos.
@@ -577,6 +580,11 @@ func New(cfg Config) http.Handler {
 				if cfg.Kuma.Enabled {
 					r.Get("/kuma", kumaPage(cfg.Kuma))
 					r.Post("/kuma/sync", kumaSyncNow(cfg.Kuma))
+				}
+
+				if cfg.Tasks != nil {
+					r.Get("/tasks", tasksPage(cfg.Tasks))
+					r.Post("/tasks/{name}/run", tasksRun(cfg.Tasks))
 				}
 			})
 		}

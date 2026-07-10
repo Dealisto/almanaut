@@ -16,6 +16,7 @@ import (
 
 	"github.com/Dealisto/almanaut/internal/config"
 	"github.com/Dealisto/almanaut/internal/discovery"
+	"github.com/Dealisto/almanaut/internal/job"
 	"github.com/Dealisto/almanaut/internal/kuma"
 	"github.com/Dealisto/almanaut/internal/notify"
 	"github.com/Dealisto/almanaut/internal/store"
@@ -90,6 +91,11 @@ func main() {
 		log.Println("uptime kuma sync enabled")
 	}
 
+	// Background jobs run through a shared runner (the Scheduled-tasks admin
+	// page reflects it); it is always constructed so /tasks is always mounted
+	// for admins, even before any job is registered below.
+	runner := job.New(log.Default())
+
 	handler := web.New(web.Config{
 		Hosts:         store.NewHostRepo(db),
 		Services:      store.NewServiceRepo(db),
@@ -119,6 +125,7 @@ func main() {
 		Version:       version,
 		Webhooks:      dispatcher,
 		Kuma:          kumaOpts,
+		Tasks:         runner,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
@@ -147,6 +154,8 @@ func main() {
 	if cfg.DiscordWebhookURL != "" {
 		senders = append(senders, notify.NewDiscordClient(cfg.DiscordWebhookURL))
 	}
+	// The expiry-notifications job is registered only when a channel is
+	// configured, preserving the opt-in.
 	if len(senders) > 0 {
 		notifier := notify.New(
 			store.NewCertificateRepo(db),
@@ -156,8 +165,15 @@ func main() {
 			notify.NewMultiSender(senders...),
 			cfg.NotifyWithinDays,
 		)
-		go runNotifier(ctx, notifier, cfg.NotifyInterval)
+		runner.Register(job.Definition{
+			Name:     "expiry-notifications",
+			Title:    "Expiry notifications",
+			Interval: cfg.NotifyInterval,
+			Timeout:  time.Minute,
+			Run:      func(ctx context.Context) error { return notifier.Run(ctx, time.Now()) },
+		})
 	}
+	go runner.Start(ctx)
 
 	select {
 	case err := <-serverErr:
@@ -198,28 +214,4 @@ func runHealthcheck(addr string) int {
 		return 1
 	}
 	return 0
-}
-
-// runNotifier runs one notification pass at startup, then every interval, until
-// ctx is cancelled. Each pass is bounded by its own timeout so a hung ntfy
-// endpoint cannot wedge the loop.
-func runNotifier(ctx context.Context, n *notify.Notifier, interval time.Duration) {
-	pass := func() {
-		runCtx, cancel := context.WithTimeout(ctx, time.Minute)
-		defer cancel()
-		if err := n.Run(runCtx, time.Now()); err != nil {
-			log.Printf("notify: run: %v", err)
-		}
-	}
-	pass()
-	t := time.NewTicker(interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			pass()
-		}
-	}
 }
