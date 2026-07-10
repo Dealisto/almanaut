@@ -1,0 +1,33 @@
+{{define "listcontrols"}}
+{{if .Columns}}
+<form class="list-controls" method="get" action="{{.BasePath}}">
+  <label class="lc-field">Sort
+    <select name="sort">
+      <option value=""{{if not .Sort}} selected{{end}}>—</option>
+      {{range .Columns}}<option value="{{.}}"{{if eq . $.Sort}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </label>
+  <select name="dir" aria-label="Sort direction">
+    <option value="asc"{{if eq .Dir "asc"}} selected{{end}}>asc</option>
+    <option value="desc"{{if eq .Dir "desc"}} selected{{end}}>desc</option>
+  </select>
+  {{if .Tags}}
+  <label class="lc-field">Tag
+    <select name="tag">
+      <option value=""{{if not .Tag}} selected{{end}}>—</option>
+      {{range .Tags}}<option value="{{.}}"{{if eq . $.Tag}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </label>
+  {{end}}
+  <label class="lc-field">Filter
+    <select name="field">
+      <option value=""{{if not .FilterField}} selected{{end}}>—</option>
+      {{range .Columns}}<option value="{{.}}"{{if eq . $.FilterField}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </label>
+  <input type="search" name="value" value="{{.FilterValue}}" placeholder="contains…" aria-label="Filter value">
+  <button class="btn" type="submit">Apply</button>
+  {{if .Active}}<a class="btn btn-link" href="{{.BasePath}}">Clear</a>{{end}}
+</form>
+{{end}}
+{{end}}

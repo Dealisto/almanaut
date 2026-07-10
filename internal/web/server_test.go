@@ -1406,10 +1406,14 @@ func TestDeleteEntityRollsBackOnFailure(t *testing.T) {
 	}
 
 	// Nothing was committed: the host must survive the rolled-back cascade.
-	req := httptest.NewRequest(http.MethodGet, "/hosts", nil)
-	rec = httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	if !strings.Contains(rec.Body.String(), "proxmox") {
+	// Verify against the DB directly — the list page now reads the tags table
+	// (for the filter bar), which this test dropped, so an HTTP GET would 500 on
+	// the broken schema rather than observe the surviving row.
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM hosts WHERE name = 'proxmox'`).Scan(&n); err != nil {
+		t.Fatalf("count hosts: %v", err)
+	}
+	if n != 1 {
 		t.Error("host was deleted despite the cascade rolling back")
 	}
 }

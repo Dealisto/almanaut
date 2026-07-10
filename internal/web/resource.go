@@ -36,8 +36,9 @@ type validatable interface{ Validate() error }
 
 // listData / formData replace the per-entity page-data structs.
 type listData[T any] struct {
-	Title string
-	Items []T
+	Title    string
+	Items    []T
+	Controls listControls
 }
 
 type formData[T any] struct {
@@ -170,13 +171,20 @@ func notFoundOrServerError(w http.ResponseWriter, req *http.Request, sing string
 	serverError(w, req, err)
 }
 
-func (rs resource[T]) list(w http.ResponseWriter, req *http.Request) {
-	items, err := rs.repo.List()
-	if err != nil {
-		serverError(w, req, err)
-		return
+func (rs resource[T]) list(d handlerDeps) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		items, err := rs.repo.List()
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
+		items, controls, err := rs.filterSort(items, req, d)
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
+		render(w, req, rs.listTmpl, listData[T]{Title: rs.title, Items: items, Controls: controls})
 	}
-	render(w, req, rs.listTmpl, listData[T]{Title: rs.title, Items: items})
 }
 
 func (rs resource[T]) newForm(d handlerDeps) http.HandlerFunc {
@@ -527,7 +535,7 @@ func (rs resource[T]) del(d handlerDeps) http.HandlerFunc {
 
 // mount wires all seven routes for this entity.
 func (rs resource[T]) mount(r chi.Router, d handlerDeps) {
-	r.Get(rs.basePath(), rs.list)
+	r.Get(rs.basePath(), rs.list(d))
 	r.Get(rs.basePath()+"/new", rs.newForm(d))
 	r.Post(rs.basePath(), rs.create(d))
 	r.Get(rs.basePath()+"/{id}", rs.show(d))

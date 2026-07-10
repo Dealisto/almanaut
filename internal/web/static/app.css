@@ -179,6 +179,9 @@ form.stack input:focus,form.stack select:focus,form.stack textarea:focus{
   letter-spacing:.03em;background:var(--bg);border:1px solid var(--border);color:var(--muted)}
 .badge-warn{background:var(--crit-soft);border-color:var(--danger);color:var(--danger)}
 .badge-ok{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
+.list-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:0 0 1rem}
+.list-controls .lc-field{display:flex;flex-direction:column;gap:2px;font-size:.75rem;color:var(--muted)}
+.list-controls select,.list-controls input[type=search]{padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg)}
 ul.related{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
 ul.related li{padding:7px 10px;border-radius:8px}
 ul.related li:hover{background:var(--bg)}

@@ -27,7 +27,7 @@ var pages = func() map[string]*template.Template {
 					"isAdmin":     func() bool { return false },
 					"kumaEnabled": func() bool { return false },
 				}).
-				ParseFS(templatesFS, "templates/layout.html", "templates/custom_fields_form.html", "templates/webhook_form_fields.html", "templates/"+page),
+				ParseFS(templatesFS, "templates/layout.html", "templates/custom_fields_form.html", "templates/webhook_form_fields.html", "templates/list_controls.html", "templates/"+page),
 		)
 	}
 	// login.html is standalone (no app shell): it defines its own "layout".

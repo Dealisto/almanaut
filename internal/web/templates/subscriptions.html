@@ -8,6 +8,7 @@
     {{if canWrite}}<a class="btn btn-primary" href="/subscriptions/new">+ New subscription</a>{{end}}
   </div>
 </div>
+{{template "listcontrols" .Controls}}
 {{if .Items}}
 <div class="table-wrap">
 <table>
