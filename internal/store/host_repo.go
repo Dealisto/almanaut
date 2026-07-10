@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 )
@@ -47,9 +48,9 @@ func (r *HostRepo) Create(h domain.Host) (int64, error) {
 		return 0, fmt.Errorf("marshal ips: %w", err)
 	}
 	res, err := r.db.Exec(
-		`INSERT INTO hosts (name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(ips), h.Notes, h.RackID, h.RackPosition, h.UHeight,
+		`INSERT INTO hosts (name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height, check_address)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(ips), h.Notes, h.RackID, h.RackPosition, h.UHeight, h.CheckAddress,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert host: %w", err)
@@ -67,9 +68,9 @@ func (r *HostRepo) Update(h domain.Host) error {
 		return fmt.Errorf("marshal ips: %w", err)
 	}
 	res, err := r.db.Exec(
-		`UPDATE hosts SET name=?, type=?, os=?, cpu=?, ram=?, disk=?, status=?, ips=?, notes=?, rack_id=?, rack_position=?, u_height=?
+		`UPDATE hosts SET name=?, type=?, os=?, cpu=?, ram=?, disk=?, status=?, ips=?, notes=?, rack_id=?, rack_position=?, u_height=?, check_address=?
 		 WHERE id=?`,
-		h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(ips), h.Notes, h.RackID, h.RackPosition, h.UHeight, h.ID,
+		h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(ips), h.Notes, h.RackID, h.RackPosition, h.UHeight, h.CheckAddress, h.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update host: %w", err)
@@ -80,8 +81,12 @@ func (r *HostRepo) Update(h domain.Host) error {
 // Get returns the host with the given id.
 func (r *HostRepo) Get(id int64) (domain.Host, error) {
 	row := r.db.QueryRow(
-		`SELECT id, name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height
-		 FROM hosts WHERE id = ?`, id,
+		`SELECT h.id, h.name, h.type, h.os, h.cpu, h.ram, h.disk, h.status, h.ips, h.notes,
+		        h.rack_id, h.rack_position, h.u_height, h.check_address,
+		        l.status, l.checked_at, l.changed_at, l.last_error
+		 FROM hosts h
+		 LEFT JOIN liveness_state l ON l.entity_type = 'host' AND l.entity_id = h.id
+		 WHERE h.id = ?`, id,
 	)
 	return scanHost(row)
 }
@@ -89,8 +94,12 @@ func (r *HostRepo) Get(id int64) (domain.Host, error) {
 // List returns all hosts ordered by name.
 func (r *HostRepo) List() ([]domain.Host, error) {
 	rows, err := r.db.Query(
-		`SELECT id, name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height
-		 FROM hosts ORDER BY name`,
+		`SELECT h.id, h.name, h.type, h.os, h.cpu, h.ram, h.disk, h.status, h.ips, h.notes,
+		        h.rack_id, h.rack_position, h.u_height, h.check_address,
+		        l.status, l.checked_at, l.changed_at, l.last_error
+		 FROM hosts h
+		 LEFT JOIN liveness_state l ON l.entity_type = 'host' AND l.entity_id = h.id
+		 ORDER BY h.name`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query hosts: %w", err)
@@ -119,14 +128,29 @@ func (r *HostRepo) Delete(id int64) error {
 func scanHost(s scanner) (domain.Host, error) {
 	var h domain.Host
 	var ipsJSON string
+	var lStatus, lChecked, lChanged, lErr sql.NullString
 	if err := s.Scan(
 		&h.ID, &h.Name, &h.Type, &h.OS, &h.CPU, &h.RAM, &h.Disk, &h.Status, &ipsJSON, &h.Notes,
-		&h.RackID, &h.RackPosition, &h.UHeight,
+		&h.RackID, &h.RackPosition, &h.UHeight, &h.CheckAddress,
+		&lStatus, &lChecked, &lChanged, &lErr,
 	); err != nil {
 		return domain.Host{}, notFound(fmt.Errorf("scan host: %w", err))
 	}
 	if err := json.Unmarshal([]byte(ipsJSON), &h.IPs); err != nil {
 		return domain.Host{}, fmt.Errorf("unmarshal ips: %w", err)
 	}
+	h.Liveness = livenessFromNulls(lStatus, lChecked, lChanged, lErr)
 	return h, nil
+}
+
+// livenessFromNulls builds a *domain.LivenessStatus from joined liveness_state
+// columns; returns nil when the LEFT JOIN produced no row.
+func livenessFromNulls(status, checked, changed, lastErr sql.NullString) *domain.LivenessStatus {
+	if !status.Valid {
+		return nil
+	}
+	ls := &domain.LivenessStatus{Status: status.String, LastError: lastErr.String}
+	ls.CheckedAt, _ = time.Parse(time.RFC3339, checked.String)
+	ls.ChangedAt, _ = time.Parse(time.RFC3339, changed.String)
+	return ls
 }

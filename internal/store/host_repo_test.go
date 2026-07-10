@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 )
@@ -110,6 +111,36 @@ func TestHostRepoNotFound(t *testing.T) {
 	}
 	if err := repo.Update(domain.Host{ID: id, Name: "keep", Type: "vm", IPs: []string{"10.0.0.9"}}); err != nil {
 		t.Errorf("Update(no-op) error = %v, want nil", err)
+	}
+}
+
+func TestHostRepoCheckAddressAndLivenessJoin(t *testing.T) {
+	db := newTestDB(t)
+	hosts := NewHostRepo(db)
+	id, err := hosts.Create(domain.Host{Name: "h", Type: "vm", CheckAddress: "10.0.0.1:22"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, err := hosts.Get(id)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.CheckAddress != "10.0.0.1:22" {
+		t.Fatalf("check_address not persisted: %q", got.CheckAddress)
+	}
+	if got.Liveness != nil {
+		t.Fatal("liveness should be nil before any check")
+	}
+
+	now := time.Now()
+	if err := NewLivenessRepo(db).Upsert("host", id, domain.LivenessStatus{
+		Status: domain.LivenessUp, CheckedAt: now, ChangedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert liveness: %v", err)
+	}
+	got, _ = hosts.Get(id)
+	if got.Liveness == nil || got.Liveness.Status != domain.LivenessUp {
+		t.Fatalf("liveness join not populated: %+v", got.Liveness)
 	}
 }
 

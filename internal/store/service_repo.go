@@ -43,9 +43,9 @@ func (r *ServiceRepo) GetTx(tx *sql.Tx, id int64) (domain.Service, error) {
 // Create inserts s and returns its new ID.
 func (r *ServiceRepo) Create(s domain.Service) (int64, error) {
 	res, err := r.db.Exec(
-		`INSERT INTO services (name, kind, url, ports, category, notes)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		s.Name, s.Kind, s.URL, s.Ports, s.Category, s.Notes,
+		`INSERT INTO services (name, kind, url, ports, category, notes, check_address)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		s.Name, s.Kind, s.URL, s.Ports, s.Category, s.Notes, s.CheckAddress,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert service: %w", err)
@@ -56,7 +56,11 @@ func (r *ServiceRepo) Create(s domain.Service) (int64, error) {
 // Get returns the service with the given id.
 func (r *ServiceRepo) Get(id int64) (domain.Service, error) {
 	row := r.db.QueryRow(
-		`SELECT id, name, kind, url, ports, category, notes FROM services WHERE id = ?`, id,
+		`SELECT s.id, s.name, s.kind, s.url, s.ports, s.category, s.notes, s.check_address,
+		        l.status, l.checked_at, l.changed_at, l.last_error
+		 FROM services s
+		 LEFT JOIN liveness_state l ON l.entity_type = 'service' AND l.entity_id = s.id
+		 WHERE s.id = ?`, id,
 	)
 	return scanService(row)
 }
@@ -64,7 +68,11 @@ func (r *ServiceRepo) Get(id int64) (domain.Service, error) {
 // List returns all services ordered by name.
 func (r *ServiceRepo) List() ([]domain.Service, error) {
 	rows, err := r.db.Query(
-		`SELECT id, name, kind, url, ports, category, notes FROM services ORDER BY name`,
+		`SELECT s.id, s.name, s.kind, s.url, s.ports, s.category, s.notes, s.check_address,
+		        l.status, l.checked_at, l.changed_at, l.last_error
+		 FROM services s
+		 LEFT JOIN liveness_state l ON l.entity_type = 'service' AND l.entity_id = s.id
+		 ORDER BY s.name`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query services: %w", err)
@@ -84,8 +92,8 @@ func (r *ServiceRepo) List() ([]domain.Service, error) {
 // Update overwrites the service with s.ID with the values in s.
 func (r *ServiceRepo) Update(s domain.Service) error {
 	res, err := r.db.Exec(
-		`UPDATE services SET name=?, kind=?, url=?, ports=?, category=?, notes=? WHERE id=?`,
-		s.Name, s.Kind, s.URL, s.Ports, s.Category, s.Notes, s.ID,
+		`UPDATE services SET name=?, kind=?, url=?, ports=?, category=?, notes=?, check_address=? WHERE id=?`,
+		s.Name, s.Kind, s.URL, s.Ports, s.Category, s.Notes, s.CheckAddress, s.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update service: %w", err)
@@ -103,8 +111,13 @@ func (r *ServiceRepo) Delete(id int64) error {
 
 func scanService(s scanner) (domain.Service, error) {
 	var svc domain.Service
-	if err := s.Scan(&svc.ID, &svc.Name, &svc.Kind, &svc.URL, &svc.Ports, &svc.Category, &svc.Notes); err != nil {
+	var lStatus, lChecked, lChanged, lErr sql.NullString
+	if err := s.Scan(
+		&svc.ID, &svc.Name, &svc.Kind, &svc.URL, &svc.Ports, &svc.Category, &svc.Notes, &svc.CheckAddress,
+		&lStatus, &lChecked, &lChanged, &lErr,
+	); err != nil {
 		return domain.Service{}, notFound(fmt.Errorf("scan service: %w", err))
 	}
+	svc.Liveness = livenessFromNulls(lStatus, lChecked, lChanged, lErr)
 	return svc, nil
 }
