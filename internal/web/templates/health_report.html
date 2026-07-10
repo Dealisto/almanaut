@@ -1,0 +1,32 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Connections &amp; views</span>
+    <h1>Health report</h1>
+  </div>
+  <div class="ph-actions">
+    {{if .Total}}<span class="badge badge-warn">{{.Total}} finding{{if ne .Total 1}}s{{end}}</span>{{else}}<span class="badge badge-ok">All clear</span>{{end}}
+  </div>
+</div>
+
+{{range .Rules}}
+<section class="panel">
+<h2>{{.Title}} <span class="attn-count">{{.Count}}</span></h2>
+<p class="muted">{{.Description}}</p>
+{{if .Findings}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Entity</th></tr></thead>
+  <tbody>
+  {{range .Findings}}
+    <tr><td><a href="{{.URL}}">{{.Label}}</a></td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">Nothing to fix here.</div></div>
+{{end}}
+</section>
+{{end}}
+{{end}}

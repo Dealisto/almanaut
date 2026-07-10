@@ -191,7 +191,25 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalo
 			})
 		}
 
+		_, healthTotal, err := buildAuditRules(repos, rels, cat)
+		if err != nil {
+			fail(err)
+			return
+		}
+		var healthItems []attentionItem
+		if healthTotal > 0 {
+			noun := "issues"
+			if healthTotal == 1 {
+				noun = "issue"
+			}
+			healthItems = []attentionItem{{
+				Label: fmt.Sprintf("%d inventory %s — view report", healthTotal, noun),
+				URL:   "/health-report",
+			}}
+		}
+
 		groups := []attentionGroup{
+			{Title: "Inventory health", MoreURL: "/health-report", Severity: "warn", Items: healthItems},
 			{Title: "Certificates expiring soon", MoreURL: "/checks", Severity: "warn", Items: certItems},
 			{Title: "Services without backup", MoreURL: "/checks", Severity: "warn", Items: svcItems},
 			{Title: "Hosts down", Severity: "crit", Items: hostItems},

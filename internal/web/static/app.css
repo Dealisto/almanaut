@@ -178,6 +178,7 @@ form.stack input:focus,form.stack select:focus,form.stack textarea:focus{
 .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-family:var(--mono);font-size:.7rem;
   letter-spacing:.03em;background:var(--bg);border:1px solid var(--border);color:var(--muted)}
 .badge-warn{background:var(--crit-soft);border-color:var(--danger);color:var(--danger)}
+.badge-ok{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
 ul.related{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
 ul.related li{padding:7px 10px;border-radius:8px}
 ul.related li:hover{background:var(--bg)}
