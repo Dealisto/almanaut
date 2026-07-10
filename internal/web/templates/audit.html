@@ -1,0 +1,52 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Admin</span>
+    <h1>Audit log</h1>
+  </div>
+</div>
+
+<form class="list-controls" method="get" action="/audit">
+  <label class="lc-field">User
+    <select name="user">
+      <option value="">—</option>
+      {{range .Users}}<option value="{{.}}"{{if eq . $.FilterUser}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </label>
+  <label class="lc-field">Type
+    <select name="type">
+      <option value="">—</option>
+      {{range .Types}}<option value="{{.}}"{{if eq . $.FilterType}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </label>
+  <label class="lc-field">Since
+    <input type="date" name="since" value="{{.Since}}">
+  </label>
+  <label class="lc-field">Until
+    <input type="date" name="until" value="{{.Until}}">
+  </label>
+  <button class="btn" type="submit">Filter</button>
+  <a class="btn btn-link" href="/audit">Clear</a>
+</form>
+
+{{if .Events}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Time</th><th>Event</th><th>User</th><th>Source IP</th><th>Detail</th></tr></thead>
+  <tbody>
+  {{range .Events}}
+    <tr>
+      <td><time>{{.CreatedAt}}</time></td>
+      <td><code>{{.Type}}</code></td>
+      <td>{{if .Username}}{{.Username}}{{else}}—{{end}}</td>
+      <td><code>{{if .SourceIP}}{{.SourceIP}}{{else}}—{{end}}</code></td>
+      <td>{{.Detail}}</td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No matching events.</div></div>
+{{end}}
+{{end}}

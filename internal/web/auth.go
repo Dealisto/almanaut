@@ -149,7 +149,7 @@ func loginForm(w http.ResponseWriter, r *http.Request) {
 // failed attempts for a username are throttled (see loginThrottle): once a
 // username is locked out the request is refused with 429 before any password
 // verification, so an attacker cannot spend the server's bcrypt budget guessing.
-func login(users *store.UserRepo, sessions *store.SessionRepo, throttle *loginThrottle, forceSecure bool) http.HandlerFunc {
+func login(users *store.UserRepo, sessions *store.SessionRepo, throttle *loginThrottle, audit *store.AuthEventRepo, retentionDays int, forceSecure bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := strings.TrimSpace(r.FormValue("username"))
 		password := r.FormValue("password")
@@ -159,6 +159,7 @@ func login(users *store.UserRepo, sessions *store.SessionRepo, throttle *loginTh
 		if ok, retryAfter := throttle.allowed(username, now); !ok {
 			secs := int(math.Ceil(retryAfter.Seconds()))
 			mins := (secs + 59) / 60
+			recordAuth(audit, r, domain.AuthLoginFailure, username, 0, "rate-limited")
 			w.Header().Set("Retry-After", strconv.Itoa(secs))
 			w.WriteHeader(http.StatusTooManyRequests)
 			render(w, r, "login.html", loginData{
@@ -183,6 +184,7 @@ func login(users *store.UserRepo, sessions *store.SessionRepo, throttle *loginTh
 			// distinct usernames cannot grow the map unbounded when no successful
 			// login ever occurs to trigger a prune.
 			throttle.cleanup(now)
+			recordAuth(audit, r, domain.AuthLoginFailure, username, 0, "")
 			w.WriteHeader(http.StatusUnauthorized)
 			render(w, r, "login.html", loginData{Title: "Sign in", Next: next, Error: "invalid username or password"})
 			return
@@ -204,17 +206,25 @@ func login(users *store.UserRepo, sessions *store.SessionRepo, throttle *loginTh
 		throttle.recordSuccess(username)
 		_ = sessions.DeleteExpired(nowStr) // opportunistic prune
 		throttle.cleanup(now)              // opportunistic prune of throttle state
+		recordAuth(audit, r, domain.AuthLoginSuccess, u.Username, u.ID, "")
+		pruneAuditOpportunistically(audit, r, now, retentionDays)
 		setSessionCookie(w, r, token, forceSecure)
 		http.Redirect(w, r, next, http.StatusSeeOther)
 	}
 }
 
 // logout deletes the current session and clears the cookie.
-func logout(sessions *store.SessionRepo, forceSecure bool) http.HandlerFunc {
+func logout(sessions *store.SessionRepo, audit *store.AuthEventRepo, forceSecure bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
 			_ = sessions.DeleteByToken(hashToken(c.Value))
 		}
+		var username string
+		var uid int64
+		if u, ok := userFrom(r.Context()); ok {
+			username, uid = u.Username, u.ID
+		}
+		recordAuth(audit, r, domain.AuthLogout, username, uid, "")
 		clearSessionCookie(w, r, forceSecure)
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 	}
@@ -262,12 +272,15 @@ func bearerToken(r *http.Request) (string, bool) {
 // browser never sends a bearer header automatically, this keeps /api free of CSRF
 // without a CSRF token. All responses are JSON; a genuine backend failure is a
 // 500, never a silent 401.
-func apiAuth(tokens *store.TokenRepo, sessions *store.SessionRepo) func(http.Handler) http.Handler {
+func apiAuth(tokens *store.TokenRepo, sessions *store.SessionRepo, audit *store.AuthEventRepo, tokenUses *tokenUseLog) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if raw, ok := bearerToken(r); ok {
 				u, scope, err := tokens.UserByToken(hashToken(raw))
 				if err == nil {
+					if tokenUses != nil && tokenUses.shouldLog(hashToken(raw), time.Now().UTC()) {
+						recordAuth(audit, r, domain.AuthTokenUsed, u.Username, u.ID, "scope="+scope)
+					}
 					ctx := withTokenScope(withUser(r.Context(), u), domain.Scope(scope))
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
