@@ -188,6 +188,23 @@ func TestHealthReportStaleAndAcknowledge(t *testing.T) {
 	}
 }
 
+// TestAcknowledgeNonexistentEntity verifies acknowledging a ref for an entity
+// that does not exist is rejected and writes no changelog row.
+func TestAcknowledgeNonexistentEntity(t *testing.T) {
+	srv, db := newStaleTestServer(t, 90)
+	rec := postForm(t, srv, "/health-report/acknowledge", url.Values{"ref": {"host:999999"}})
+	if rec.Code != 404 {
+		t.Fatalf("acknowledge nonexistent = %d, want 404", rec.Code)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM changelog WHERE action='acknowledge'`).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("phantom acknowledge rows = %d, want 0", n)
+	}
+}
+
 // TestHealthReportStaleDisabled verifies the rule reports nothing when the
 // window is 0, even for a very old entity.
 func TestHealthReportStaleDisabled(t *testing.T) {

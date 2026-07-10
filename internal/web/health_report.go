@@ -177,7 +177,19 @@ func acknowledgeStale(cat entityCatalog, changelog *store.ChangelogRepo) http.Ha
 			http.Error(w, "unknown entity type", http.StatusBadRequest)
 			return
 		}
-		label := entityLabel(cat, typ, id)
+		// Only acknowledge an entity that actually exists, so a stray ref can't
+		// append a phantom row to the append-only changelog.
+		opts, err := cat.options()
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
+		labels := labelMap(opts)
+		label, ok := labels[fmt.Sprintf("%s:%d", typ, id)]
+		if !ok {
+			http.NotFound(w, req)
+			return
+		}
 		if err := changelog.Create(store.ChangeEvent{
 			EntityType: typ,
 			EntityID:   id,
@@ -192,16 +204,6 @@ func acknowledgeStale(cat entityCatalog, changelog *store.ChangelogRepo) http.Ha
 		}
 		http.Redirect(w, req, "/health-report", http.StatusSeeOther)
 	}
-}
-
-// entityLabel resolves a (type,id) reference to its display label, falling back
-// to the reference string when the entity can no longer be found.
-func entityLabel(cat entityCatalog, typ string, id int64) string {
-	opts, err := cat.options()
-	if err != nil {
-		return fmt.Sprintf("%s:%d", typ, id)
-	}
-	return labelOrFallback(labelMap(opts), typ, id)
 }
 
 // entityRefs projects catalog options to plain entity references.
