@@ -32,6 +32,7 @@ type detailExtras struct {
 	ipam         *ipamSection
 	children     *childrenSection
 	elevation    *elevationSection
+	probe        *probeSection
 	customFields []domain.CustomFieldValue
 	attachments  []attachmentView
 }
@@ -63,6 +64,7 @@ type detailData struct {
 	IPAM         *ipamSection
 	Children     *childrenSection
 	Elevation    *elevationSection
+	Probe        *probeSection
 	CustomFields []domain.CustomFieldValue
 	Attachments  []attachmentView
 
@@ -218,6 +220,7 @@ func renderDetailExtra(
 		IPAM:         extras.ipam,
 		Children:     extras.children,
 		Elevation:    extras.elevation,
+		Probe:        extras.probe,
 		CustomFields: extras.customFields,
 		Attachments:  extras.attachments,
 

@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Dealisto/almanaut/internal/certprobe"
 	"github.com/Dealisto/almanaut/internal/config"
 	"github.com/Dealisto/almanaut/internal/discovery"
 	"github.com/Dealisto/almanaut/internal/job"
@@ -97,6 +98,12 @@ func main() {
 	// for admins, even before any job is registered below.
 	runner := job.New(log.Default())
 
+	// The prober is always built so the manual "Probe now" button works even
+	// when scheduled probing is disabled; only the background job below is
+	// gated on cfg.CertProbeEnabled.
+	certProbes := store.NewCertProbeRepo(db)
+	prober := certprobe.New(store.NewCertificateRepo(db), certProbes, db, nil, cfg.CertProbeTimeout, nil, nil)
+
 	handler := web.New(web.Config{
 		Hosts:         store.NewHostRepo(db),
 		Services:      store.NewServiceRepo(db),
@@ -115,6 +122,8 @@ func main() {
 		Tags:          store.NewTagRepo(db),
 		VLANs:         store.NewVLANRepo(db),
 		Reservations:  store.NewReservationRepo(db),
+		CertProber:    prober,
+		CertProbes:    certProbes,
 		DB:            db,
 		Docker:        discovery.NewSocketClient(cfg.DockerSocket),
 		NetScan:       discovery.NewNetworkScanner(),
@@ -200,6 +209,19 @@ func main() {
 			Run:      checker.Run,
 		})
 		log.Println("liveness checks enabled")
+	}
+
+	// Scheduled certificate probing is opt-in; the prober itself is always
+	// built above so the manual "Probe now" button works regardless.
+	if cfg.CertProbeEnabled {
+		runner.Register(job.Definition{
+			Name:     "cert-probe",
+			Title:    "Certificate probing",
+			Interval: cfg.CertProbeInterval,
+			Timeout:  cfg.CertProbeInterval,
+			Run:      prober.Run,
+		})
+		log.Println("certificate probing enabled")
 	}
 
 	go runner.Start(ctx)

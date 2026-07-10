@@ -55,6 +55,12 @@ type Config struct {
 	// Tasks exposes the background job runner to the Scheduled-tasks admin
 	// page. Nil => the page and routes are not mounted.
 	Tasks jobRunner
+	// CertProber runs the "Probe now" TLS check from a certificate's detail
+	// page (implemented by *certprobe.Prober).
+	CertProber CertProber
+	// CertProbes stores/reads each certificate's latest TLS probe result,
+	// surfaced on the certificate detail page.
+	CertProbes *store.CertProbeRepo
 }
 
 // New builds the HTTP handler with all routes wired to the given repos.
@@ -205,11 +211,13 @@ func New(cfg Config) http.Handler {
 					{"Issuer", c.Issuer},
 					{"Expires on", c.ExpiresOn},
 					{"Auto-renew", autoRenew},
+					{"Probe target", c.ProbeTarget},
 				}
 			},
 			search: func(c domain.Certificate) []string {
 				return []string{c.Subject, c.Issuer, c.Notes}
 			},
+			probe:    certProbeSection(cfg.CertProbes),
 			newItem:  domain.Certificate{},
 			listTmpl: "certificates.html", formTmpl: "certificate_form.html",
 		},
@@ -632,6 +640,7 @@ func New(cfg Config) http.Handler {
 			r.Post("/discovery/network/import", importNetwork(hosts, netOpts, db))
 			r.Get("/discovery/proxmox", scanProxmox(proxmox, hosts, pveOpts))
 			r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts, db))
+			r.Post("/certificates/{id}/probe", probeCertificate(cat, cfg.CertProber, certificates))
 		})
 	})
 

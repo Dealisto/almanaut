@@ -45,9 +45,9 @@ func (r *CertificateRepo) GetTx(tx *sql.Tx, id int64) (domain.Certificate, error
 // Create inserts c and returns its new ID.
 func (r *CertificateRepo) Create(c domain.Certificate) (int64, error) {
 	res, err := r.db.Exec(
-		`INSERT INTO certificates (subject, issuer, expires_on, auto_renew, notes)
-		 VALUES (?, ?, ?, ?, ?)`,
-		c.Subject, c.Issuer, c.ExpiresOn, boolToInt(c.AutoRenew), c.Notes,
+		`INSERT INTO certificates (subject, issuer, expires_on, auto_renew, notes, probe_target)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		c.Subject, c.Issuer, c.ExpiresOn, boolToInt(c.AutoRenew), c.Notes, c.ProbeTarget,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert certificate: %w", err)
@@ -58,7 +58,7 @@ func (r *CertificateRepo) Create(c domain.Certificate) (int64, error) {
 // Get returns the certificate with the given id.
 func (r *CertificateRepo) Get(id int64) (domain.Certificate, error) {
 	row := r.db.QueryRow(
-		`SELECT id, subject, issuer, expires_on, auto_renew, notes FROM certificates WHERE id = ?`, id,
+		`SELECT id, subject, issuer, expires_on, auto_renew, notes, probe_target FROM certificates WHERE id = ?`, id,
 	)
 	return scanCertificate(row)
 }
@@ -66,7 +66,7 @@ func (r *CertificateRepo) Get(id int64) (domain.Certificate, error) {
 // List returns all certificates ordered by expiry date (soonest first).
 func (r *CertificateRepo) List() ([]domain.Certificate, error) {
 	rows, err := r.db.Query(
-		`SELECT id, subject, issuer, expires_on, auto_renew, notes FROM certificates ORDER BY expires_on`,
+		`SELECT id, subject, issuer, expires_on, auto_renew, notes, probe_target FROM certificates ORDER BY expires_on`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query certificates: %w", err)
@@ -86,8 +86,8 @@ func (r *CertificateRepo) List() ([]domain.Certificate, error) {
 // Update overwrites the certificate with c.ID with the values in c.
 func (r *CertificateRepo) Update(c domain.Certificate) error {
 	res, err := r.db.Exec(
-		`UPDATE certificates SET subject=?, issuer=?, expires_on=?, auto_renew=?, notes=? WHERE id=?`,
-		c.Subject, c.Issuer, c.ExpiresOn, boolToInt(c.AutoRenew), c.Notes, c.ID,
+		`UPDATE certificates SET subject=?, issuer=?, expires_on=?, auto_renew=?, notes=?, probe_target=? WHERE id=?`,
+		c.Subject, c.Issuer, c.ExpiresOn, boolToInt(c.AutoRenew), c.Notes, c.ProbeTarget, c.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update certificate: %w", err)
@@ -106,7 +106,7 @@ func (r *CertificateRepo) Delete(id int64) error {
 func scanCertificate(s scanner) (domain.Certificate, error) {
 	var c domain.Certificate
 	var autoRenew int64
-	if err := s.Scan(&c.ID, &c.Subject, &c.Issuer, &c.ExpiresOn, &autoRenew, &c.Notes); err != nil {
+	if err := s.Scan(&c.ID, &c.Subject, &c.Issuer, &c.ExpiresOn, &autoRenew, &c.Notes, &c.ProbeTarget); err != nil {
 		return domain.Certificate{}, notFound(fmt.Errorf("scan certificate: %w", err))
 	}
 	c.AutoRenew = autoRenew != 0

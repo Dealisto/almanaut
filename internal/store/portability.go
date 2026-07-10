@@ -219,9 +219,9 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 	}
 	for _, c := range snap.Certificates {
 		if err := insert("certificate", c.ID,
-			`INSERT INTO certificates (id, subject, issuer, expires_on, auto_renew, notes)
-			 VALUES (?, ?, ?, ?, ?, ?)`,
-			c.ID, c.Subject, c.Issuer, c.ExpiresOn, boolToInt(c.AutoRenew), c.Notes); err != nil {
+			`INSERT INTO certificates (id, subject, issuer, expires_on, auto_renew, notes, probe_target)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			c.ID, c.Subject, c.Issuer, c.ExpiresOn, boolToInt(c.AutoRenew), c.Notes, c.ProbeTarget); err != nil {
 			return err
 		}
 	}

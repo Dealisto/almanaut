@@ -103,6 +103,39 @@
 </section>
 {{end}}
 
+{{with .Probe}}
+<section class="panel">
+  <h2>TLS probe</h2>
+  {{if .Target}}
+  <p>Target: <code>{{.Target}}</code></p>
+  {{with .Status}}
+  <p>Last probed: {{.ProbedAt.Format "2006-01-02 15:04 UTC"}} —
+    {{if .Success}}<span class="badge">success</span>{{else}}<span class="badge badge-warn">failed</span>{{end}}</p>
+  {{if .LastError}}<p class="error">{{.LastError}}</p>{{end}}
+  {{if .Success}}
+  <dl class="def-grid">
+    <dt>Issuer</dt><dd>{{.Issuer}}</dd>
+    <dt>Serial</dt><dd><code>{{.Serial}}</code></dd>
+    <dt>SANs</dt><dd>{{range $i, $s := .SANs}}{{if $i}}, {{end}}{{$s}}{{end}}</dd>
+    <dt>Expires</dt><dd>{{.NotAfter}}</dd>
+  </dl>
+  {{end}}
+  {{if .Mismatches}}
+  <div class="notice"><strong>Mismatches:</strong>
+    <ul>{{range .Mismatches}}<li>{{.}}</li>{{end}}</ul>
+  </div>
+  {{end}}
+  {{else}}<p class="muted"><em>Not probed yet.</em></p>{{end}}
+  {{if canWrite}}
+  <form class="form-inline" method="post" action="{{$.ListURL}}/{{$.EntityID}}/probe">
+    {{ csrfField }}
+    <button class="btn btn-primary" type="submit">Probe now</button>
+  </form>
+  {{end}}
+  {{else}}<p class="muted"><em>No probe target set — this certificate is tracked manually.</em></p>{{end}}
+</section>
+{{end}}
+
 {{with .CustomFields}}
 <section class="panel">
   <h2>Custom fields</h2>

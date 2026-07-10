@@ -252,6 +252,12 @@ All configuration is via environment variables; everything is optional.
 | `ALMANAUT_KUMA_USER`          | (empty)              | Kuma username (socket.io login; API keys don't cover monitor CRUD) |
 | `ALMANAUT_KUMA_PASS`          | (empty)              | Kuma password (supports the `_FILE` convention) |
 | `ALMANAUT_KUMA_INSECURE`      | `false`              | Skip TLS verification for a self-signed Kuma certificate |
+| `ALMANAUT_LIVENESS_ENABLED`   | `false`              | Master switch for native TCP liveness checks on hosts/services (per-entity check address; empty address = not monitored) |
+| `ALMANAUT_LIVENESS_INTERVAL`  | `60s`                | How often the liveness checker runs (Go duration, e.g. `30s`) |
+| `ALMANAUT_LIVENESS_TIMEOUT`   | `5s`                 | Per-address TCP dial timeout for liveness checks (Go duration) |
+| `ALMANAUT_CERT_PROBE_ENABLED` | `false`              | Master switch for the scheduled certificate-probing job; the per-cert "Probe now" button works regardless |
+| `ALMANAUT_CERT_PROBE_INTERVAL` | `24h`               | How often the scheduled cert-probe job runs (Go duration) |
+| `ALMANAUT_CERT_PROBE_TIMEOUT` | `10s`                | Per-endpoint TLS dial timeout when probing a certificate (Go duration) |
 
 ### Secrets from files
 

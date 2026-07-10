@@ -419,6 +419,42 @@ func TestExportImportRoundTripsReservations(t *testing.T) {
 	}
 }
 
+func TestExportImportRoundTripsCertificateProbeTarget(t *testing.T) {
+	db := newTestDB(t)
+	if _, err := NewCertificateRepo(db).Create(domain.Certificate{
+		Subject: "example.com", ExpiresOn: "2027-01-01", ProbeTarget: "example.com:443",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := Export(db)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if len(first.Certificates) != 1 || first.Certificates[0].ProbeTarget != "example.com:443" {
+		t.Fatalf("snapshot missing certificate probe_target: %+v", first.Certificates)
+	}
+
+	db2 := newTestDB(t)
+	if err := Import(db2, first); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	second, err := Export(db2)
+	if err != nil {
+		t.Fatalf("re-export: %v", err)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("snapshot mismatch after round-trip:\nfirst:  %+v\nsecond: %+v", first, second)
+	}
+
+	got, err := NewCertificateRepo(db2).Get(first.Certificates[0].ID)
+	if err != nil {
+		t.Fatalf("get after import: %v", err)
+	}
+	if got.ProbeTarget != "example.com:443" {
+		t.Fatalf("probe_target not restored: %q", got.ProbeTarget)
+	}
+}
+
 func TestExportImportRoundTripsCustomFields(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "src.db")
 	db, err := Open(dbPath)
