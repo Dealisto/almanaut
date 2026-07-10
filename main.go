@@ -21,6 +21,7 @@ import (
 	"github.com/Dealisto/almanaut/internal/kuma"
 	"github.com/Dealisto/almanaut/internal/liveness"
 	"github.com/Dealisto/almanaut/internal/notify"
+	"github.com/Dealisto/almanaut/internal/scheddiscovery"
 	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/Dealisto/almanaut/internal/web"
 	"github.com/Dealisto/almanaut/internal/webhook"
@@ -104,6 +105,10 @@ func main() {
 	certProbes := store.NewCertProbeRepo(db)
 	prober := certprobe.New(store.NewCertificateRepo(db), certProbes, db, nil, cfg.CertProbeTimeout, nil, nil)
 
+	// The scheduled-discovery run history is always available so
+	// /discovery/runs is mounted even before any per-source job below runs.
+	discoveryRuns := store.NewDiscoveryRunRepo(db)
+
 	handler := web.New(web.Config{
 		Hosts:         store.NewHostRepo(db),
 		Services:      store.NewServiceRepo(db),
@@ -136,6 +141,7 @@ func main() {
 		Webhooks:      dispatcher,
 		Kuma:          kumaOpts,
 		Tasks:         runner,
+		DiscoveryRuns: discoveryRuns,
 	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
@@ -222,6 +228,33 @@ func main() {
 			Run:      prober.Run,
 		})
 		log.Println("certificate probing enabled")
+	}
+
+	// Scheduled discovery is opt-in per source: each is gated by its own
+	// interval plus that source's availability. Findings are only recorded
+	// and notified here — nothing is auto-imported (see internal/scheddiscovery).
+	detector := scheddiscovery.New(
+		discovery.NewSocketClient(cfg.DockerSocket),
+		discovery.NewNetworkScanner(),
+		cfg.ScanSubnet,
+		discovery.NewProxmoxClient(cfg.ProxmoxURL, cfg.ProxmoxToken, cfg.ProxmoxInsecure),
+		store.NewServiceRepo(db),
+		store.NewHostRepo(db),
+		discoveryRuns,
+		sender,
+		nil, nil,
+	)
+	if cfg.DiscoveryDockerInterval > 0 {
+		runner.Register(job.Definition{Name: "discovery-docker", Title: "Discovery: Docker", Interval: cfg.DiscoveryDockerInterval, Timeout: cfg.DiscoveryDockerInterval, Run: detector.RunDocker})
+		log.Println("scheduled Docker discovery enabled")
+	}
+	if cfg.DiscoveryNetworkInterval > 0 && cfg.NetworkScanEnabled && cfg.ScanSubnet != "" {
+		runner.Register(job.Definition{Name: "discovery-network", Title: "Discovery: network", Interval: cfg.DiscoveryNetworkInterval, Timeout: cfg.DiscoveryNetworkInterval, Run: detector.RunNetwork})
+		log.Println("scheduled network discovery enabled")
+	}
+	if cfg.DiscoveryProxmoxInterval > 0 && cfg.ProxmoxURL != "" && cfg.ProxmoxToken != "" {
+		runner.Register(job.Definition{Name: "discovery-proxmox", Title: "Discovery: Proxmox", Interval: cfg.DiscoveryProxmoxInterval, Timeout: cfg.DiscoveryProxmoxInterval, Run: detector.RunProxmox})
+		log.Println("scheduled Proxmox discovery enabled")
 	}
 
 	go runner.Start(ctx)

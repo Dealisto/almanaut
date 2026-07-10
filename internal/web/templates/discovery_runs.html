@@ -1,0 +1,35 @@
+{{/* internal/web/templates/discovery_runs.html */}}
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <p class="ph-eyebrow">Administration</p>
+    <h1>Discovery runs</h1>
+  </div>
+</div>
+
+<div class="panel">
+  {{if .Runs}}
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Source</th><th>Started</th><th>Finished</th><th>Found</th><th>New</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      {{range .Runs}}
+      <tr>
+        <td>{{.Source}}</td>
+        <td>{{.StartedAt}}</td>
+        <td>{{.FinishedAt}}</td>
+        <td>{{.FoundCount}}</td>
+        <td>{{.NewCount}}</td>
+        <td>{{if .Error}}<span class="badge badge-warn">{{.Error}}</span>{{else}}<span class="badge">ok</span>{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}
+  <div class="empty">No scheduled discovery runs yet.</div>
+  {{end}}
+</div>
+{{end}}
