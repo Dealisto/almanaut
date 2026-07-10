@@ -1,0 +1,16 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Account</span>
+    <h1>Recovery codes</h1>
+  </div>
+</div>
+<section class="panel">
+  <p><span class="badge badge-ok">2FA enabled</span></p>
+  <p><strong>Save these recovery codes now.</strong> Each can be used once if you lose your authenticator. They will not be shown again.</p>
+  <ul class="recovery-codes">
+    {{range .Codes}}<li><code>{{.}}</code></li>{{end}}
+  </ul>
+  <p><a class="btn" href="/account/2fa">Done</a></p>
+</section>
+{{end}}

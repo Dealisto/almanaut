@@ -68,6 +68,7 @@
         {{if isAdmin}}<a href="/tasks" class="{{if isActive "/tasks"}}active{{end}}">Scheduled tasks</a>{{end}}
         {{if isAdmin}}{{if kumaEnabled}}<a href="/kuma" class="{{if isActive "/kuma"}}active{{end}}">Uptime Kuma</a>{{end}}{{end}}
         <a href="/account/tokens" class="{{if isActive "/account/tokens"}}active{{end}}">API tokens</a>
+        {{if currentUser}}<a href="/account/2fa" class="{{if isActive "/account/2fa"}}active{{end}}">Two-factor auth</a>{{end}}
       </details>
     </nav>
     <form class="theme-switch" method="post" action="/theme">

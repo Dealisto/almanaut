@@ -15,7 +15,7 @@ var templatesFS embed.FS
 // templates referencing {{ csrfField }} parse; render rebinds it per request.
 var pages = func() map[string]*template.Template {
 	m := map[string]*template.Template{}
-	for _, page := range []string{"hosts.html", "host_form.html", "services.html", "service_form.html", "networks.html", "network_form.html", "vlans.html", "vlan_form.html", "domains.html", "domain_form.html", "certificates.html", "certificate_form.html", "backups.html", "backup_form.html", "hardware.html", "hardware_form.html", "subscriptions.html", "subscription_form.html", "accounts.html", "account_form.html", "sites.html", "site_form.html", "locations.html", "location_form.html", "racks.html", "rack_form.html", "contacts.html", "contact_form.html", "relationships.html", "impact.html", "checks.html", "health_report.html", "saved_views.html", "detail.html", "tags_overview.html", "search.html", "data.html", "dashboard.html", "discovery.html", "discovery_docker.html", "discovery_network.html", "discovery_proxmox.html", "history.html", "users.html", "password.html", "tokens.html", "reservations.html", "reservation_form.html", "custom_fields.html", "webhooks.html", "webhook_edit.html", "kuma.html", "tasks.html", "discovery_runs.html", "audit.html"} {
+	for _, page := range []string{"hosts.html", "host_form.html", "services.html", "service_form.html", "networks.html", "network_form.html", "vlans.html", "vlan_form.html", "domains.html", "domain_form.html", "certificates.html", "certificate_form.html", "backups.html", "backup_form.html", "hardware.html", "hardware_form.html", "subscriptions.html", "subscription_form.html", "accounts.html", "account_form.html", "sites.html", "site_form.html", "locations.html", "location_form.html", "racks.html", "rack_form.html", "contacts.html", "contact_form.html", "relationships.html", "impact.html", "checks.html", "health_report.html", "saved_views.html", "detail.html", "tags_overview.html", "search.html", "data.html", "dashboard.html", "discovery.html", "discovery_docker.html", "discovery_network.html", "discovery_proxmox.html", "history.html", "users.html", "password.html", "tokens.html", "account_2fa.html", "2fa_recovery.html", "reservations.html", "reservation_form.html", "custom_fields.html", "webhooks.html", "webhook_edit.html", "kuma.html", "tasks.html", "discovery_runs.html", "audit.html"} {
 		m[page] = template.Must(
 			template.New("layout.html").
 				Funcs(template.FuncMap{
@@ -41,6 +41,18 @@ var pages = func() map[string]*template.Template {
 				"currentUser": func() string { return "" },
 			}).
 			ParseFS(templatesFS, "templates/login.html"),
+	)
+	// 2fa_challenge.html is standalone too (post-password, pre-session): it
+	// defines its own "layout" like login.html.
+	m["2fa_challenge.html"] = template.Must(
+		template.New("2fa_challenge.html").
+			Funcs(template.FuncMap{
+				"csrfField":   func() template.HTML { return "" },
+				"isActive":    func(string) bool { return false },
+				"theme":       func() string { return "system" },
+				"currentUser": func() string { return "" },
+			}).
+			ParseFS(templatesFS, "templates/2fa_challenge.html"),
 	)
 	return m
 }()

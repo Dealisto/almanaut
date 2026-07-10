@@ -522,6 +522,7 @@ func New(cfg Config) http.Handler {
 	webhooks := store.NewWebhookRepo(db)
 	savedViews := store.NewSavedViewRepo(db)
 	authEvents := store.NewAuthEventRepo(db)
+	totp := store.NewTOTPRepo(db)
 	tokenUses := newTokenUseLog()
 	cat := entityCatalog{resources: resources}
 	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, customFields: customFields, attachments: attachments, db: db, webhooks: cfg.Webhooks}
@@ -554,7 +555,9 @@ func New(cfg Config) http.Handler {
 			r.Use(limitBody)
 			r.Use(csrfProtect(cfg.SecureCookies))
 			r.Get("/login", loginForm)
-			r.Post("/login", login(users, sessions, throttle, authEvents, cfg.AuthAuditRetentionDays, cfg.SecureCookies))
+			r.Post("/login", login(users, sessions, totp, throttle, authEvents, cfg.AuthAuditRetentionDays, cfg.SecureCookies))
+			r.Get("/login/2fa", challenge2FAForm(totp))
+			r.Post("/login/2fa", verify2FA(users, sessions, totp, throttle, authEvents, cfg.SecureCookies))
 		})
 	}
 
@@ -596,6 +599,10 @@ func New(cfg Config) http.Handler {
 			r.Get("/account/tokens", listTokens(tokens))
 			r.Post("/account/tokens", createToken(tokens))
 			r.Post("/account/tokens/{id}/delete", deleteToken(tokens))
+			r.Get("/account/2fa", account2FA(totp))
+			r.Post("/account/2fa/setup", setup2FA(totp))
+			r.Post("/account/2fa/confirm", confirm2FA(totp, db))
+			r.Post("/account/2fa/disable", disable2FA(totp))
 		}
 		r.Post("/theme", setTheme(cfg.SecureCookies)) // UI preference, any role
 
@@ -609,6 +616,7 @@ func New(cfg Config) http.Handler {
 				r.Get("/audit", auditLogPage(authEvents, users))
 				r.Post("/users/{id}/password", resetUserPassword(users))
 				r.Post("/users/{id}/role", updateUserRole(users))
+				r.Post("/users/{id}/2fa/reset", resetUser2FA(totp, authEvents, users))
 
 				r.Get("/webhooks", listWebhooks(webhooks))
 				r.Post("/webhooks", createWebhook(webhooks))
