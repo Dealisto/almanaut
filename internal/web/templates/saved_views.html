@@ -1,0 +1,46 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Preferences</span>
+    <h1>Saved views</h1>
+  </div>
+</div>
+
+{{if .Groups}}
+{{range .Groups}}
+<section class="panel">
+<h2>{{.TypeTitle}}</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th><th>View</th><th></th></tr></thead>
+  <tbody>
+  {{range .Views}}
+    <tr>
+      <td>
+        <form class="form-inline" method="post" action="/views/{{.ID}}/rename">
+          {{ csrfField }}
+          <input name="name" value="{{.Name}}" aria-label="View name">
+          <button class="btn" type="submit">Rename</button>
+        </form>
+      </td>
+      <td><a href="{{.URL}}"><code>{{if .Query}}?{{.Query}}{{else}}(all){{end}}</code></a></td>
+      <td>
+        <form class="form-inline" method="post" action="/views/{{.ID}}/delete"
+              onsubmit="return confirm('Delete this saved view?');">
+          {{ csrfField }}
+          <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+</section>
+{{end}}
+{{else}}
+<section class="panel">
+  <div class="empty">No saved views yet. Filter or sort a list page, then use “Save current view”.</div>
+</section>
+{{end}}
+{{end}}

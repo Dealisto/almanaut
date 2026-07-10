@@ -517,6 +517,7 @@ func New(cfg Config) http.Handler {
 	customFields := store.NewCustomFieldRepo(db)
 	attachments := store.NewAttachmentRepo(db)
 	webhooks := store.NewWebhookRepo(db)
+	savedViews := store.NewSavedViewRepo(db)
 	cat := entityCatalog{resources: resources}
 	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, customFields: customFields, attachments: attachments, db: db, webhooks: cfg.Webhooks}
 	r := chi.NewRouter()
@@ -572,6 +573,15 @@ func New(cfg Config) http.Handler {
 		// unsafe request, so an oversize upload is rejected up front.
 		r.Use(limitBody)
 		r.Use(csrfProtect(cfg.SecureCookies))
+		// Load the user's saved views for the sidebar on every UI page.
+		r.Use(savedViewsMiddleware(savedViews, cat))
+
+		// Saved list views: a per-user preference, so available to every role
+		// (like /theme), not gated behind requireWrite.
+		r.Get("/views", savedViewsPage(savedViews, cat))
+		r.Post("/views", createSavedView(savedViews, cat))
+		r.Post("/views/{id}/rename", renameSavedView(savedViews))
+		r.Post("/views/{id}/delete", deleteSavedView(savedViews))
 
 		// Self-service: available to every authenticated user regardless of role.
 		if cfg.AuthEnabled {

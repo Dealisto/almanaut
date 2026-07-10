@@ -29,5 +29,14 @@
   <button class="btn" type="submit">Apply</button>
   {{if .Active}}<a class="btn btn-link" href="{{.BasePath}}">Clear</a>{{end}}
 </form>
+<form class="list-controls lc-save" method="post" action="/views">
+  {{ csrfField }}
+  <input type="hidden" name="entity_type" value="{{.Type}}">
+  <input type="hidden" name="query" value="{{.CurrentQuery}}">
+  <label class="lc-field">Save current view
+    <input name="name" placeholder="view name" required aria-label="Saved view name">
+  </label>
+  <button class="btn" type="submit">Save view</button>
+</form>
 {{end}}
 {{end}}
