@@ -129,6 +129,25 @@ func TestTimeoutCancelsPass(t *testing.T) {
 	eventually(t, func() bool { return statusOf(r, "a").LastErr != "" })
 }
 
+func TestTriggerOnlyJobHasNoNextRun(t *testing.T) {
+	ch := make(chan int, 4)
+	r := New(discardLogger())
+	r.Register(Definition{Name: "a", Interval: 0, Run: signaling(ch)})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go r.Start(ctx)
+
+	waitFor(t, ch) // startup pass
+	r.Trigger("a")
+	waitFor(t, ch) // triggered pass
+
+	eventually(t, func() bool { return statusOf(r, "a").Runs >= 2 })
+	s := statusOf(r, "a")
+	if !s.NextRun.IsZero() {
+		t.Fatalf("NextRun = %v, want zero (trigger-only job should never be scheduled)", s.NextRun)
+	}
+}
+
 func TestStatusesReturnsRegisteredJobsInOrder(t *testing.T) {
 	r := New(nil)
 	r.Register(Definition{Name: "a", Title: "Job A", Interval: time.Hour, Run: noop})

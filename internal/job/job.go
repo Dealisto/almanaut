@@ -175,7 +175,9 @@ func (r *Runner) pass(ctx context.Context, j *job) {
 	j.runs++
 	j.lastRun = start
 	j.lastDur = time.Since(start)
-	j.nextRun = time.Now().Add(j.def.Interval)
+	if j.def.Interval > 0 {
+		j.nextRun = time.Now().Add(j.def.Interval)
+	}
 	if err != nil {
 		j.lastErr = err.Error()
 	} else {
