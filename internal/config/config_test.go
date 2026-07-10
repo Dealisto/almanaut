@@ -327,3 +327,23 @@ func TestLoadCertProbeOverrides(t *testing.T) {
 		t.Fatalf("overrides not applied: %+v", cfg)
 	}
 }
+
+func TestLoadDiscoveryIntervalsDefaultZero(t *testing.T) {
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.DiscoveryDockerInterval != 0 || cfg.DiscoveryNetworkInterval != 0 || cfg.DiscoveryProxmoxInterval != 0 {
+		t.Fatalf("discovery intervals should default to 0 (disabled): %+v", cfg)
+	}
+}
+
+func TestLoadDiscoveryIntervalOverrides(t *testing.T) {
+	t.Setenv("ALMANAUT_DISCOVERY_DOCKER_INTERVAL", "1h")
+	t.Setenv("ALMANAUT_DISCOVERY_NETWORK_INTERVAL", "6h")
+	t.Setenv("ALMANAUT_DISCOVERY_PROXMOX_INTERVAL", "30m")
+	cfg, _ := Load()
+	if cfg.DiscoveryDockerInterval != time.Hour || cfg.DiscoveryNetworkInterval != 6*time.Hour || cfg.DiscoveryProxmoxInterval != 30*time.Minute {
+		t.Fatalf("overrides not applied: %+v", cfg)
+	}
+}
