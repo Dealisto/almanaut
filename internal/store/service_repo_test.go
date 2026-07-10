@@ -3,6 +3,7 @@ package store
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 )
@@ -64,5 +65,35 @@ func TestServiceRepoCRUD(t *testing.T) {
 	list, _ = repo.List()
 	if len(list) != 0 {
 		t.Fatalf("List len after delete = %d, want 0", len(list))
+	}
+}
+
+func TestServiceRepoCheckAddressAndLivenessJoin(t *testing.T) {
+	db := newTestDB(t)
+	services := NewServiceRepo(db)
+	id, err := services.Create(domain.Service{Name: "svc", Kind: "container", CheckAddress: "10.0.0.2:443"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, err := services.Get(id)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.CheckAddress != "10.0.0.2:443" {
+		t.Fatalf("check_address not persisted: %q", got.CheckAddress)
+	}
+	if got.Liveness != nil {
+		t.Fatal("liveness should be nil before any check")
+	}
+
+	now := time.Now()
+	if err := NewLivenessRepo(db).Upsert("service", id, domain.LivenessStatus{
+		Status: domain.LivenessUp, CheckedAt: now, ChangedAt: now,
+	}); err != nil {
+		t.Fatalf("upsert liveness: %v", err)
+	}
+	got, _ = services.Get(id)
+	if got.Liveness == nil || got.Liveness.Status != domain.LivenessUp {
+		t.Fatalf("liveness join not populated: %+v", got.Liveness)
 	}
 }

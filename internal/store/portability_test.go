@@ -93,11 +93,12 @@ func TestTagRepoListAll(t *testing.T) {
 func TestImportRoundTrip(t *testing.T) {
 	db := newTestDB(t)
 	// Seed via repos so ids are assigned, then snapshot.
-	hostID, err := NewHostRepo(db).Create(domain.Host{Name: "proxmox", Type: "physical", IPs: []string{"10.0.0.5"}, Notes: "# run"})
+	hostID, err := NewHostRepo(db).Create(domain.Host{Name: "proxmox", Type: "physical", IPs: []string{"10.0.0.5"}, Notes: "# run", CheckAddress: "10.0.0.5:22"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewServiceRepo(db).Create(domain.Service{Name: "jellyfin", Kind: "container"}); err != nil {
+	serviceID, err := NewServiceRepo(db).Create(domain.Service{Name: "jellyfin", Kind: "container", CheckAddress: "jellyfin.lan:8096"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := NewRelationshipRepo(db).Create(domain.Relationship{FromType: "service", FromID: 1, ToType: "host", ToID: hostID, Kind: "runs on"}); err != nil {
@@ -127,6 +128,16 @@ func TestImportRoundTrip(t *testing.T) {
 	h, err := NewHostRepo(db2).Get(hostID)
 	if err != nil || h.Name != "proxmox" {
 		t.Errorf("host id %d not preserved: %+v err=%v", hostID, h, err)
+	}
+	if h.CheckAddress != "10.0.0.5:22" {
+		t.Errorf("host CheckAddress = %q, want %q", h.CheckAddress, "10.0.0.5:22")
+	}
+	svc, err := NewServiceRepo(db2).Get(serviceID)
+	if err != nil {
+		t.Fatalf("get service: %v", err)
+	}
+	if svc.CheckAddress != "jellyfin.lan:8096" {
+		t.Errorf("service CheckAddress = %q, want %q", svc.CheckAddress, "jellyfin.lan:8096")
 	}
 }
 

@@ -16,7 +16,11 @@ type Service struct {
 	URL      string `yaml:"url" json:"url"`     // access URL
 	Ports    string `yaml:"ports" json:"ports"` // free text, e.g. "8096, 443"
 	Category string `yaml:"category" json:"category"`
-	Notes    string `yaml:"notes" json:"notes"`
+
+	CheckAddress string          `yaml:"check_address" json:"check_address"` // optional host:port for TCP liveness checks; empty = not monitored
+	Liveness     *LivenessStatus `yaml:"-" json:"liveness,omitempty"`        // derived, populated by the repo join
+
+	Notes string `yaml:"notes" json:"notes"`
 }
 
 // Validate checks required fields and value formats.
@@ -26,6 +30,9 @@ func (s Service) Validate() error {
 	}
 	if !contains(ServiceKinds, s.Kind) {
 		return fmt.Errorf("kind %q must be one of %v", s.Kind, ServiceKinds)
+	}
+	if err := ValidateCheckAddress(s.CheckAddress); err != nil {
+		return err
 	}
 	return nil
 }

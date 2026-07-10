@@ -11,7 +11,7 @@
 {{if .Items}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Name</th><th>Type</th><th>OS</th><th>IPs</th><th>Status</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Type</th><th>OS</th><th>IPs</th><th>Status</th><th>Liveness</th><th></th></tr></thead>
   <tbody>
   {{range .Items}}
     <tr>
@@ -20,6 +20,13 @@
       <td>{{.OS}}</td>
       <td>{{range $i, $ip := .IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}</td>
       <td>{{.Status}}</td>
+      <td>
+        {{if .Liveness}}
+          {{if eq .Liveness.Status "down"}}<span class="badge badge-warn">down</span>
+          {{else}}<span class="badge">up</span>{{end}}
+        {{else if .CheckAddress}}<span class="badge">unknown</span>
+        {{else}}—{{end}}
+      </td>
       <td>
         {{if canWrite}}
         <a class="btn" href="/hosts/{{.ID}}/edit">Edit</a>

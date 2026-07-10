@@ -16,6 +16,7 @@
   </label>
   <label>Access URL<input name="url" value="{{.Item.URL}}"></label>
   <label>Ports<input name="ports" value="{{.Item.Ports}}"></label>
+  <label>Liveness check address (host:port, optional)<input name="check_address" value="{{.Item.CheckAddress}}" placeholder="server.lan:8096"></label>
   <label>Category<input name="category" value="{{.Item.Category}}"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
   {{template "customFieldsForm" .Extras.customFields}}

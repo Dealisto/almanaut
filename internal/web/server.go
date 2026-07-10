@@ -88,6 +88,7 @@ func New(cfg Config) http.Handler {
 					{"Type", h.Type}, {"OS", h.OS}, {"CPU", h.CPU}, {"RAM", h.RAM},
 					{"Disk", h.Disk}, {"Status", h.Status}, {"IPs", strings.Join(h.IPs, ", ")},
 					{"Rack", rackLabel(racks, h.RackID)}, {"Rack position (U)", rackPosLabel(h.RackID, h.RackPosition, h.UHeight)},
+					{"Liveness", livenessLabel(h.Liveness)},
 				}
 			},
 			search: func(h domain.Host) []string {
@@ -114,6 +115,7 @@ func New(cfg Config) http.Handler {
 					{"URL", s.URL},
 					{"Ports", s.Ports},
 					{"Category", s.Category},
+					{"Liveness", livenessLabel(s.Liveness)},
 				}
 			},
 			search: func(s domain.Service) []string {
@@ -1005,6 +1007,20 @@ func rackPosLabel(rackID int64, position, uHeight int) string {
 		return "—"
 	}
 	return fmt.Sprintf("%d (%dU)", position, uHeight)
+}
+
+// livenessLabel renders a LivenessStatus for the detail page's plain-text row.
+func livenessLabel(s *domain.LivenessStatus) string {
+	if s == nil {
+		return "—"
+	}
+	if s.Status == domain.LivenessDown {
+		if s.LastError != "" {
+			return "down · " + s.LastError
+		}
+		return "down"
+	}
+	return "up · checked " + s.CheckedAt.Format("2006-01-02 15:04")
 }
 
 // parseIPs splits a comma-separated field into trimmed, non-empty values.

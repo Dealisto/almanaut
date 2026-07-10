@@ -20,6 +20,7 @@
   <label>Disk<input name="disk" value="{{.Item.Disk}}"></label>
   <label>IPs (comma-separated)<input name="ips" value="{{range $i, $ip := .Item.IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}"></label>
   <label>Status<input name="status" value="{{.Item.Status}}"></label>
+  <label>Liveness check address (host:port, optional)<input name="check_address" value="{{.Item.CheckAddress}}" placeholder="192.168.1.10:443"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
   <label>Rack
     <select name="rack_id">

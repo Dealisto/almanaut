@@ -18,6 +18,7 @@ import (
 	"github.com/Dealisto/almanaut/internal/discovery"
 	"github.com/Dealisto/almanaut/internal/job"
 	"github.com/Dealisto/almanaut/internal/kuma"
+	"github.com/Dealisto/almanaut/internal/liveness"
 	"github.com/Dealisto/almanaut/internal/notify"
 	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/Dealisto/almanaut/internal/web"
@@ -154,6 +155,9 @@ func main() {
 	if cfg.DiscordWebhookURL != "" {
 		senders = append(senders, notify.NewDiscordClient(cfg.DiscordWebhookURL))
 	}
+	// Shared across every notification-emitting job; a no-op success when no
+	// channel is configured, so it is always safe to build.
+	sender := notify.NewMultiSender(senders...)
 	// The expiry-notifications job is registered only when a channel is
 	// configured, preserving the opt-in.
 	if len(senders) > 0 {
@@ -162,7 +166,7 @@ func main() {
 			store.NewHardwareRepo(db),
 			store.NewSubscriptionRepo(db),
 			store.NewNotificationRepo(db),
-			notify.NewMultiSender(senders...),
+			sender,
 			cfg.NotifyWithinDays,
 		)
 		runner.Register(job.Definition{
@@ -173,6 +177,31 @@ func main() {
 			Run:      func(ctx context.Context) error { return notifier.Run(ctx, time.Now()) },
 		})
 	}
+
+	// Liveness checks are opt-in: a background pass of TCP dials against
+	// every host/service, recording up/down transitions and notifying via
+	// the same sender fan-out as expiry notifications.
+	if cfg.LivenessEnabled {
+		checker := liveness.New(
+			store.NewHostRepo(db),
+			store.NewServiceRepo(db),
+			store.NewLivenessRepo(db),
+			sender,
+			nil, // default TCP dialer
+			cfg.LivenessTimeout,
+			nil, // slog.Default
+			nil, // time.Now
+		)
+		runner.Register(job.Definition{
+			Name:     "liveness",
+			Title:    "Liveness checks",
+			Interval: cfg.LivenessInterval,
+			Timeout:  cfg.LivenessInterval, // a batch of sequential dials may exceed the 1m default
+			Run:      checker.Run,
+		})
+		log.Println("liveness checks enabled")
+	}
+
 	go runner.Start(ctx)
 
 	select {

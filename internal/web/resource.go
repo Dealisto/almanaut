@@ -739,16 +739,17 @@ func parseHost(get func(string) string, id int64) domain.Host {
 	rackPos, _ := strconv.Atoi(strings.TrimSpace(get("rack_position")))
 	uHeight, _ := strconv.Atoi(strings.TrimSpace(get("u_height")))
 	return domain.Host{
-		ID:     id,
-		Name:   strings.TrimSpace(get("name")),
-		Type:   get("type"),
-		OS:     get("os"),
-		CPU:    get("cpu"),
-		RAM:    get("ram"),
-		Disk:   get("disk"),
-		Status: get("status"),
-		Notes:  get("notes"),
-		IPs:    parseIPs(get("ips")),
+		ID:           id,
+		Name:         strings.TrimSpace(get("name")),
+		Type:         get("type"),
+		OS:           get("os"),
+		CPU:          get("cpu"),
+		RAM:          get("ram"),
+		Disk:         get("disk"),
+		Status:       get("status"),
+		Notes:        get("notes"),
+		IPs:          parseIPs(get("ips")),
+		CheckAddress: strings.TrimSpace(get("check_address")),
 
 		RackID:       rackID,
 		RackPosition: rackPos,
@@ -758,13 +759,14 @@ func parseHost(get func(string) string, id int64) domain.Host {
 
 func parseService(get func(string) string, id int64) domain.Service {
 	return domain.Service{
-		ID:       id,
-		Name:     strings.TrimSpace(get("name")),
-		Kind:     get("kind"),
-		URL:      get("url"),
-		Ports:    get("ports"),
-		Category: get("category"),
-		Notes:    get("notes"),
+		ID:           id,
+		Name:         strings.TrimSpace(get("name")),
+		Kind:         get("kind"),
+		URL:          get("url"),
+		Ports:        get("ports"),
+		Category:     get("category"),
+		Notes:        get("notes"),
+		CheckAddress: strings.TrimSpace(get("check_address")),
 	}
 }
 
