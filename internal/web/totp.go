@@ -96,6 +96,17 @@ func account2FA(totp *store.TOTPRepo) http.HandlerFunc {
 func setup2FA(totp *store.TOTPRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, _ := userFrom(r.Context())
+		// Refuse to re-initialize an already-enabled factor: SetSecret would reset
+		// enabled to 0, which would be an unguarded way to neutralize 2FA from a
+		// hijacked session. Re-enrollment must go through disable (which re-verifies
+		// a current code) first.
+		if t, err := totp.Get(u.ID); err == nil && t.Enabled {
+			http.Redirect(w, r, "/account/2fa", http.StatusSeeOther)
+			return
+		} else if err != nil && !errors.Is(err, store.ErrNotFound) {
+			serverError(w, r, err)
+			return
+		}
 		secret, err := domain.GenerateTOTPSecret()
 		if err != nil {
 			serverError(w, r, err)

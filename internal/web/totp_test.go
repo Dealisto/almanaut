@@ -186,6 +186,31 @@ func TestTOTPAdminReset(t *testing.T) {
 	}
 }
 
+// TestTOTPSetupCannotResetEnabled verifies re-running setup on an already-
+// enabled factor does not silently disable it (security-review finding).
+func TestTOTPSetupCannotResetEnabled(t *testing.T) {
+	h, db := totpTestHandler(t)
+	session := loginAs(t, h, "admin", "password123")
+	enroll2FA(t, h, db, session, 1)
+
+	// Attempt to re-initialize; must be refused with no change to the secret.
+	var before string
+	db.QueryRow(`SELECT secret FROM user_totp WHERE user_id=1`).Scan(&before)
+	if rec := postCSRF(t, h, session, "/account/2fa/setup", ""); rec.Code != http.StatusSeeOther {
+		t.Fatalf("re-setup = %d", rec.Code)
+	}
+	var after string
+	var enabled int
+	db.QueryRow(`SELECT secret, enabled FROM user_totp WHERE user_id=1`).Scan(&after, &enabled)
+	if enabled != 1 || after != before {
+		t.Errorf("re-setup changed factor: enabled=%d secretChanged=%v", enabled, after != before)
+	}
+	// And login still demands 2FA.
+	if rec := passwordLogin(t, h, "admin", "password123"); rec.Header().Get("Location") != "/login/2fa?next=%2F" {
+		t.Error("2FA no longer required after re-setup attempt")
+	}
+}
+
 func TestTOTPViewerCannotReset(t *testing.T) {
 	h, db := totpTestHandler(t)
 	viewer := seedUserAndLogin(t, h, db, "vic", domain.RoleViewer)
