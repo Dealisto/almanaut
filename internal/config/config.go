@@ -42,6 +42,10 @@ type Config struct {
 	LivenessEnabled  bool          // ALMANAUT_LIVENESS_ENABLED — master switch for TCP liveness checks
 	LivenessInterval time.Duration // ALMANAUT_LIVENESS_INTERVAL — time between check passes
 	LivenessTimeout  time.Duration // ALMANAUT_LIVENESS_TIMEOUT — per-address TCP dial timeout
+
+	CertProbeEnabled  bool          // ALMANAUT_CERT_PROBE_ENABLED — master switch for the scheduled cert-probe job
+	CertProbeInterval time.Duration // ALMANAUT_CERT_PROBE_INTERVAL — time between scheduled probe passes
+	CertProbeTimeout  time.Duration // ALMANAUT_CERT_PROBE_TIMEOUT — per-endpoint TLS dial timeout
 }
 
 // Load reads configuration from the environment, falling back to defaults. It
@@ -96,6 +100,9 @@ func Load() (Config, error) {
 		LivenessEnabled:    getenvBool("ALMANAUT_LIVENESS_ENABLED", false),
 		LivenessInterval:   getenvDuration("ALMANAUT_LIVENESS_INTERVAL", 60*time.Second),
 		LivenessTimeout:    getenvDuration("ALMANAUT_LIVENESS_TIMEOUT", 5*time.Second),
+		CertProbeEnabled:   getenvBool("ALMANAUT_CERT_PROBE_ENABLED", false),
+		CertProbeInterval:  getenvDuration("ALMANAUT_CERT_PROBE_INTERVAL", 24*time.Hour),
+		CertProbeTimeout:   getenvDuration("ALMANAUT_CERT_PROBE_TIMEOUT", 10*time.Second),
 	}, nil
 }
 

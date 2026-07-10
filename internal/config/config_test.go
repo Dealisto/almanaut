@@ -298,3 +298,32 @@ func TestLoadLivenessOverrides(t *testing.T) {
 		t.Fatalf("overrides not applied: %+v", cfg)
 	}
 }
+
+func TestLoadCertProbeDefaults(t *testing.T) {
+	t.Setenv("ALMANAUT_CERT_PROBE_ENABLED", "")
+	t.Setenv("ALMANAUT_CERT_PROBE_INTERVAL", "")
+	t.Setenv("ALMANAUT_CERT_PROBE_TIMEOUT", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if cfg.CertProbeEnabled {
+		t.Fatal("cert probe should default disabled")
+	}
+	if cfg.CertProbeInterval != 24*time.Hour {
+		t.Fatalf("interval default = %v", cfg.CertProbeInterval)
+	}
+	if cfg.CertProbeTimeout != 10*time.Second {
+		t.Fatalf("timeout default = %v", cfg.CertProbeTimeout)
+	}
+}
+
+func TestLoadCertProbeOverrides(t *testing.T) {
+	t.Setenv("ALMANAUT_CERT_PROBE_ENABLED", "true")
+	t.Setenv("ALMANAUT_CERT_PROBE_INTERVAL", "6h")
+	t.Setenv("ALMANAUT_CERT_PROBE_TIMEOUT", "3s")
+	cfg, _ := Load()
+	if !cfg.CertProbeEnabled || cfg.CertProbeInterval != 6*time.Hour || cfg.CertProbeTimeout != 3*time.Second {
+		t.Fatalf("overrides not applied: %+v", cfg)
+	}
+}
