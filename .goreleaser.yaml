@@ -1,0 +1,70 @@
+# goreleaser configuration for versioned, reproducible releases.
+# A pushed `v*` tag triggers .github/workflows/release.yml, which runs
+# `goreleaser release`, producing multi-platform binaries, checksums, and a
+# GitHub Release. Container images are published separately by publish.yml.
+version: 2
+
+builds:
+  - id: almanaut
+    main: .
+    binary: almanaut
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      # Match the Dockerfile's version injection so `/version` and `/healthz`
+      # report the release version regardless of how the binary was built.
+      - -s -w -X main.version={{ .Version }}
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    # Windows users expect a zip.
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: Other changes
+      order: 999
+
+release:
+  draft: false
+  # Tags like v1.0.0-rc1 are published as pre-releases automatically.
+  prerelease: auto
+  name_template: "{{ .ProjectName }} {{ .Tag }}"
+  footer: |
+    ## Container images
+
+    Multi-arch images for this release are on GHCR:
+    `ghcr.io/dealisto/almanaut:{{ .Version }}`, `:{{ .Major }}.{{ .Minor }}`, and `:latest`.

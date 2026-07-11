@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -36,8 +37,21 @@ func TestHealthzOK(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /healthz = %d, want 200", rec.Code)
 	}
-	if body := strings.TrimSpace(rec.Body.String()); body != "ok" {
-		t.Errorf("GET /healthz body = %q, want \"ok\"", body)
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Errorf("Content-Type = %q, want application/json", ct)
+	}
+	var got struct {
+		Status  string `json:"status"`
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal /healthz body: %v; body=%s", err, rec.Body.String())
+	}
+	if got.Status != "ok" {
+		t.Errorf("status = %q, want \"ok\"", got.Status)
+	}
+	if got.Version == "" {
+		t.Errorf("version is empty, want the running version")
 	}
 }
 

@@ -549,7 +549,7 @@ func New(cfg Config) http.Handler {
 
 	// Unauthenticated operational endpoints, registered before the auth/CSRF
 	// group so a container HEALTHCHECK or probe can reach them without creds.
-	r.Get("/healthz", healthz(db))
+	r.Get("/healthz", healthz(db, cfg.Version))
 	r.Get("/version", versionInfo(cfg.Version))
 	// Static CSS is public so the unauthenticated login page can style itself.
 	r.Get("/static/app.css", staticCSS(cfg.Version))
