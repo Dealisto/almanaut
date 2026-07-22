@@ -13,7 +13,7 @@ import json
 import os
 import sys
 
-# Basenames that must not be edited or overwritten via Edit/Write.
+# Basenames (lowercased) that must not be edited or overwritten via Edit/Write.
 PROTECTED = {
     "almanaut.exe": "a build artifact; rebuild it with `go build` instead of editing it.",
     "go.sum": "managed by the Go toolchain; run `go mod tidy` or `go get` instead of editing it.",
@@ -32,7 +32,9 @@ def main() -> int:
     if not file_path:
         return 0
 
-    base = os.path.basename(file_path.replace("\\", "/"))
+    # Lowercase the basename so the guard also holds on case-insensitive
+    # filesystems (Windows/macOS), where "GO.SUM" resolves to the same file.
+    base = os.path.basename(file_path.replace("\\", "/")).lower()
     reason = PROTECTED.get(base)
     if reason:
         sys.stderr.write(f"Blocked: '{base}' is {reason}\n")
