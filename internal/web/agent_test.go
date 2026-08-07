@@ -83,6 +83,32 @@ func TestAgentReportRejectsNonAgentScope(t *testing.T) {
 	}
 }
 
+// A read-only token is rejected the same way a read-write one is: the agent
+// endpoint requires the agent scope specifically, not merely "some valid
+// token" or "a token that can't write the entity API".
+func TestAgentReportRejectsReadOnlyScope(t *testing.T) {
+	h, _, raw := agentServer(t, domain.ScopeReadOnly)
+	if rec := postReport(t, h, raw, baseReport()); rec.Code != http.StatusForbidden {
+		t.Fatalf("read-only token on /api/agent/report = %d, want 403", rec.Code)
+	}
+}
+
+// The route sits behind apiAuth like every other /api route: no credentials
+// at all must be rejected before the handler's own scope check ever runs.
+func TestAgentReportRequiresToken(t *testing.T) {
+	h, _, _ := agentServer(t, domain.ScopeAgent)
+	body, err := json.Marshal(baseReport())
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/agent/report", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated POST /api/agent/report = %d, want 401", rec.Code)
+	}
+}
+
 func TestAgentTokenCannotWriteEntityAPI(t *testing.T) {
 	h, _, raw := agentServer(t, domain.ScopeAgent)
 	req := httptest.NewRequest(http.MethodPost, "/api/hosts", bytes.NewReader([]byte(`{"name":"x","type":"vm"}`)))
@@ -236,7 +262,7 @@ func TestAgentReportRejectsUnknownSchemaVersion(t *testing.T) {
 // scheduling, so the assertion only pins down what must hold under either:
 // exactly one 200 and one 409, never a 500 with a raw SQL string in the body.
 func TestAgentReportAgentIDConflictReturns409(t *testing.T) {
-	h, _, raw := agentServer(t, domain.ScopeAgent)
+	h, db, raw := agentServer(t, domain.ScopeAgent)
 
 	a := baseReport()
 	a.AgentID = "race-id"
@@ -268,5 +294,24 @@ func TestAgentReportAgentIDConflictReturns409(t *testing.T) {
 	}
 	if ok != 1 || conflict != 1 {
 		t.Fatalf("racing reports with the same agent_id = %v, want exactly one 200 and one 409", codes)
+	}
+
+	// This is the assertion that actually pins the rollback fix: a regression
+	// back to "conflict = true; return nil" on the ErrAgentIDConflict branch
+	// would still produce one 200 and one 409 above, but would also commit the
+	// loser's host write, leaving an orphaned host with no agent binding.
+	var hosts int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM hosts`).Scan(&hosts); err != nil {
+		t.Fatalf("count hosts: %v", err)
+	}
+	if hosts != 1 {
+		t.Fatalf("hosts = %d after a losing race, want exactly 1 (the loser's create must have rolled back)", hosts)
+	}
+	var bindings int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM host_agents`).Scan(&bindings); err != nil {
+		t.Fatalf("count host_agents: %v", err)
+	}
+	if bindings != 1 {
+		t.Fatalf("host_agents = %d after a losing race, want exactly 1 (the loser's binding must have rolled back)", bindings)
 	}
 }
