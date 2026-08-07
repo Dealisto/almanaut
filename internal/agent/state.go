@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -12,6 +13,11 @@ import (
 const DefaultStateDir = "/var/lib/almanaut-agent"
 
 const agentIDFile = "agent-id"
+
+// uuidv4Pattern validates the shape of a UUIDv4: 8-4-4-4-12 hex with version
+// nibble 4 and RFC 4122 variant nibble (8-b). The validator and generator both
+// use this pattern so they cannot drift apart.
+var uuidv4Pattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
 // LoadOrCreateAgentID returns the agent's persistent identity, generating and
 // storing one on first run.
@@ -25,11 +31,12 @@ func LoadOrCreateAgentID(dir string) (string, error) {
 	path := filepath.Join(dir, agentIDFile)
 	switch raw, err := os.ReadFile(path); {
 	case err == nil:
-		if id := strings.TrimSpace(string(raw)); id != "" {
+		if id := strings.TrimSpace(string(raw)); id != "" && isValidUUIDv4(id) {
 			return id, nil
 		}
-		// An empty file is corruption, not an identity — fall through and
-		// write a fresh one rather than reporting "" forever.
+		// An empty file, whitespace-only file, or malformed content is corruption —
+		// fall through and write a fresh one rather than reporting invalid or
+		// truncated id forever (which would create duplicate hosts on the server).
 	case !os.IsNotExist(err):
 		return "", fmt.Errorf("read agent id: %w", err)
 	}
@@ -50,10 +57,21 @@ func writeNewAgentID(dir string) (string, error) {
 		return "", fmt.Errorf("create state dir: %w", err)
 	}
 	path := filepath.Join(dir, agentIDFile)
-	if err := os.WriteFile(path, []byte(id+"\n"), 0o600); err != nil {
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, []byte(id+"\n"), 0o600); err != nil {
 		return "", fmt.Errorf("write agent id: %w", err)
 	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath) // best effort cleanup
+		return "", fmt.Errorf("rename agent id: %w", err)
+	}
 	return id, nil
+}
+
+// isValidUUIDv4 checks that a string has the shape of a UUIDv4: 8-4-4-4-12 hex
+// with version nibble 4 and RFC 4122 variant nibble (8-b).
+func isValidUUIDv4(s string) bool {
+	return uuidv4Pattern.MatchString(s)
 }
 
 // newUUIDv4 builds a random UUID from crypto/rand. A dependency for 12 lines

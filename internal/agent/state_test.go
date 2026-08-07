@@ -103,3 +103,73 @@ func TestLoadOrCreateAgentIDReplacesEmptyFile(t *testing.T) {
 		t.Fatalf("id %q is not a UUIDv4", got)
 	}
 }
+
+// A file containing arbitrary text (e.g., "hello") is malformed and must be
+// replaced. This guards against accepting invalid content as an identity.
+func TestLoadOrCreateAgentIDReplacesArbitraryText(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "agent-id"), []byte("hello\n"), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	got, err := LoadOrCreateAgentID(dir)
+	if err != nil {
+		t.Fatalf("LoadOrCreateAgentID: %v", err)
+	}
+	if !uuid4Pattern.MatchString(got) {
+		t.Fatalf("id %q is not a UUIDv4", got)
+	}
+}
+
+// A truncated UUID (from a partial write, e.g., power loss mid-write) is
+// malformed and must be replaced rather than accepted forever. This is the
+// realistic failure case that validation protects against.
+func TestLoadOrCreateAgentIDReplaceTruncatedUUID(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "agent-id"), []byte("3f2b1c9e-0000-4000-8000-0000\n"), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	got, err := LoadOrCreateAgentID(dir)
+	if err != nil {
+		t.Fatalf("LoadOrCreateAgentID: %v", err)
+	}
+	if !uuid4Pattern.MatchString(got) {
+		t.Fatalf("id %q is not a UUIDv4", got)
+	}
+}
+
+// A pre-seeded or restored UUIDv4 (valid and operator-supplied, not generated
+// by this run) must be accepted and used, not silently replaced. This guards
+// against the fix over-reaching and discarding operator intent.
+func TestLoadOrCreateAgentIDAcceptsPreSeededUUID(t *testing.T) {
+	dir := t.TempDir()
+	want := "3f2b1c9e-1234-4567-89ab-cdef00000001"
+	if err := os.WriteFile(filepath.Join(dir, "agent-id"), []byte(want+"\n"), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	got, err := LoadOrCreateAgentID(dir)
+	if err != nil {
+		t.Fatalf("LoadOrCreateAgentID: %v", err)
+	}
+	if got != want {
+		t.Fatalf("id = %q, want %q (pre-seeded id was discarded)", got, want)
+	}
+}
+
+// After a successful write, the directory must contain only agent-id, with no
+// leftover temporary file.
+func TestWriteAgentIDLeavesNoTemporaryFiles(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := LoadOrCreateAgentID(dir); err != nil {
+		t.Fatalf("LoadOrCreateAgentID: %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 file, found %d", len(entries))
+	}
+	if entries[0].Name() != "agent-id" {
+		t.Fatalf("expected agent-id, found %q", entries[0].Name())
+	}
+}
