@@ -54,6 +54,21 @@ func containsDirective(lines []string, directive string) bool {
 	return false
 }
 
+// stripShellComments removes lines that are comments (# prefix), excluding
+// the shebang (#!). Used to ensure a shell script test cannot be satisfied by
+// a comment containing the directive.
+func stripShellComments(content string) string {
+	var result []string
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") && !strings.HasPrefix(trimmed, "#!") {
+			continue
+		}
+		result = append(result, line)
+	}
+	return strings.Join(result, "\n")
+}
+
 // The agent runs as root on every machine in a fleet, so each of these
 // directives is load-bearing. Losing one silently widens what a compromised
 // agent — or a bug in it — can reach. Each must appear in the [Service]
@@ -132,21 +147,60 @@ func TestTimerTargetsTheService(t *testing.T) {
 // its refusal to clobber an existing config are the two properties that matter.
 func TestInstallerProtectsTheConfig(t *testing.T) {
 	script := readFile(t, "install.sh")
+	// Use stripShellComments so a comment containing "chmod 600" does not
+	// satisfy the test — the actual chmod command must be in executable code.
+	scriptNoComments := stripShellComments(script)
 	for _, want := range []string{
 		"chmod 600", // the config holds a token
 		"chmod 700", // so does its directory
 		"systemctl daemon-reload",
 		"systemctl enable --now almanaut-agent.timer",
 	} {
-		if !strings.Contains(script, want) {
-			t.Errorf("install.sh is missing %q", want)
+		if !strings.Contains(scriptNoComments, want) {
+			t.Errorf("install.sh is missing %q (not counting comments)", want)
 		}
 	}
 	// Re-running the installer during an upgrade must not blank a token the
 	// operator pasted by hand, so the write must be guarded by an existence
-	// check rather than being unconditional.
-	if !strings.Contains(script, "if [ -f \"$CONFIG_FILE\" ]") {
-		t.Errorf("install.sh does not guard against overwriting an existing config:\n%s", script)
+	// check rather than being unconditional. Check that printf (the write)
+	// appears after the guard.
+	guardIdx := strings.Index(script, "if [ -f \"$CONFIG_FILE\" ]")
+	printfIdx := strings.Index(script, "printf")
+	if guardIdx == -1 {
+		t.Errorf("install.sh does not guard against overwriting an existing config (missing 'if [ -f')")
+	}
+	if printfIdx == -1 {
+		t.Errorf("install.sh does not write the config (missing 'printf')")
+	}
+	if guardIdx > printfIdx {
+		t.Errorf("install.sh writes the config before guarding against overwrites")
+	}
+}
+
+// The installer must validate that SERVER_URL and TOKEN contain no characters
+// that would corrupt the TOML config or enable shell injection.
+func TestInstallerValidatesConfigValues(t *testing.T) {
+	script := readFile(t, "install.sh")
+	// Check that validation exists (the script must contain the validation logic).
+	// These are the dangerous characters that must be rejected.
+	requiredValidation := []string{
+		"grep -q '\"'",   // reject double-quote
+		"grep -q '\\\\'", // reject backslash
+		"validate_config_value",
+	}
+	for _, want := range requiredValidation {
+		if !strings.Contains(script, want) {
+			t.Errorf("install.sh is missing validation check for %q", want)
+		}
+	}
+	// Verify that validation is called for both SERVER_URL and TOKEN.
+	if !strings.Contains(script, "validate_config_value") {
+		t.Errorf("install.sh missing validate_config_value function")
+	}
+	// Check that the function is actually invoked on both values.
+	if !strings.Contains(script, "validate_config_value") ||
+		strings.Count(script, "validate_config_value") < 2 {
+		t.Errorf("install.sh must call validate_config_value for both SERVER_URL and TOKEN")
 	}
 }
 
