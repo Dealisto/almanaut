@@ -573,12 +573,17 @@ can't write even for an admin).
 
 An **`agent`**-scoped token is report-only: it authenticates nothing but
 `POST /api/agent/report` (see below) and cannot read the inventory or mutate
-any entity, regardless of its owner's role. Issue one per host running
-`almanaut-agent`; it never needs read access to the rest of the API. A report
-never overwrites `name`, `notes`, `status`, `check_address`, rack placement,
-tags, relationships or custom fields — it only ever updates `os`, `cpu`,
-`ram`, `disk` and `ips` (plus `type`, once, when the report creates the
-host).
+any entity, regardless of its owner's role. Because the intersection rule
+above still applies, the token's owner also needs a role that can write
+(`admin` or `editor`) — a viewer's token cannot report, even scoped `agent`.
+Issue one per host running `almanaut-agent`; it never needs read access to
+the rest of the API. A report never overwrites `notes`, `status`,
+`check_address`, rack placement, tags, relationships or custom fields — it
+only ever updates `os`, `cpu`, `ram`, `disk` and `ips`. `name` and `type` are
+the exception: both are set once, from the reported hostname and virtualization
+kind, only when the report creates the host; a host renamed by hand (or
+re-typed) afterwards keeps that value forever, since later reports never touch
+either field again.
 
 The raw token (`alm_...`) is shown **once**, right after creation — copy it
 then, since only its hash is stored. Revoke a token from the same page at any

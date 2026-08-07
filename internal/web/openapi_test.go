@@ -239,6 +239,25 @@ func TestJSONFieldNameSkipsAndFallsBack(t *testing.T) {
 	}
 }
 
+// TestAPIDocsPageIncludesAgentReport guards the human-readable docs page
+// against the same omission the generated OpenAPI spec had to be fixed for:
+// the agent endpoint is not an entity route, so it needs its own hand-added
+// section in buildAPIDocs rather than being picked up by the catalog loop.
+func TestAPIDocsPageIncludesAgentReport(t *testing.T) {
+	h := newTestServer(t)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docs", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"/api/agent/report", "AgentReport"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("docs page missing %q", want)
+		}
+	}
+}
+
 func TestAPIDocsPageRenders(t *testing.T) {
 	h := newTestServer(t)
 	rec := httptest.NewRecorder()

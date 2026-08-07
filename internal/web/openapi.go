@@ -534,6 +534,19 @@ func buildAPIDocs(resources []mountable, version string) apiDocsData {
 			{"GET", "/api/openapi.json", "This API's OpenAPI 3 document"},
 		},
 	})
+	// The on-host agent's check-in endpoint, same reasoning as its hand-added
+	// entry in buildOpenAPIDoc: it is not an entity route, so it gets its own
+	// section rather than being forced into the catalog loop above.
+	data.Sections = append(data.Sections, apiDocSection{
+		Name: "Agent",
+		Endpoints: []apiDocEndpoint{
+			{"POST", "/api/agent/report", "Ingest one report from almanaut-agent"},
+		},
+	})
+	data.Schemas = append(data.Schemas, apiDocSchema{
+		Name:   "AgentReport",
+		Fields: schemaFields(schemaForType(reflect.TypeOf(agentapi.Report{}))),
+	})
 	return data
 }
 
