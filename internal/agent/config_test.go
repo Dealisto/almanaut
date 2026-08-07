@@ -90,3 +90,52 @@ func TestLoadConfigIgnoresCommentsAndBlankLines(t *testing.T) {
 		t.Fatalf("ServerURL = %q", cfg.ServerURL)
 	}
 }
+
+// Trailing comments are allowed; trailing garbage is not. This test pair
+// confirms the distinction: both have trailing text, but one parses and one fails.
+func TestLoadConfigRejectsTrailingGarbage(t *testing.T) {
+	p := writeConfig(t, "server_url = \"https://alm.lan\" typo=oops\ntoken = \"t\"\n")
+	_, err := LoadConfig(p, noEnv)
+	if err == nil {
+		t.Fatal("LoadConfig accepted trailing garbage, want error")
+	}
+	if !strings.Contains(err.Error(), "unexpected text") {
+		t.Fatalf("error %q does not describe the issue", err)
+	}
+}
+
+func TestLoadConfigRejectsBackslashInValue(t *testing.T) {
+	p := writeConfig(t, "server_url = \"https://alm.lan\"\ntoken = \"abc\\def\"\n")
+	_, err := LoadConfig(p, noEnv)
+	if err == nil {
+		t.Fatal("LoadConfig accepted backslash in value, want error")
+	}
+	if !strings.Contains(err.Error(), "escape sequence") {
+		t.Fatalf("error %q does not name the problem", err)
+	}
+}
+
+func TestLoadConfigRejectsMultiLineStringOpener(t *testing.T) {
+	p := writeConfig(t, "server_url = \"\"\"\ntoken = \"t\"\n")
+	_, err := LoadConfig(p, noEnv)
+	if err == nil {
+		t.Fatal("LoadConfig accepted multi-line string, want error")
+	}
+	if !strings.Contains(err.Error(), "multi-line") {
+		t.Fatalf("error %q does not name the problem", err)
+	}
+}
+
+func TestLoadConfigRejectsDuplicateKey(t *testing.T) {
+	p := writeConfig(t, "server_url = \"https://alm.lan\"\ntoken = \"t1\"\ntoken = \"t2\"\n")
+	_, err := LoadConfig(p, noEnv)
+	if err == nil {
+		t.Fatal("LoadConfig accepted duplicate key, want error")
+	}
+	if !strings.Contains(err.Error(), "duplicate key") || !strings.Contains(err.Error(), "token") {
+		t.Fatalf("error %q does not name the duplicate key", err)
+	}
+	if !strings.Contains(err.Error(), "line") {
+		t.Fatalf("error %q does not mention lines", err)
+	}
+}

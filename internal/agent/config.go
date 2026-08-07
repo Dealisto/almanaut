@@ -1,7 +1,4 @@
 // Package agent collects host facts and reports them to an almanaut server.
-// Everything here is written to be testable without root and without running
-// on the machine being described: collectors read through an injectable Root
-// rather than touching / directly.
 package agent
 
 import (
@@ -40,6 +37,7 @@ func LoadConfig(path string, getenv func(string) string) (Config, error) {
 	defer f.Close()
 
 	var cfg Config
+	seen := make(map[string]int) // key -> line number
 	sc := bufio.NewScanner(f)
 	for line := 1; sc.Scan(); line++ {
 		key, value, err := parseConfigLine(sc.Text())
@@ -50,8 +48,16 @@ func LoadConfig(path string, getenv func(string) string) (Config, error) {
 		case "":
 			// blank or comment
 		case "server_url":
+			if prevLine, exists := seen[key]; exists {
+				return Config{}, fmt.Errorf("%s line %d: duplicate key %q (first seen at line %d)", path, line, key, prevLine)
+			}
+			seen[key] = line
 			cfg.ServerURL = value
 		case "token":
+			if prevLine, exists := seen[key]; exists {
+				return Config{}, fmt.Errorf("%s line %d: duplicate key %q (first seen at line %d)", path, line, key, prevLine)
+			}
+			seen[key] = line
 			cfg.Token = value
 		default:
 			return Config{}, fmt.Errorf("%s line %d: unknown key %q", path, line, key)
@@ -74,12 +80,20 @@ func LoadConfig(path string, getenv func(string) string) (Config, error) {
 }
 
 // parseConfigLine returns the key and value of one config line. A blank line
-// or a comment yields an empty key and no error.
+// or a comment yields an empty key and no error. After the closing quote,
+// only whitespace and # comments are permitted. Backslashes in values are
+// rejected to prevent confusion about escape sequences.
 func parseConfigLine(raw string) (key, value string, err error) {
 	line := strings.TrimSpace(raw)
 	if line == "" || strings.HasPrefix(line, "#") {
 		return "", "", nil
 	}
+
+	// Detect multi-line string opener """ early for a better error message.
+	if strings.Contains(line, `"""`) {
+		return "", "", fmt.Errorf("multi-line strings are not supported")
+	}
+
 	k, v, ok := strings.Cut(line, "=")
 	if !ok {
 		return "", "", fmt.Errorf("expected `key = \"value\"`, got %q", raw)
@@ -89,9 +103,24 @@ func parseConfigLine(raw string) (key, value string, err error) {
 	if !strings.HasPrefix(v, `"`) {
 		return "", "", fmt.Errorf("value for %q must be double-quoted", key)
 	}
+
+	// Find closing quote and extract value.
 	end := strings.Index(v[1:], `"`)
 	if end < 0 {
 		return "", "", fmt.Errorf("value for %q is missing its closing quote", key)
 	}
-	return key, v[1 : 1+end], nil
+	valueContent := v[1 : 1+end]
+
+	// Reject backslashes in the value (no escape sequences supported).
+	if strings.Contains(valueContent, `\`) {
+		return "", "", fmt.Errorf("escape sequences are not supported in value for %q", key)
+	}
+
+	// Check what follows the closing quote: only whitespace or # comment allowed.
+	afterQuote := strings.TrimSpace(v[1+end+1:])
+	if afterQuote != "" && !strings.HasPrefix(afterQuote, "#") {
+		return "", "", fmt.Errorf("unexpected text after value for %q: %q (only comments allowed)", key, afterQuote)
+	}
+
+	return key, valueContent, nil
 }
