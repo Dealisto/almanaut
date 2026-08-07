@@ -67,3 +67,53 @@ func TestResolveCreatesWhenNothingMatches(t *testing.T) {
 		t.Fatalf("Resolve = %+v, want create", got)
 	}
 }
+
+// Both binding and report have no interfaces, hostname differs: vacuous-truth case.
+// With no MAC evidence on either side, hostname change is the only signal. We
+// deliberately err toward DecideConflict (a loud 409) over the risk of silently
+// forking the inventory by accepting it as an update.
+func TestResolveConflictWhenBothHaveNoMACsButHostnamesChange(t *testing.T) {
+	oldReport := Report{
+		SchemaVersion: SchemaVersion,
+		AgentID:       "3f2b1c9e-0000-4000-8000-000000000001",
+		Hostname:      "nas01",
+		Interfaces:    []Interface{},
+	}
+	b := binding(7, oldReport)
+
+	newReport := Report{
+		SchemaVersion: SchemaVersion,
+		AgentID:       "3f2b1c9e-0000-4000-8000-000000000001",
+		Hostname:      "web02",
+		Interfaces:    []Interface{},
+	}
+	got := Resolve(newReport, b, nil)
+	if got.Kind != DecideConflict {
+		t.Fatalf("no-MAC conflict = %+v, want conflict", got)
+	}
+}
+
+// Stored binding has no MACs, new report has MACs, hostname differs: another
+// vacuous-truth case. The old fingerprint "nas01|" cannot share any MAC with the
+// new report, so both hostname AND "no MACs match" signal a clone. We err toward
+// the loud DecideConflict rather than risk silent forking.
+func TestResolveConflictWhenOldHasNoMACsNewHasMACs(t *testing.T) {
+	oldReport := Report{
+		SchemaVersion: SchemaVersion,
+		AgentID:       "3f2b1c9e-0000-4000-8000-000000000001",
+		Hostname:      "nas01",
+		Interfaces:    []Interface{},
+	}
+	b := binding(7, oldReport)
+
+	newReport := Report{
+		SchemaVersion: SchemaVersion,
+		AgentID:       "3f2b1c9e-0000-4000-8000-000000000001",
+		Hostname:      "web02",
+		Interfaces:    []Interface{{Name: "eth0", MAC: "de:ad:be:ef:00:01"}},
+	}
+	got := Resolve(newReport, b, nil)
+	if got.Kind != DecideConflict {
+		t.Fatalf("old-no-MAC conflict = %+v, want conflict", got)
+	}
+}

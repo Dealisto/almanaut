@@ -80,6 +80,9 @@ func isClone(old, now string) bool {
 func splitFingerprint(fp string) (string, []string) {
 	name, macs, _ := strings.Cut(fp, "|")
 	if macs == "" {
+		// Guard: strings.Split("", ",") returns []string{""}, not nil. Without this
+		// check, an empty MAC list would become a one-element slice with a phantom
+		// MAC that could spuriously match and suppress a real clone detection.
 		return name, nil
 	}
 	return name, strings.Split(macs, ",")
