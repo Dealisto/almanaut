@@ -127,6 +127,7 @@ func main() {
 		Tags:                   store.NewTagRepo(db),
 		VLANs:                  store.NewVLANRepo(db),
 		Reservations:           store.NewReservationRepo(db),
+		Agents:                 store.NewAgentRepo(db),
 		CertProber:             prober,
 		CertProbes:             certProbes,
 		DB:                     db,

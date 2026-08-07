@@ -37,6 +37,11 @@ type Config struct {
 	Tags          *store.TagRepo
 	VLANs         *store.VLANRepo
 	Reservations  *store.ReservationRepo
+	// Agents backs the on-host agent's binding/report history for
+	// POST /api/agent/report. Nil defaults to store.NewAgentRepo(DB) in New,
+	// so every existing Config literal (which already sets DB) keeps working
+	// unchanged.
+	Agents        *store.AgentRepo
 	DB            *sql.DB
 	Logger        *log.Logger // nil → log.Default()
 	Docker        dockerScanner
@@ -84,6 +89,10 @@ func New(cfg Config) http.Handler {
 	if cfg.Webhooks == nil {
 		cfg.Webhooks = webhook.Noop{}
 	}
+	agents := cfg.Agents
+	if agents == nil {
+		agents = store.NewAgentRepo(cfg.DB)
+	}
 	hosts, services, networks := cfg.Hosts, cfg.Services, cfg.Networks
 	domains, certificates, backups := cfg.Domains, cfg.Certificates, cfg.Backups
 	hardware, subscriptions, accounts := cfg.Hardware, cfg.Subscriptions, cfg.Accounts
@@ -96,33 +105,34 @@ func New(cfg Config) http.Handler {
 	reservations := cfg.Reservations
 	docker, netscan, netOpts := cfg.Docker, cfg.NetScan, cfg.NetOpts
 	proxmox, pveOpts := cfg.Proxmox, cfg.PVEOpts
-	resources := []mountable{
-		resource[domain.Host]{
-			name: "hosts", sing: "host", title: "Hosts", heading: "Host",
-			repo:  hosts,
-			parse: parseHost,
-			label: func(h domain.Host) string { return h.Name },
-			id:    func(h domain.Host) int64 { return h.ID },
-			setID: func(h *domain.Host, id int64) { h.ID = id },
-			notes: func(h domain.Host) string { return h.Notes },
-			fields: func(h domain.Host) []fieldRow {
-				return []fieldRow{
-					{"Type", h.Type}, {"OS", h.OS}, {"CPU", h.CPU}, {"RAM", h.RAM},
-					{"Disk", h.Disk}, {"Status", h.Status}, {"IPs", strings.Join(h.IPs, ", ")},
-					{"Rack", rackLabel(racks, h.RackID)}, {"Rack position (U)", rackPosLabel(h.RackID, h.RackPosition, h.UHeight)},
-					{"Liveness", livenessLabel(h.Liveness)},
-				}
-			},
-			search: func(h domain.Host) []string {
-				return []string{h.Name, h.OS, h.CPU, h.RAM, h.Disk, h.Status, h.Notes, strings.Join(h.IPs, " ")}
-			},
-			newItem:  domain.Host{Type: "physical", UHeight: 1},
-			listTmpl: "hosts.html", formTmpl: "host_form.html",
-			extras: func() map[string]any {
-				rackList, _ := racks.List()
-				return map[string]any{"Types": domain.HostTypes, "Racks": rackList}
-			},
+	hostRS := resource[domain.Host]{
+		name: "hosts", sing: "host", title: "Hosts", heading: "Host",
+		repo:  hosts,
+		parse: parseHost,
+		label: func(h domain.Host) string { return h.Name },
+		id:    func(h domain.Host) int64 { return h.ID },
+		setID: func(h *domain.Host, id int64) { h.ID = id },
+		notes: func(h domain.Host) string { return h.Notes },
+		fields: func(h domain.Host) []fieldRow {
+			return []fieldRow{
+				{"Type", h.Type}, {"OS", h.OS}, {"CPU", h.CPU}, {"RAM", h.RAM},
+				{"Disk", h.Disk}, {"Status", h.Status}, {"IPs", strings.Join(h.IPs, ", ")},
+				{"Rack", rackLabel(racks, h.RackID)}, {"Rack position (U)", rackPosLabel(h.RackID, h.RackPosition, h.UHeight)},
+				{"Liveness", livenessLabel(h.Liveness)},
+			}
 		},
+		search: func(h domain.Host) []string {
+			return []string{h.Name, h.OS, h.CPU, h.RAM, h.Disk, h.Status, h.Notes, strings.Join(h.IPs, " ")}
+		},
+		newItem:  domain.Host{Type: "physical", UHeight: 1},
+		listTmpl: "hosts.html", formTmpl: "host_form.html",
+		extras: func() map[string]any {
+			rackList, _ := racks.List()
+			return map[string]any{"Types": domain.HostTypes, "Racks": rackList}
+		},
+	}
+	resources := []mountable{
+		hostRS,
 		resource[domain.Service]{
 			name: "services", sing: "service", title: "Services", heading: "Service",
 			repo:  services,
@@ -728,6 +738,27 @@ func New(cfg Config) http.Handler {
 		// /metrics is a GET: reachable with a bearer API token (Prometheus) or a
 		// session cookie (logged-in browser). Not under CSRF; no creds → 401.
 		r.Get("/metrics", metricsHandler(repos, relationships))
+	})
+
+	// The on-host agent's report endpoint is deliberately its own group: it
+	// needs apiAuth (to populate the token scope agentReport checks) but must
+	// stay outside requireWrite, which calls effectiveCanWrite — and the agent
+	// scope deliberately fails that (Scope.CanWrite requires ScopeReadWrite).
+	// The handler enforces its own explicit scope check instead.
+	r.Group(func(r chi.Router) {
+		r.Use(limitBody)
+		if cfg.AuthEnabled {
+			r.Use(apiAuth(tokens, sessions, authEvents, tokenUses))
+		}
+		r.Post("/api/agent/report", agentReport(agentDeps{
+			db: db, agents: agents, hosts: hosts, webhooks: deps.webhooks,
+			createHost: func(tx *sql.Tx, h domain.Host, actor string, ev *[]webhook.Event) (int64, error) {
+				return hostRS.createEntityTx(tx, deps, h, nil, actor, ev)
+			},
+			updateHost: func(tx *sql.Tx, h domain.Host, actor string, ev *[]webhook.Event) error {
+				return hostRS.updateEntityTx(tx, deps, h, nil, actor, ev)
+			},
+		}))
 	})
 	return r
 }
