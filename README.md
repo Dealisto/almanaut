@@ -566,10 +566,19 @@ a plain form post. Any request missing valid credentials gets a plain
 ### API tokens
 
 Create a personal token at **API tokens** (`/account/tokens`) while logged in:
-give it a label and a **scope** — `read-write` or `read-only`. A request's
-effective permission is the intersection of the token's scope and its owner's
-role (a viewer's token can never write, and a read-only token can't write
-even for an admin).
+give it a label and a **scope** — `read-write`, `read-only`, or `agent`. A
+request's effective permission is the intersection of the token's scope and
+its owner's role (a viewer's token can never write, and a read-only token
+can't write even for an admin).
+
+An **`agent`**-scoped token is report-only: it authenticates nothing but
+`POST /api/agent/report` (see below) and cannot read the inventory or mutate
+any entity, regardless of its owner's role. Issue one per host running
+`almanaut-agent`; it never needs read access to the rest of the API. A report
+never overwrites `name`, `notes`, `status`, `check_address`, rack placement,
+tags, relationships or custom fields — it only ever updates `os`, `cpu`,
+`ram`, `disk` and `ips` (plus `type`, once, when the report creates the
+host).
 
 The raw token (`alm_...`) is shown **once**, right after creation — copy it
 then, since only its hash is stored. Revoke a token from the same page at any
@@ -596,6 +605,7 @@ curl -X POST http://localhost:8080/api/hosts \
 | `GET /api/search?q=<term>` | Flat array of matches: `[{"type","id","label","path"}]` |
 | `GET /api/relationships` | All relationships |
 | `GET /api/openapi.json` | The OpenAPI 3 document describing every route and schema |
+| `POST /api/agent/report` | Ingest one report from `almanaut-agent`. Requires an **`agent`**-scoped token. `200` + `{"host_id","changed"}`, `400` on malformed JSON/failed validation/unknown `schema_version`, `409` when the agent id is bound to a different machine |
 
 `{type}` bases mirror the web UI's routes, not a naive plural of the entity
 name — `hardware`, not `hardwares` (see [The inventory model](#the-inventory-model)

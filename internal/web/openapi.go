@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Dealisto/almanaut/internal/agentapi"
 	"github.com/Dealisto/almanaut/internal/domain"
 )
 
@@ -404,6 +405,35 @@ func buildOpenAPIDoc(resources []mountable, version string) *openAPIDoc {
 			"text/plain": {Schema: &oaSchema{Type: "string"}},
 		}}},
 	}}
+
+	// The on-host agent's check-in endpoint. Not an entity route — it does not
+	// follow the list/create/get/replace/delete shape the catalog loop above
+	// builds, so it is added by hand here, tagged "Agent" rather than folded
+	// into "General" or swept into the entity coverage test's expectations.
+	doc.Components.Schemas["AgentReport"] = schemaForType(reflect.TypeOf(agentapi.Report{}))
+	doc.Components.Schemas["AgentReportResult"] = &oaSchema{
+		Type: "object",
+		Properties: func() *oaProps {
+			p := newProps()
+			p.set("host_id", &oaSchema{Type: "integer", Format: "int64"})
+			p.set("changed", &oaSchema{Type: "array", Items: &oaSchema{Type: "string"}})
+			return p
+		}(),
+	}
+	doc.Paths["/api/agent/report"] = &oaPathItem{
+		Post: &oaOperation{
+			Tags:        []string{"Agent"},
+			Summary:     "Ingest one host-fact report from almanaut-agent",
+			RequestBody: jsonBody("AgentReport"),
+			Responses: map[string]oaResponse{
+				"200": jsonResp("Report accepted; the affected host id and which fields it changed", "AgentReportResult"),
+				"400": errorResp("Malformed JSON, failed Report.Validate, or an unsupported schema_version"),
+				"401": errorResp("Missing or invalid bearer token"),
+				"403": errorResp("Token scope is not agent"),
+				"409": errorResp("agent_id is already bound to a different machine"),
+			},
+		},
+	}
 	return doc
 }
 
