@@ -155,6 +155,33 @@ func TestLoadOrCreateAgentIDAcceptsPreSeededUUID(t *testing.T) {
 	}
 }
 
+// A valid UUIDv4 in uppercase (as New-Guid produces on Windows, or from
+// restored backups/pre-seeded values) must be kept and returned, not silently
+// replaced. This guards against regressions where case-sensitivity would cause
+// duplicate hosts.
+func TestLoadOrCreateAgentIDAcceptsUppercaseUUID(t *testing.T) {
+	dir := t.TempDir()
+	want := "3F2B1C9E-1234-4567-89AB-CDEF00000001"
+	if err := os.WriteFile(filepath.Join(dir, "agent-id"), []byte(want+"\n"), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	got, err := LoadOrCreateAgentID(dir)
+	if err != nil {
+		t.Fatalf("LoadOrCreateAgentID: %v", err)
+	}
+	if got != want {
+		t.Fatalf("id = %q, want %q (uppercase uuid was discarded or modified)", got, want)
+	}
+	// Verify a second call returns the same value unchanged.
+	second, err := LoadOrCreateAgentID(dir)
+	if err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if second != want {
+		t.Fatalf("second call returned %q, want %q", second, want)
+	}
+}
+
 // After a successful write, the directory must contain only agent-id, with no
 // leftover temporary file.
 func TestWriteAgentIDLeavesNoTemporaryFiles(t *testing.T) {

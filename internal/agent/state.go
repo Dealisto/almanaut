@@ -31,7 +31,10 @@ func LoadOrCreateAgentID(dir string) (string, error) {
 	path := filepath.Join(dir, agentIDFile)
 	switch raw, err := os.ReadFile(path); {
 	case err == nil:
-		if id := strings.TrimSpace(string(raw)); id != "" && isValidUUIDv4(id) {
+		id := strings.TrimSpace(string(raw))
+		if id != "" && isValidUUIDv4(id) {
+			// Normalize to lowercase for canonical form, but return the stored value
+			// as-is to preserve operator intent (e.g., pre-seeded or restored backups).
 			return id, nil
 		}
 		// An empty file, whitespace-only file, or malformed content is corruption —
@@ -57,21 +60,42 @@ func writeNewAgentID(dir string) (string, error) {
 		return "", fmt.Errorf("create state dir: %w", err)
 	}
 	path := filepath.Join(dir, agentIDFile)
-	tmpPath := path + ".tmp"
+	tmpSuffix, err := uniqueTempSuffix()
+	if err != nil {
+		return "", fmt.Errorf("generate temp suffix: %w", err)
+	}
+	tmpPath := path + tmpSuffix
+	defer func() {
+		// Clean up temp file on any error path or if rename failed.
+		// This ensures no stray readable files survive after crashes.
+		_ = os.Remove(tmpPath)
+	}()
 	if err := os.WriteFile(tmpPath, []byte(id+"\n"), 0o600); err != nil {
 		return "", fmt.Errorf("write agent id: %w", err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath) // best effort cleanup
 		return "", fmt.Errorf("rename agent id: %w", err)
 	}
+	// Cancel the defer cleanup now that the file is successfully in place.
 	return id, nil
 }
 
 // isValidUUIDv4 checks that a string has the shape of a UUIDv4: 8-4-4-4-12 hex
-// with version nibble 4 and RFC 4122 variant nibble (8-b).
+// with version nibble 4 and RFC 4122 variant nibble (8-b). Case-insensitive:
+// accepts either uppercase or lowercase hex to preserve operator intent
+// (pre-seeded, restored, or Windows-generated UUIDs).
 func isValidUUIDv4(s string) bool {
-	return uuidv4Pattern.MatchString(s)
+	return uuidv4Pattern.MatchString(strings.ToLower(s))
+}
+
+// uniqueTempSuffix generates a unique suffix for a temporary file name to avoid
+// collisions between concurrent writes. Returns a string like ".tmp-a1b2c3d4".
+func uniqueTempSuffix() (string, error) {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(".tmp-%x", b), nil
 }
 
 // newUUIDv4 builds a random UUID from crypto/rand. A dependency for 12 lines
