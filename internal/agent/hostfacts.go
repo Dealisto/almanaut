@@ -95,27 +95,9 @@ func detectVirtKind(r Root) string {
 	if marker := readTrimmed(r.Path(r.Run, "systemd/container")); marker != "" {
 		return "lxc"
 	}
-	initCgroup := strings.ToLower(readTrimmed(r.Path(r.Proc, "1/cgroup")))
-
-	// Check for container runtimes by matching path segments, not raw substrings.
-	// This avoids false positives: systemd unit names like "lxcbackup.service"
-	// would match "/lxc" in "/system.slice/lxcbackup.service" with a substring check.
-	// We match either exact segments ("docker") or scope prefixes ("docker-<id>.scope").
-	segments := strings.Split(initCgroup, "/")
-	for _, segment := range segments {
-		segment = strings.TrimSpace(segment)
-		if segment == "" {
-			continue
-		}
-		for runtime := range containerRuntimes {
-			if segment == runtime || strings.HasPrefix(segment, runtime+"-") {
-				return "lxc"
-			}
-		}
-		// Kubernetes pods are always containers, detected as whole-segment containment.
-		if strings.Contains(segment, "kubepods") {
-			return "lxc"
-		}
+	cgroupContent := readTrimmed(r.Path(r.Proc, "1/cgroup"))
+	if cgroupContent != "" && detectContainerFromCgroup(cgroupContent) {
+		return "lxc"
 	}
 
 	for _, file := range []string{"class/dmi/id/product_name", "class/dmi/id/sys_vendor"} {
@@ -127,4 +109,55 @@ func detectVirtKind(r Root) string {
 		}
 	}
 	return "physical"
+}
+
+// detectContainerFromCgroup examines /proc/1/cgroup to detect container runtimes.
+// Handles both cgroup v1 (multi-line: "hierarchy-id:controllers:path") and v2 (single-line: "0::path").
+//
+// Recognized container indicators in cgroup path segments:
+// - Exact runtime: docker, lxc, podman, containerd, rkt, systemd-nspawn, lxc-libvirt
+// - Systemd scope: docker-<id>.scope, containerd-<id>.scope, etc.
+// - Proxmox containers: lxc.payload.<vmid>, lxc.monitor.<vmid>
+// - Kubernetes: any segment containing "kubepods"
+func detectContainerFromCgroup(cgroupContent string) bool {
+	// Parse each line (cgroup v1 is multi-line, cgroup v2 is single-line)
+	for _, line := range strings.Split(strings.ToLower(cgroupContent), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Extract cgroup path from "hierarchy-id:controllers:path" or "0::path"
+		parts := strings.Split(line, ":")
+		if len(parts) < 3 {
+			continue
+		}
+		cgroupPath := parts[len(parts)-1]
+
+		// Check each path segment for container indicators
+		for _, segment := range strings.Split(cgroupPath, "/") {
+			segment = strings.TrimSpace(segment)
+			if segment == "" {
+				continue
+			}
+
+			// Exact runtime match or dash-scoped match (docker-<id>.scope)
+			for runtime := range containerRuntimes {
+				if segment == runtime || strings.HasPrefix(segment, runtime+"-") {
+					return true
+				}
+			}
+
+			// Proxmox container patterns
+			if strings.HasPrefix(segment, "lxc.payload.") || strings.HasPrefix(segment, "lxc.monitor.") {
+				return true
+			}
+
+			// Kubernetes container indicator
+			if strings.Contains(segment, "kubepods") {
+				return true
+			}
+		}
+	}
+	return false
 }

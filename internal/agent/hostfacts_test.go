@@ -69,6 +69,7 @@ func TestDetectVirtKind(t *testing.T) {
 		files map[string]string
 		want  string
 	}{
+		// Systemd container marker takes precedence
 		{
 			name:  "lxc via systemd container marker",
 			files: map[string]string{"run/systemd/container": "lxc\n"},
@@ -80,11 +81,6 @@ func TestDetectVirtKind(t *testing.T) {
 			want:  "lxc",
 		},
 		{
-			name:  "container detected from pid 1 cgroup when systemd marker is absent",
-			files: map[string]string{"proc/1/cgroup": "0::/docker/3f2b1c9e\n"},
-			want:  "lxc",
-		},
-		{
 			name: "container wins over the hypervisor underneath it",
 			files: map[string]string{
 				"run/systemd/container":         "lxc\n",
@@ -92,19 +88,11 @@ func TestDetectVirtKind(t *testing.T) {
 			},
 			want: "lxc",
 		},
+
+		// Physical: false positive prevention
 		{
-			name:  "kvm guest via DMI",
-			files: map[string]string{"sys/class/dmi/id/product_name": "KVM\n"},
-			want:  "vm",
-		},
-		{
-			name:  "vmware guest via DMI vendor",
-			files: map[string]string{"sys/class/dmi/id/sys_vendor": "VMware, Inc.\n"},
-			want:  "vm",
-		},
-		{
-			name:  "bare metal when nothing indicates otherwise",
-			files: map[string]string{"sys/class/dmi/id/sys_vendor": "ASUSTeK COMPUTER INC.\n"},
+			name:  "systemd unit docker.service is not a container",
+			files: map[string]string{"proc/1/cgroup": "0::/system.slice/docker.service\n"},
 			want:  "physical",
 		},
 		{
@@ -118,19 +106,60 @@ func TestDetectVirtKind(t *testing.T) {
 			want:  "physical",
 		},
 		{
-			name:  "real docker container with scope format",
-			files: map[string]string{"proc/1/cgroup": "0::/docker-abc123def456.scope\n"},
+			name:  "empty cgroup path is not a container",
+			files: map[string]string{"proc/1/cgroup": "0::/\n"},
+			want:  "physical",
+		},
+		{
+			name:  "systemd user slice is not a container",
+			files: map[string]string{"proc/1/cgroup": "11:name=systemd:/user.slice/user-1000.slice\n"},
+			want:  "physical",
+		},
+
+		// Real containers via cgroup
+		{
+			name:  "docker container direct path",
+			files: map[string]string{"proc/1/cgroup": "0::/docker/3f2b1c9e\n"},
 			want:  "lxc",
 		},
 		{
-			name:  "lxc container with payload format",
-			files: map[string]string{"proc/1/cgroup": "0::/lxc.payload/lxc-container-123\n"},
+			name:  "docker container with systemd scope",
+			files: map[string]string{"proc/1/cgroup": "0::/system.slice/docker-3f2b1c9e.scope\n"},
 			want:  "lxc",
 		},
 		{
-			name:  "kubernetes pod in kubepods slice",
-			files: map[string]string{"proc/1/cgroup": "0::/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod123.slice\n"},
+			name:  "proxmox lxc container payload format",
+			files: map[string]string{"proc/1/cgroup": "0::/lxc.payload.101/system.slice/init.scope\n"},
 			want:  "lxc",
+		},
+		{
+			name:  "proxmox lxc monitor container",
+			files: map[string]string{"proc/1/cgroup": "0::/lxc.monitor.101\n"},
+			want:  "lxc",
+		},
+		{
+			name:  "kubernetes pod in kubepods",
+			files: map[string]string{"proc/1/cgroup": "0::/kubepods/besteffort/pod123/abc\n"},
+			want:  "lxc",
+		},
+
+		// VM detection
+		{
+			name:  "kvm guest via DMI",
+			files: map[string]string{"sys/class/dmi/id/product_name": "KVM\n"},
+			want:  "vm",
+		},
+		{
+			name:  "vmware guest via DMI vendor",
+			files: map[string]string{"sys/class/dmi/id/sys_vendor": "VMware, Inc.\n"},
+			want:  "vm",
+		},
+
+		// Physical/bare metal
+		{
+			name:  "bare metal when nothing indicates otherwise",
+			files: map[string]string{"sys/class/dmi/id/sys_vendor": "ASUSTeK COMPUTER INC.\n"},
+			want:  "physical",
 		},
 	}
 	for _, tc := range cases {
