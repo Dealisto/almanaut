@@ -4,15 +4,18 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/Dealisto/almanaut/internal/agentapi"
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
+	"github.com/Dealisto/almanaut/internal/webhook"
 )
 
 // agentServer builds an auth-enabled handler plus a raw token with the given
@@ -296,10 +299,15 @@ func TestAgentReportAgentIDConflictReturns409(t *testing.T) {
 		t.Fatalf("racing reports with the same agent_id = %v, want exactly one 200 and one 409", codes)
 	}
 
-	// This is the assertion that actually pins the rollback fix: a regression
-	// back to "conflict = true; return nil" on the ErrAgentIDConflict branch
-	// would still produce one 200 and one 409 above, but would also commit the
-	// loser's host write, leaving an orphaned host with no agent binding.
+	// These two counts are a general invariant of a losing report (whichever
+	// conflict branch produced it) and cost nothing to check here, but they do
+	// NOT reliably exercise the Upsert -> store.ErrAgentIDConflict branch
+	// specifically: empirically, on this platform, the loser's ByAgentID read
+	// almost always observes the winner's already-committed binding first and
+	// takes the ordinary DecideConflict path instead, which never writes a
+	// host in the first place. TestAgentReportRollsBackHostOnAgentIDConflict
+	// below is the test that actually pins that branch's rollback, by forcing
+	// it deterministically instead of racing for it.
 	var hosts int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM hosts`).Scan(&hosts); err != nil {
 		t.Fatalf("count hosts: %v", err)
@@ -313,5 +321,123 @@ func TestAgentReportAgentIDConflictReturns409(t *testing.T) {
 	}
 	if bindings != 1 {
 		t.Fatalf("host_agents = %d after a losing race, want exactly 1 (the loser's binding must have rolled back)", bindings)
+	}
+}
+
+// fakeAgentRepo wraps a real *store.AgentRepo but can be told to fail Upsert
+// on demand, so a test can force the store.ErrAgentIDConflict branch
+// deterministically instead of hoping two racing goroutines land on it.
+type fakeAgentRepo struct {
+	real      *store.AgentRepo
+	upsertErr error // non-nil: Upsert returns this instead of delegating
+}
+
+func (f fakeAgentRepo) WithTx(tx *sql.Tx) agentRepo {
+	return fakeAgentRepo{real: f.real.WithTx(tx), upsertErr: f.upsertErr}
+}
+
+func (f fakeAgentRepo) ByAgentID(agentID string) (store.AgentBinding, error) {
+	return f.real.ByAgentID(agentID)
+}
+
+func (f fakeAgentRepo) Upsert(b store.AgentBinding) error {
+	if f.upsertErr != nil {
+		return f.upsertErr
+	}
+	return f.real.Upsert(b)
+}
+
+func (f fakeAgentRepo) RecordReport(hostID int64, agentID, receivedAt, agentVersion string, schemaVersion int, payload []byte) error {
+	return f.real.RecordReport(hostID, agentID, receivedAt, agentVersion, schemaVersion, payload)
+}
+
+// TestAgentReportRollsBackHostOnAgentIDConflict is the test that actually
+// pins the errAgentConflict rollback fix. TestAgentReportAgentIDConflictReturns409
+// races two real HTTP requests but — empirically, on this platform — the
+// loser almost always takes the pre-existing DecideConflict path rather than
+// the Upsert -> store.ErrAgentIDConflict one, so it never proves the specific
+// branch this test targets: it substitutes a fakeAgentRepo whose Upsert
+// always fails with a wrapped store.ErrAgentIDConflict, forcing an ordinary,
+// otherwise-successful create straight into that branch. A regression back to
+// "conflict = true; return nil" there would commit the host this test's
+// createHost call writes and still answer 409 — the hosts/host_agents counts
+// below are what would catch that; the status code and body alone would not.
+func TestAgentReportRollsBackHostOnAgentIDConflict(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := store.Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	hosts := store.NewHostRepo(db)
+	hostRS := resource[domain.Host]{
+		sing:  "host",
+		repo:  hosts,
+		label: func(h domain.Host) string { return h.Name },
+		id:    func(h domain.Host) int64 { return h.ID },
+	}
+	deps := handlerDeps{
+		changelog:    store.NewChangelogRepo(db),
+		customFields: store.NewCustomFieldRepo(db),
+		db:           db,
+	}
+
+	fake := fakeAgentRepo{
+		real:      store.NewAgentRepo(db),
+		upsertErr: fmt.Errorf("insert host_agents: %w", store.ErrAgentIDConflict),
+	}
+	dispatcher := &recordingDispatcher{}
+
+	d := agentDeps{
+		db:       db,
+		agents:   fake,
+		hosts:    hosts,
+		webhooks: dispatcher,
+		createHost: func(tx *sql.Tx, h domain.Host, actor string, ev *[]webhook.Event) (int64, error) {
+			return hostRS.createEntityTx(tx, deps, h, nil, actor, ev)
+		},
+		updateHost: func(tx *sql.Tx, h domain.Host, actor string, ev *[]webhook.Event) error {
+			return hostRS.updateEntityTx(tx, deps, h, nil, actor, ev)
+		},
+	}
+
+	body, err := json.Marshal(baseReport())
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/agent/report", bytes.NewReader(body))
+	ctx := withTokenScope(req.Context(), domain.ScopeAgent)
+	ctx = withUser(ctx, domain.User{ID: 1, Username: "alice", Role: domain.RoleEditor})
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+	agentReport(d)(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("forced ErrAgentIDConflict = %d, want 409 (body %s)", rec.Code, rec.Body)
+	}
+	if strings.Contains(rec.Body.String(), "UNIQUE constraint") || strings.Contains(rec.Body.String(), "SQL") {
+		t.Fatalf("409 body leaks a raw SQL string: %s", rec.Body)
+	}
+
+	var hostCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM hosts`).Scan(&hostCount); err != nil {
+		t.Fatalf("count hosts: %v", err)
+	}
+	if hostCount != 0 {
+		t.Fatalf("hosts = %d, want 0 (the create inside the rolled-back transaction must not survive an ErrAgentIDConflict)", hostCount)
+	}
+	var bindingCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM host_agents`).Scan(&bindingCount); err != nil {
+		t.Fatalf("count host_agents: %v", err)
+	}
+	if bindingCount != 0 {
+		t.Fatalf("host_agents = %d, want 0", bindingCount)
+	}
+	if got := dispatcher.all(); len(got) != 0 {
+		t.Fatalf("dispatched %d webhook event(s), want 0 (nothing should be dispatched for a rolled-back transaction)", len(got))
 	}
 }

@@ -751,7 +751,7 @@ func New(cfg Config) http.Handler {
 			r.Use(apiAuth(tokens, sessions, authEvents, tokenUses))
 		}
 		r.Post("/api/agent/report", agentReport(agentDeps{
-			db: db, agents: agents, hosts: hosts, webhooks: deps.webhooks,
+			db: db, agents: storeAgentRepo{agents}, hosts: hosts, webhooks: deps.webhooks,
 			createHost: func(tx *sql.Tx, h domain.Host, actor string, ev *[]webhook.Event) (int64, error) {
 				return hostRS.createEntityTx(tx, deps, h, nil, actor, ev)
 			},

@@ -20,6 +20,33 @@ import (
 // host write survives a losing report) and the handler answers identically.
 var errAgentConflict = errors.New("agent report conflict")
 
+// agentRepo is the subset of *store.AgentRepo the report handler needs. It
+// exists so agentDeps.agents can hold a fake in tests: two racing goroutines
+// almost never actually land in the Upsert -> store.ErrAgentIDConflict
+// branch (store.WithTx plus SQLite's own write serialization mean the loser
+// typically observes the winner's committed binding first and takes the
+// ordinary DecideConflict path instead), so a fake that forces
+// ErrAgentIDConflict on demand is the only way to deterministically test that
+// the resulting rollback actually happens.
+type agentRepo interface {
+	WithTx(tx *sql.Tx) agentRepo
+	ByAgentID(agentID string) (store.AgentBinding, error)
+	Upsert(b store.AgentBinding) error
+	RecordReport(hostID int64, agentID, receivedAt, agentVersion string, schemaVersion int, payload []byte) error
+}
+
+// storeAgentRepo adapts *store.AgentRepo to agentRepo. The adapter is needed
+// because store.AgentRepo.WithTx returns *store.AgentRepo — the concrete
+// type — not agentRepo; Go interface satisfaction does not accept a
+// covariant return type, so the concrete type alone cannot satisfy an
+// interface whose own WithTx returns the interface. This wrapper re-wraps
+// WithTx's result so it does, without touching store.AgentRepo itself.
+type storeAgentRepo struct{ *store.AgentRepo }
+
+func (r storeAgentRepo) WithTx(tx *sql.Tx) agentRepo {
+	return storeAgentRepo{r.AgentRepo.WithTx(tx)}
+}
+
 // agentDeps is what the report handler needs. createHost/updateHost are
 // closures over the hosts resource so that the agent path goes through the very
 // same create/update code as the UI and the entity API — which is what gives it
@@ -27,7 +54,7 @@ var errAgentConflict = errors.New("agent report conflict")
 // any of the three.
 type agentDeps struct {
 	db         *sql.DB
-	agents     *store.AgentRepo
+	agents     agentRepo
 	hosts      *store.HostRepo
 	webhooks   webhook.Dispatcher
 	createHost func(tx *sql.Tx, h domain.Host, actor string, events *[]webhook.Event) (int64, error)
