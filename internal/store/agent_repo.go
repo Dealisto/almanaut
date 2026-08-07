@@ -64,6 +64,31 @@ func (r *AgentRepo) Upsert(b AgentBinding) error {
 	return nil
 }
 
+// BoundHostIDs returns the set of host ids that already have a binding, so
+// callers can exclude them from adoption matching: a host already bound to one
+// agent must never be handed to a different, unbound agent (that would steal
+// the binding and, once the first agent reports again, cause the two to
+// oscillate the record back and forth forever).
+func (r *AgentRepo) BoundHostIDs() (map[int64]bool, error) {
+	rows, err := r.db.Query(`SELECT host_id FROM host_agents`)
+	if err != nil {
+		return nil, fmt.Errorf("query bound host ids: %w", err)
+	}
+	defer rows.Close()
+	out := map[int64]bool{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan bound host id: %w", err)
+		}
+		out[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate bound host ids: %w", err)
+	}
+	return out, nil
+}
+
 // RecordReport appends one report and prunes the host's history to
 // agentReportRetention rows.
 func (r *AgentRepo) RecordReport(hostID int64, agentID, receivedAt, agentVersion string, schemaVersion int, payload []byte) error {

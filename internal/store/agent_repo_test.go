@@ -99,6 +99,52 @@ func TestUpsertAgentIDConflict(t *testing.T) {
 	}
 }
 
+// BoundHostIDs must return exactly the host ids that currently have a
+// binding — no more, no less — so the report handler can exclude them from
+// adoption matching.
+func TestAgentRepoBoundHostIDs(t *testing.T) {
+	r := agentTestDB(t)
+	db := r.db.(*sql.DB)
+	if _, err := NewHostRepo(db).Create(domain.Host{Name: "srv2", Type: "physical"}); err != nil {
+		t.Fatalf("create host 2: %v", err)
+	}
+	if _, err := NewHostRepo(db).Create(domain.Host{Name: "srv3", Type: "physical"}); err != nil {
+		t.Fatalf("create host 3: %v", err)
+	}
+
+	got, err := r.BoundHostIDs()
+	if err != nil {
+		t.Fatalf("BoundHostIDs (none bound): %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("BoundHostIDs = %v, want empty before any binding exists", got)
+	}
+
+	if err := r.Upsert(AgentBinding{HostID: 1, AgentID: "uuid-1", Fingerprint: "h|aa", LastSeen: "2026-08-07T10:00:00Z"}); err != nil {
+		t.Fatalf("Upsert host 1: %v", err)
+	}
+	if err := r.Upsert(AgentBinding{HostID: 3, AgentID: "uuid-3", Fingerprint: "h|cc", LastSeen: "2026-08-07T10:00:00Z"}); err != nil {
+		t.Fatalf("Upsert host 3: %v", err)
+	}
+
+	got, err = r.BoundHostIDs()
+	if err != nil {
+		t.Fatalf("BoundHostIDs: %v", err)
+	}
+	want := map[int64]bool{1: true, 3: true}
+	if len(got) != len(want) {
+		t.Fatalf("BoundHostIDs = %v, want %v", got, want)
+	}
+	for id := range want {
+		if !got[id] {
+			t.Fatalf("BoundHostIDs = %v, missing host %d", got, id)
+		}
+	}
+	if got[2] {
+		t.Fatalf("BoundHostIDs = %v, host 2 was never bound", got)
+	}
+}
+
 func TestRecordReportCrossHostIsolation(t *testing.T) {
 	r := agentTestDB(t)
 	// Create a second host

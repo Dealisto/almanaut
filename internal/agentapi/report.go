@@ -5,6 +5,7 @@ package agentapi
 
 import (
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 )
@@ -84,15 +85,47 @@ func (r Report) Fingerprint() string {
 	return strings.ToLower(strings.TrimSpace(r.Hostname)) + "|" + strings.Join(macs, ",")
 }
 
-// ReportedIPs flattens every interface address, in interface order.
+// ReportedIPs flattens every interface address into the bare, validatable form
+// domain.Host.Validate accepts, in interface order.
+//
+// net.Interfaces() — the source of this data on the agent side — yields
+// addresses with a CIDR suffix ("192.168.1.5/24") and, for IPv6 link-local
+// addresses, a zone ("fe80::1%eth0"); net.ParseIP rejects both forms outright.
+// Sanitizing here, in the package shared by the server and the future agent
+// binary, keeps the two from ever disagreeing on what counts as a usable IP.
+// Loopback and link-local addresses are dropped as noise: they are present on
+// every machine and never distinguish one host from another.
 func (r Report) ReportedIPs() []string {
 	out := []string{}
 	for _, i := range r.Interfaces {
 		for _, a := range i.Addrs {
-			if a = strings.TrimSpace(a); a != "" {
-				out = append(out, a)
+			if ip, ok := sanitizeReportedIP(a); ok {
+				out = append(out, ip)
 			}
 		}
 	}
 	return out
+}
+
+// sanitizeReportedIP strips a CIDR suffix and an IPv6 zone from a, then
+// reports the bare address if it parses and is not loopback or link-local.
+func sanitizeReportedIP(a string) (string, bool) {
+	a = strings.TrimSpace(a)
+	if a == "" {
+		return "", false
+	}
+	if idx := strings.IndexByte(a, '/'); idx >= 0 {
+		a = a[:idx]
+	}
+	if idx := strings.IndexByte(a, '%'); idx >= 0 {
+		a = a[:idx]
+	}
+	ip := net.ParseIP(a)
+	if ip == nil {
+		return "", false
+	}
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return "", false
+	}
+	return ip.String(), true
 }

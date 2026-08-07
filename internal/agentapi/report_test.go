@@ -105,6 +105,29 @@ func TestValidateRejectsMissingAgentIDAndHostname(t *testing.T) {
 	}
 }
 
+// ReportedIPs must strip a CIDR suffix and an IPv6 zone, and drop loopback,
+// link-local, and unparseable addresses — the exact form net.Interfaces()
+// yields on Linux, which net.ParseIP (and so domain.Host.Validate) rejects
+// outright. Order and exact contents both matter here.
+func TestReportedIPsSanitizesAndFiltersJunk(t *testing.T) {
+	r := Report{
+		Interfaces: []Interface{
+			{Name: "eth0", Addrs: []string{"192.168.1.5/24", "127.0.0.1", "10.0.0.9"}},
+			{Name: "eth1", Addrs: []string{"fe80::1%eth1", "::1", "169.254.1.1", "not-an-ip"}},
+		},
+	}
+	got := r.ReportedIPs()
+	want := []string{"192.168.1.5", "10.0.0.9"}
+	if len(got) != len(want) {
+		t.Fatalf("ReportedIPs() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ReportedIPs()[%d] = %q, want %q (full: %v)", i, got[i], want[i], got)
+		}
+	}
+}
+
 // An unknown schema version must be refused outright rather than guessed at.
 func TestValidateRejectsUnknownSchemaVersion(t *testing.T) {
 	r := sample()

@@ -20,6 +20,20 @@ import (
 // host write survives a losing report) and the handler answers identically.
 var errAgentConflict = errors.New("agent report conflict")
 
+// invalidHostError marks a merged-host validation failure as bad input rather
+// than a server fault. A report's own fields are checked by rep.Validate()
+// before any merge happens, but the host produced by merging a report onto an
+// existing record can still fail domain.Host.Validate() — e.g. an existing row
+// carries a value (such as Type) that was valid when written but is no longer
+// in the allowed set. That is a data problem the client cannot fix by retrying,
+// but it is still an input problem, not ours: routing it through
+// apiServerError would answer 500 on every subsequent report from that
+// machine, so the handler unwraps this instead and answers 400.
+type invalidHostError struct{ err error }
+
+func (e *invalidHostError) Error() string { return e.err.Error() }
+func (e *invalidHostError) Unwrap() error { return e.err }
+
 // agentRepo is the subset of *store.AgentRepo the report handler needs. It
 // exists so agentDeps.agents can hold a fake in tests: two racing goroutines
 // almost never actually land in the Upsert -> store.ErrAgentIDConflict
@@ -33,6 +47,9 @@ type agentRepo interface {
 	ByAgentID(agentID string) (store.AgentBinding, error)
 	Upsert(b store.AgentBinding) error
 	RecordReport(hostID int64, agentID, receivedAt, agentVersion string, schemaVersion int, payload []byte) error
+	// BoundHostIDs returns every host id that already belongs to some agent, so
+	// the adoption candidate list can exclude hosts bound to a different agent.
+	BoundHostIDs() (map[int64]bool, error)
 }
 
 // storeAgentRepo adapts *store.AgentRepo to agentRepo. The adapter is needed
@@ -112,11 +129,22 @@ func agentReport(d agentDeps) http.HandlerFunc {
 			// on the tx-bound repo inside the transaction.
 			var refs []agentapi.HostRef
 			if existing == nil {
+				bound, err := agents.BoundHostIDs()
+				if err != nil {
+					return err
+				}
 				list, err := d.hosts.WithTx(tx).List()
 				if err != nil {
 					return err
 				}
 				for _, h := range list {
+					// A host already bound to a different agent must never be
+					// adopted here: doing so would steal the binding, and the
+					// rightful agent's next report would just steal it back —
+					// the two would oscillate the record forever.
+					if bound[h.ID] {
+						continue
+					}
 					refs = append(refs, agentapi.HostRef{ID: h.ID, Name: h.Name, IPs: h.IPs})
 				}
 			}
@@ -133,7 +161,7 @@ func agentReport(d agentDeps) http.HandlerFunc {
 			case agentapi.DecideCreate:
 				h := mergeAgentReport(domain.Host{}, rep, true)
 				if err := h.Validate(); err != nil {
-					return err
+					return &invalidHostError{err}
 				}
 				id, err := d.createHost(tx, h, actor, &events)
 				if err != nil {
@@ -148,7 +176,7 @@ func agentReport(d agentDeps) http.HandlerFunc {
 				}
 				merged := mergeAgentReport(h, rep, false)
 				if err := merged.Validate(); err != nil {
-					return err
+					return &invalidHostError{err}
 				}
 				if err := d.updateHost(tx, merged, actor, &events); err != nil {
 					return err
@@ -174,6 +202,11 @@ func agentReport(d agentDeps) http.HandlerFunc {
 		if errors.Is(err, errAgentConflict) {
 			writeJSONError(w, http.StatusConflict,
 				"this agent_id is already bound to a different machine; run 'almanaut-agent reset-id' on the clone")
+			return
+		}
+		var invalidHost *invalidHostError
+		if errors.As(err, &invalidHost) {
+			writeJSONError(w, http.StatusBadRequest, invalidHost.Error())
 			return
 		}
 		if err != nil {

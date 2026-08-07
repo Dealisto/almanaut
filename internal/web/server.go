@@ -727,6 +727,7 @@ func New(cfg Config) http.Handler {
 		r.Use(limitBody)
 		if cfg.AuthEnabled {
 			r.Use(apiAuth(tokens, sessions, authEvents, tokenUses))
+			r.Use(rejectAgentScope)
 			r.Use(requireWrite)
 		}
 		for _, rs := range resources {

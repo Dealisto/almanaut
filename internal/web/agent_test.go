@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -123,6 +124,69 @@ func TestAgentTokenCannotWriteEntityAPI(t *testing.T) {
 	}
 }
 
+// An agent-scoped token must not be able to read the entity API either: it is
+// deployed on every machine in the fleet, so a compromised container reading
+// it must not leak the whole inventory. requireWrite alone lets every GET
+// through regardless of scope, so this is a distinct gate (rejectAgentScope).
+func TestAgentScopeCannotReadHosts(t *testing.T) {
+	h, _, raw := agentServer(t, domain.ScopeAgent)
+	req := httptest.NewRequest(http.MethodGet, "/api/hosts", nil)
+	req.Header.Set("Authorization", "Bearer "+raw)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("agent token GET /api/hosts = %d, want 403 (body %s)", rec.Code, rec.Body)
+	}
+}
+
+// Same as above for /api/search: the agent scope must not reach any read
+// route in the main API group, not just the entity CRUD ones.
+func TestAgentScopeCannotSearch(t *testing.T) {
+	h, _, raw := agentServer(t, domain.ScopeAgent)
+	req := httptest.NewRequest(http.MethodGet, "/api/search?q=x", nil)
+	req.Header.Set("Authorization", "Bearer "+raw)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("agent token GET /api/search = %d, want 403 (body %s)", rec.Code, rec.Body)
+	}
+}
+
+// A read-only token must still be able to read the entity API: the new
+// agent-scope gate must not collaterally block any other scope's reads.
+func TestReadOnlyScopeCanReadHosts(t *testing.T) {
+	h, _, raw := agentServer(t, domain.ScopeReadOnly)
+	req := httptest.NewRequest(http.MethodGet, "/api/hosts", nil)
+	req.Header.Set("Authorization", "Bearer "+raw)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("read-only token GET /api/hosts = %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+}
+
+// A read-write token must still be able to both read and write the entity
+// API: the new gate is scoped to ScopeAgent only.
+func TestReadWriteScopeCanReadAndWriteHosts(t *testing.T) {
+	h, _, raw := agentServer(t, domain.ScopeReadWrite)
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/hosts", nil)
+	getReq.Header.Set("Authorization", "Bearer "+raw)
+	getRec := httptest.NewRecorder()
+	h.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("read-write token GET /api/hosts = %d, want 200 (body %s)", getRec.Code, getRec.Body)
+	}
+
+	postReq := httptest.NewRequest(http.MethodPost, "/api/hosts", bytes.NewReader([]byte(`{"name":"nas","type":"physical"}`)))
+	postReq.Header.Set("Authorization", "Bearer "+raw)
+	postRec := httptest.NewRecorder()
+	h.ServeHTTP(postRec, postReq)
+	if postRec.Code != http.StatusCreated {
+		t.Fatalf("read-write token POST /api/hosts = %d, want 201 (body %s)", postRec.Code, postRec.Body)
+	}
+}
+
 func TestAgentReportCreatesThenUpdatesHost(t *testing.T) {
 	h, db, raw := agentServer(t, domain.ScopeAgent)
 
@@ -232,6 +296,105 @@ func TestAgentReportAdoptsExistingHost(t *testing.T) {
 	}
 }
 
+// Adoption must skip a host that is already bound to a different agent.
+// Without this, two machines sharing a normalized hostname would fight over
+// the same record forever: whichever agent is currently unbound adopts it,
+// overwriting the other's facts, and the next time the rightful agent reports
+// it re-adopts and flips the binding back — one changelog row and one webhook
+// per cycle, forever. This pins that the second agent instead gets its own
+// host, host 7's fields are untouched, and the original binding survives.
+func TestAgentAdoptionSkipsHostBoundToDifferentAgent(t *testing.T) {
+	h, db, raw := agentServer(t, domain.ScopeAgent)
+
+	seedID, err := store.NewHostRepo(db).Create(domain.Host{Name: "docker", Type: "lxc", Notes: "hand-entered"})
+	if err != nil {
+		t.Fatalf("seed host: %v", err)
+	}
+
+	// Agent A is unbound and adopts the seed host by normalized hostname match.
+	a := baseReport()
+	a.AgentID = "agent-a"
+	a.Hostname = "docker"
+	a.RAM = "8 GB"
+	recA := postReport(t, h, raw, a)
+	if recA.Code != http.StatusOK {
+		t.Fatalf("agent A report = %d, want 200 (body %s)", recA.Code, recA.Body)
+	}
+	var respA struct {
+		HostID int64 `json:"host_id"`
+	}
+	if err := json.Unmarshal(recA.Body.Bytes(), &respA); err != nil {
+		t.Fatalf("decode agent A response: %v", err)
+	}
+	if respA.HostID != seedID {
+		t.Fatalf("agent A host_id = %d, want the seeded host %d", respA.HostID, seedID)
+	}
+	afterA, err := store.NewHostRepo(db).Get(seedID)
+	if err != nil {
+		t.Fatalf("Get host after A: %v", err)
+	}
+
+	// Agent B is also unbound and reports the very same hostname. Host 7 is
+	// already bound to agent A, so B must NOT adopt it — it must create a new
+	// host instead.
+	b := baseReport()
+	b.AgentID = "agent-b"
+	b.Hostname = "docker"
+	b.RAM = "16 GB"
+	b.Interfaces = []agentapi.Interface{{Name: "eth0", MAC: "bb:bb:bb:00:00:02", Addrs: []string{"10.0.0.20"}}}
+	recB := postReport(t, h, raw, b)
+	if recB.Code != http.StatusOK {
+		t.Fatalf("agent B report = %d, want 200 (body %s)", recB.Code, recB.Body)
+	}
+	var respB struct {
+		HostID int64 `json:"host_id"`
+	}
+	if err := json.Unmarshal(recB.Body.Bytes(), &respB); err != nil {
+		t.Fatalf("decode agent B response: %v", err)
+	}
+	if respB.HostID == seedID {
+		t.Fatalf("agent B was allowed to steal host %d, which is already bound to agent A", seedID)
+	}
+
+	// Host 7's fields must be exactly what agent A left them as — untouched by
+	// B's report.
+	afterB, err := store.NewHostRepo(db).Get(seedID)
+	if err != nil {
+		t.Fatalf("Get host after B: %v", err)
+	}
+	if !reflect.DeepEqual(afterA, afterB) {
+		t.Fatalf("host %d changed after agent B's report: before=%+v after=%+v", seedID, afterA, afterB)
+	}
+
+	// host_agents must still map host 7 to agent A, not agent B.
+	var boundAgent string
+	if err := db.QueryRow(`SELECT agent_id FROM host_agents WHERE host_id = ?`, seedID).Scan(&boundAgent); err != nil {
+		t.Fatalf("query host_agents: %v", err)
+	}
+	if boundAgent != "agent-a" {
+		t.Fatalf("host_agents.agent_id for host %d = %q, want agent-a", seedID, boundAgent)
+	}
+
+	// Agent A reporting again must still resolve to host 7 (no oscillation).
+	a2 := baseReport()
+	a2.AgentID = "agent-a"
+	a2.Hostname = "docker"
+	a2.RAM = "8 GB"
+	recA2 := postReport(t, h, raw, a2)
+	if recA2.Code != http.StatusOK {
+		t.Fatalf("agent A second report = %d, want 200 (body %s)", recA2.Code, recA2.Body)
+	}
+	var respA2 struct {
+		HostID int64 `json:"host_id"`
+	}
+	if err := json.Unmarshal(recA2.Body.Bytes(), &respA2); err != nil {
+		t.Fatalf("decode agent A second response: %v", err)
+	}
+	if respA2.HostID != seedID {
+		t.Fatalf("agent A second report host_id = %d, want the original host %d (oscillation detected)", respA2.HostID, seedID)
+	}
+}
+
 func TestAgentReportCloneConflictReturns409(t *testing.T) {
 	h, _, raw := agentServer(t, domain.ScopeAgent)
 	if rec := postReport(t, h, raw, baseReport()); rec.Code != http.StatusOK {
@@ -243,6 +406,81 @@ func TestAgentReportCloneConflictReturns409(t *testing.T) {
 	rec := postReport(t, h, raw, clone)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("clone report = %d, want 409 (body %s)", rec.Code, rec.Body)
+	}
+}
+
+// A report whose interface addresses are all junk (link-local, loopback, or
+// unparseable — the sort net.Interfaces() can actually produce) must still
+// succeed: ReportedIPs() sanitizes them down to an empty list, and an empty
+// list means "unknown", not "clear the field" — mergeAgentReport only
+// replaces IPs when ReportedIPs() is non-empty. Before agentapi sanitized
+// these forms, they reached domain.Host.Validate() unparsed and turned every
+// report from a real machine into a 500.
+func TestAgentReportAllJunkIPsPreservesExisting(t *testing.T) {
+	h, db, raw := agentServer(t, domain.ScopeAgent)
+
+	first := baseReport()
+	rec := postReport(t, h, raw, first)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("first report = %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+	var resp struct {
+		HostID int64 `json:"host_id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	junk := baseReport()
+	junk.Interfaces = []agentapi.Interface{
+		{Name: "lo", MAC: "", Addrs: []string{"127.0.0.1", "::1"}},
+		{Name: "eth0", MAC: "aa:bb:cc:00:00:01", Addrs: []string{"fe80::1%eth0", "not-an-ip"}},
+	}
+	rec2 := postReport(t, h, raw, junk)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("all-junk-IPs report = %d, want 200 (body %s)", rec2.Code, rec2.Body)
+	}
+
+	got, err := store.NewHostRepo(db).Get(resp.HostID)
+	if err != nil {
+		t.Fatalf("Get host: %v", err)
+	}
+	if len(got.IPs) != 1 || got.IPs[0] != "192.168.1.10" {
+		t.Fatalf("IPs = %v, want the original [192.168.1.10] preserved", got.IPs)
+	}
+}
+
+// Defence in depth: if a merged host somehow still fails domain.Host.Validate
+// — here simulated by a pre-existing row whose Type was valid when written but
+// is no longer in domain.HostTypes, inserted directly to bypass Create's own
+// validation — the handler must answer 400 (bad input) rather than routing it
+// through apiServerError as a 500. mergeAgentReport does not touch Type on an
+// update, so the invalid value survives into the merged host and Validate()
+// rejects it.
+func TestAgentReportInvalidMergedHostReturns400(t *testing.T) {
+	h, db, raw := agentServer(t, domain.ScopeAgent)
+
+	res, err := db.Exec(`INSERT INTO hosts (name, type) VALUES (?, ?)`, "legacy-host", "container")
+	if err != nil {
+		t.Fatalf("insert legacy host: %v", err)
+	}
+	hostID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("LastInsertId: %v", err)
+	}
+	now := nowRFC3339()
+	if err := store.NewAgentRepo(db).Upsert(store.AgentBinding{
+		HostID: hostID, AgentID: "legacy-agent", Fingerprint: "legacy-host|", LastSeen: now,
+	}); err != nil {
+		t.Fatalf("seed binding: %v", err)
+	}
+
+	r := baseReport()
+	r.AgentID = "legacy-agent"
+	r.Hostname = "legacy-host"
+	rec := postReport(t, h, raw, r)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("update producing an invalid host = %d, want 400 (body %s)", rec.Code, rec.Body)
 	}
 }
 
@@ -349,6 +587,10 @@ func (f fakeAgentRepo) Upsert(b store.AgentBinding) error {
 
 func (f fakeAgentRepo) RecordReport(hostID int64, agentID, receivedAt, agentVersion string, schemaVersion int, payload []byte) error {
 	return f.real.RecordReport(hostID, agentID, receivedAt, agentVersion, schemaVersion, payload)
+}
+
+func (f fakeAgentRepo) BoundHostIDs() (map[int64]bool, error) {
+	return f.real.BoundHostIDs()
 }
 
 // TestAgentReportRollsBackHostOnAgentIDConflict is the test that actually

@@ -67,6 +67,23 @@ func requireWrite(next http.Handler) http.Handler {
 	})
 }
 
+// rejectAgentScope rejects every request authenticated with the agent scope,
+// regardless of method. The agent scope is meant to reach only
+// POST /api/agent/report (its own route group, which does not use this
+// middleware); requireWrite alone is not enough to keep it off the main API
+// group because it only blocks unsafe methods, and every GET is safe. Without
+// this, an agent token — deployed on every machine in the fleet — could read
+// the entire inventory via any read route.
+func rejectAgentScope(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s, ok := tokenScopeFrom(r.Context()); ok && s == domain.ScopeAgent {
+			forbidden(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // requireAdmin rejects any request whose user is not an admin with 403.
 func requireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
