@@ -27,6 +27,13 @@ ProtectHome=true
 PrivateTmp=true
 NoNewPrivileges=true
 PrivateDevices=true
+# The agent only reads /proc, /sys, and /etc files; no special capabilities
+# are needed. An empty bounding set removes all capabilities while still
+# allowing ordinary file reads as root.
+CapabilityBoundingSet=
+# Must remain false: the agent inspects /sys/fs/cgroup to determine container
+# resource allocations. Setting this to true would hide cgroups and cause
+# every LXC to silently report the host's values instead.
 ProtectControlGroups=false
 ProtectKernelModules=true
 ProtectKernelTunables=true
@@ -36,6 +43,3 @@ LockPersonality=true
 
 # The agent only ever talks to the almanaut server over TCP.
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-
-[Install]
-WantedBy=multi-user.target

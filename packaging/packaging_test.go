@@ -19,11 +19,34 @@ func readFile(t *testing.T, path string) string {
 	return string(b)
 }
 
+// nonCommentLines returns all non-blank, non-comment lines from the input.
+func nonCommentLines(content string) []string {
+	var lines []string
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "#") {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+// containsDirective checks if a directive appears as a non-comment line.
+func containsDirective(lines []string, directive string) bool {
+	for _, line := range lines {
+		if line == directive {
+			return true
+		}
+	}
+	return false
+}
+
 // The agent runs as root on every machine in a fleet, so each of these
 // directives is load-bearing. Losing one silently widens what a compromised
 // agent — or a bug in it — can reach.
 func TestServiceUnitKeepsItsHardening(t *testing.T) {
 	unit := readFile(t, "systemd/almanaut-agent.service")
+	lines := nonCommentLines(unit)
 	required := []string{
 		"Type=oneshot",
 		"ProtectSystem=strict",
@@ -31,9 +54,10 @@ func TestServiceUnitKeepsItsHardening(t *testing.T) {
 		"PrivateTmp=true",
 		"NoNewPrivileges=true",
 		"StateDirectory=almanaut-agent",
+		"CapabilityBoundingSet=",
 	}
 	for _, directive := range required {
-		if !strings.Contains(unit, directive) {
+		if !containsDirective(lines, directive) {
 			t.Errorf("service unit is missing %q", directive)
 		}
 	}
@@ -44,13 +68,24 @@ func TestServiceUnitKeepsItsHardening(t *testing.T) {
 // would generate a new one every hour, creating a duplicate host each time.
 func TestServiceUnitRunsTheInstalledBinary(t *testing.T) {
 	unit := readFile(t, "systemd/almanaut-agent.service")
-	if !strings.Contains(unit, "ExecStart=/usr/local/bin/almanaut-agent") {
+	lines := nonCommentLines(unit)
+	if !containsDirective(lines, "ExecStart=/usr/local/bin/almanaut-agent") {
 		t.Errorf("service unit does not exec the installed binary:\n%s", unit)
+	}
+}
+
+// The service is timer-driven and must never be enabled directly, so an empty
+// [Install] section is required: only the timer may be enabled.
+func TestServiceUnitHasNoInstallSection(t *testing.T) {
+	unit := readFile(t, "systemd/almanaut-agent.service")
+	if strings.Contains(unit, "[Install]") {
+		t.Errorf("service unit must not have an [Install] section (it is timer-driven only):\n%s", unit)
 	}
 }
 
 func TestTimerSchedule(t *testing.T) {
 	timer := readFile(t, "systemd/almanaut-agent.timer")
+	lines := nonCommentLines(timer)
 	required := []string{
 		"OnBootSec=2min",
 		"OnUnitActiveSec=1h",
@@ -58,7 +93,7 @@ func TestTimerSchedule(t *testing.T) {
 		"WantedBy=timers.target",
 	}
 	for _, directive := range required {
-		if !strings.Contains(timer, directive) {
+		if !containsDirective(lines, directive) {
 			t.Errorf("timer is missing %q", directive)
 		}
 	}
@@ -69,7 +104,8 @@ func TestTimerSchedule(t *testing.T) {
 // timer that is enabled, listed, and useless.
 func TestTimerTargetsTheService(t *testing.T) {
 	timer := readFile(t, "systemd/almanaut-agent.timer")
-	if strings.Contains(timer, "Unit=") && !strings.Contains(timer, "Unit=almanaut-agent.service") {
-		t.Errorf("timer has a Unit= that is not almanaut-agent.service:\n%s", timer)
+	lines := nonCommentLines(timer)
+	if !containsDirective(lines, "Unit=almanaut-agent.service") {
+		t.Errorf("timer is missing %q", "Unit=almanaut-agent.service")
 	}
 }
