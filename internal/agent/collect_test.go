@@ -160,6 +160,37 @@ func TestCollectDetectsLXCViaEnvironAndAvoidsHostDisks(t *testing.T) {
 	}
 }
 
+// Podman and systemd-nspawn hit the identical gap as non-systemd LXC: under a
+// private cgroup namespace /proc/1/cgroup is just "0::/" with no runtime name,
+// so only /proc/1/environ tells them apart from a bare-metal host. The disk
+// guard is what actually prevents the damage, so this proves it end to end
+// for a runtime other than lxc, not just that detection names it correctly.
+func TestCollectDetectsPodmanViaEnvironAndAvoidsHostDisks(t *testing.T) {
+	r := fixtureRoot(t, map[string]string{
+		"proc/1/cgroup":          "0::/\n",
+		"proc/1/environ":         "PATH=/usr/bin\x00container=podman\x00",
+		"sys/block/nvme0n1/size": "1953525168\n",
+	})
+	rep := Collect(CollectOptions{
+		Root:       r,
+		AgentID:    "id",
+		Hostname:   "ct-podman",
+		Interfaces: fakeLister(),
+		Usage: func(string) (int64, int64, error) {
+			return 34359738368, 19327352832, nil
+		},
+	})
+	if rep.VirtKind != "lxc" {
+		t.Fatalf("VirtKind = %q, want lxc (detected via /proc/1/environ)", rep.VirtKind)
+	}
+	if len(rep.Disks) != 1 || rep.Disks[0].Device != "rootfs" {
+		t.Fatalf("disks = %+v, want the rootfs entry, not the host's nvme0n1", rep.Disks)
+	}
+	if contains(rep.Disk, "nvme0n1") {
+		t.Fatalf("Disk summary %q leaks the host's block device", rep.Disk)
+	}
+}
+
 // Nothing readable must still produce a structurally valid report: the server
 // treats every empty field as "leave the existing value alone".
 func TestCollectOnBarrenRootStillValidates(t *testing.T) {

@@ -166,6 +166,38 @@ func TestDetectVirtKind(t *testing.T) {
 			},
 			want: "lxc",
 		},
+		{
+			name: "podman via proc/1/environ under a private cgroup namespace",
+			files: map[string]string{
+				"proc/1/cgroup":  "0::/\n",
+				"proc/1/environ": "PATH=/usr/bin\x00container=podman\x00",
+			},
+			want: "lxc",
+		},
+		{
+			name: "systemd-nspawn via proc/1/environ under a private cgroup namespace",
+			files: map[string]string{
+				"proc/1/cgroup":  "0::/\n",
+				"proc/1/environ": "container=systemd-nspawn\x00PATH=/usr/bin\x00",
+			},
+			want: "lxc",
+		},
+		{
+			name: "unrecognized runtime in proc/1/environ is still treated as a container",
+			files: map[string]string{
+				"proc/1/cgroup":  "0::/\n",
+				"proc/1/environ": "container=incus\x00PATH=/usr/bin\x00",
+			},
+			want: "lxc",
+		},
+		{
+			name: "container substring in an unrelated variable name is not a marker",
+			files: map[string]string{
+				"proc/1/cgroup":  "0::/\n",
+				"proc/1/environ": "MY_container=lxc\x00PATH=/usr/bin\x00",
+			},
+			want: "physical",
+		},
 
 		// VM detection
 		{
