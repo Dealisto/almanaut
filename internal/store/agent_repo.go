@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 // agentReportRetention is how many reports are kept per host. Reports exist to
@@ -54,6 +55,10 @@ func (r *AgentRepo) Upsert(b AgentBinding) error {
 		     last_seen = excluded.last_seen`,
 		b.HostID, b.AgentID, b.Fingerprint, b.LastSeen,
 	); err != nil {
+		// Detect agent_id UNIQUE constraint violation and wrap with sentinel.
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: host_agents.agent_id") {
+			return fmt.Errorf("upsert agent binding: %w", ErrAgentIDConflict)
+		}
 		return fmt.Errorf("upsert agent binding: %w", err)
 	}
 	return nil

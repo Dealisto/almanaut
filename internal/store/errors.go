@@ -12,6 +12,11 @@ import (
 // both into "not found".
 var ErrNotFound = errors.New("not found")
 
+// ErrAgentIDConflict reports that an agent_id is already bound to a different
+// host. It is the race-condition counterpart to clone detection: two machines
+// claiming one identity.
+var ErrAgentIDConflict = errors.New("agent id already bound to another host")
+
 // notFound maps a wrapped sql.ErrNoRows to ErrNotFound, leaving any other error
 // (including nil) unchanged. Used by the scanX helpers so a missing row reads as
 // ErrNotFound while a genuine scan failure keeps its context.

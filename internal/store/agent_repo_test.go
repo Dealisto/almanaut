@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"strconv"
@@ -81,5 +82,77 @@ func TestLatestReportNotFound(t *testing.T) {
 	r := agentTestDB(t)
 	if _, err := r.LatestReport(1); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("LatestReport err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestUpsertAgentIDConflict(t *testing.T) {
+	r := agentTestDB(t)
+	b1 := AgentBinding{HostID: 1, AgentID: "uuid-1", Fingerprint: "h|aa", LastSeen: "2026-08-07T10:00:00Z"}
+	if err := r.Upsert(b1); err != nil {
+		t.Fatalf("Upsert host 1: %v", err)
+	}
+	// Try to bind the same agent_id to host 2 — must fail with ErrAgentIDConflict.
+	b2 := AgentBinding{HostID: 2, AgentID: "uuid-1", Fingerprint: "h|bb", LastSeen: "2026-08-07T10:00:00Z"}
+	err := r.Upsert(b2)
+	if !errors.Is(err, ErrAgentIDConflict) {
+		t.Fatalf("Upsert host 2 with same agent_id err = %v, want ErrAgentIDConflict", err)
+	}
+}
+
+func TestRecordReportCrossHostIsolation(t *testing.T) {
+	r := agentTestDB(t)
+	// Create a second host
+	if _, err := NewHostRepo(r.db.(*sql.DB)).Create(domain.Host{Name: "srv", Type: "physical"}); err != nil {
+		t.Fatalf("create host 2: %v", err)
+	}
+
+	// Add a few reports to host 2
+	for i := 0; i < 5; i++ {
+		payload := []byte(`{"h":2,"n":` + strconv.Itoa(i) + `}`)
+		if err := r.RecordReport(2, "uuid-2", "2026-08-07T10:00:00Z", "0.1.0", 1, payload); err != nil {
+			t.Fatalf("RecordReport host 2: %v", err)
+		}
+	}
+	host2Latest, err := r.LatestReport(2)
+	if err != nil {
+		t.Fatalf("LatestReport host 2 before: %v", err)
+	}
+	if host2Latest != `{"h":2,"n":4}` {
+		t.Fatalf("host 2 latest before = %s, want h:2,n:4", host2Latest)
+	}
+
+	// Push 35 reports for host 1 (beyond retention of 30)
+	for i := 0; i < 35; i++ {
+		payload := []byte(`{"h":1,"n":` + strconv.Itoa(i) + `}`)
+		if err := r.RecordReport(1, "uuid-1", "2026-08-07T10:00:00Z", "0.1.0", 1, payload); err != nil {
+			t.Fatalf("RecordReport host 1 %d: %v", i, err)
+		}
+	}
+
+	// Verify host 1 has exactly 30 reports
+	var host1Count int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM agent_reports WHERE host_id = 1`).Scan(&host1Count); err != nil {
+		t.Fatalf("count host 1: %v", err)
+	}
+	if host1Count != agentReportRetention {
+		t.Fatalf("host 1 kept %d reports, want %d", host1Count, agentReportRetention)
+	}
+
+	// Verify host 2 still has all 5 reports (untouched by host 1's pruning)
+	var host2Count int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM agent_reports WHERE host_id = 2`).Scan(&host2Count); err != nil {
+		t.Fatalf("count host 2: %v", err)
+	}
+	if host2Count != 5 {
+		t.Fatalf("host 2 kept %d reports, want 5", host2Count)
+	}
+
+	// Verify host 2's latest is still the same (unchanged)
+	host2LatestAfter, err := r.LatestReport(2)
+	if err != nil {
+		t.Fatalf("LatestReport host 2 after: %v", err)
+	}
+	if host2LatestAfter != host2Latest {
+		t.Fatalf("host 2 latest changed to %s, want %s", host2LatestAfter, host2Latest)
 	}
 }
