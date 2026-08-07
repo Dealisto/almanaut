@@ -72,8 +72,9 @@ validate_config_value() {
 		echo "install.sh: $name contains a backslash, which the agent's config parser rejects" >&2
 		exit 1
 	fi
-	# Detect newlines using case: a pattern built from * cannot match a newline,
-	# so if the value contains one, it will not match the pattern and we fall through.
+	# Detect newlines using case: in POSIX case patterns, * matches across
+	# newlines, so *"<newline>"* matches any value containing one, triggering
+	# the error branch.
 	case "$value" in
 	*"
 "*)
