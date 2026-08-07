@@ -587,8 +587,10 @@ type fakeAgentRepo struct {
 // real connection to actually contend for the write lock.
 type contentionError struct{ code int }
 
-func (e contentionError) Error() string { return fmt.Sprintf("simulated sqlite contention (code %d)", e.code) }
-func (e contentionError) Code() int     { return e.code }
+func (e contentionError) Error() string {
+	return fmt.Sprintf("simulated sqlite contention (code %d)", e.code)
+}
+func (e contentionError) Code() int { return e.code }
 
 const sqliteBusyCode = 5 // SQLITE_BUSY; see store.sqliteBusyOrLocked
 
