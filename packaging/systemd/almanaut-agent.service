@@ -27,10 +27,17 @@ ProtectHome=true
 PrivateTmp=true
 NoNewPrivileges=true
 PrivateDevices=true
-# The agent only reads /proc, /sys, and /etc files; no special capabilities
-# are needed. An empty bounding set removes all capabilities while still
-# allowing ordinary file reads as root.
-CapabilityBoundingSet=
+# The agent reads /proc, /sys, and /etc files (no capabilities needed for these).
+# However, it reads /proc/1/environ to detect Alpine/OpenRC containers on Proxmox
+# under private cgroup namespaces — a signal added to prevent silent data corruption.
+# Access to another process's environ requires CAP_SYS_PTRACE under ptrace_scope=1
+# (Debian/Ubuntu/Proxmox default). Without this capability, container detection
+# falls back to cgroup inspection, which under a private namespace returns "0::/"
+# with no runtime marker, causing the agent to misclassify the container as physical
+# and report the host's block devices as its own — exactly the bug this signal was
+# added to prevent. Granting only this one capability ensures nothing else can be
+# done with root.
+CapabilityBoundingSet=CAP_SYS_PTRACE
 # Must remain false: the agent inspects /sys/fs/cgroup to determine container
 # resource allocations. Setting this to true would hide cgroups and cause
 # every LXC to silently report the host's values instead.
