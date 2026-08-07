@@ -126,6 +126,43 @@ func TestLoadConfigRejectsMultiLineStringOpener(t *testing.T) {
 	}
 }
 
+// A line missing "=" is exactly the shape of an operator typo like
+// `token "alm_live_abc123"` — and the raw line is the token itself. The error
+// must name the line (via LoadConfig's wrapper) without ever echoing the
+// value, since this error reaches stderr and from there the systemd journal.
+func TestLoadConfigMalformedLineDoesNotLeakSecret(t *testing.T) {
+	const secret = "alm_live_abc123"
+	p := writeConfig(t, "server_url = \"https://alm.lan\"\ntoken \""+secret+"\"\n")
+	_, err := LoadConfig(p, noEnv)
+	if err == nil {
+		t.Fatal("LoadConfig accepted a line missing '=', want error")
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Fatalf("error %q leaks the secret value", err)
+	}
+	if !strings.Contains(err.Error(), "line 2") {
+		t.Fatalf("error %q does not name the line", err)
+	}
+}
+
+// A stray quote inside the value splits it: the text after the (wrong)
+// closing quote is a fragment of the secret itself, so it must not be echoed
+// either.
+func TestLoadConfigTrailingGarbageDoesNotLeakSecretFragment(t *testing.T) {
+	const secretFragment = "cd"
+	p := writeConfig(t, "server_url = \"https://alm.lan\"\ntoken = \"ab\""+secretFragment+"\"\n")
+	_, err := LoadConfig(p, noEnv)
+	if err == nil {
+		t.Fatal("LoadConfig accepted trailing garbage, want error")
+	}
+	if strings.Contains(err.Error(), secretFragment) {
+		t.Fatalf("error %q leaks a fragment of the secret", err)
+	}
+	if !strings.Contains(err.Error(), "token") {
+		t.Fatalf("error %q does not name the key", err)
+	}
+}
+
 func TestLoadConfigRejectsDuplicateKey(t *testing.T) {
 	p := writeConfig(t, "server_url = \"https://alm.lan\"\ntoken = \"t1\"\ntoken = \"t2\"\n")
 	_, err := LoadConfig(p, noEnv)
@@ -137,5 +174,42 @@ func TestLoadConfigRejectsDuplicateKey(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "line") {
 		t.Fatalf("error %q does not mention lines", err)
+	}
+}
+
+// A malformed server_url must fail LoadConfig (a config error, exit 1) rather
+// than survive to fail inside Send with "unsupported protocol scheme", which
+// the caller treats as transient (exit 3) and retries forever.
+func TestLoadConfigRejectsServerURLMissingScheme(t *testing.T) {
+	p := writeConfig(t, "server_url = \"almanaut.lan\"\ntoken = \"t\"\n")
+	if _, err := LoadConfig(p, noEnv); err == nil {
+		t.Fatal("LoadConfig accepted a server_url with no scheme, want error")
+	}
+}
+
+func TestLoadConfigRejectsServerURLNonHTTPScheme(t *testing.T) {
+	p := writeConfig(t, "server_url = \"ftp://alm.lan\"\ntoken = \"t\"\n")
+	if _, err := LoadConfig(p, noEnv); err == nil {
+		t.Fatal("LoadConfig accepted a non-http(s) scheme, want error")
+	}
+}
+
+func TestLoadConfigRejectsServerURLMissingHost(t *testing.T) {
+	p := writeConfig(t, "server_url = \"https:///path\"\ntoken = \"t\"\n")
+	if _, err := LoadConfig(p, noEnv); err == nil {
+		t.Fatal("LoadConfig accepted a server_url with no host, want error")
+	}
+}
+
+func TestLoadConfigAcceptsValidServerURLs(t *testing.T) {
+	for _, u := range []string{"https://alm.lan", "http://alm.lan:8080/subpath"} {
+		p := writeConfig(t, "server_url = \""+u+"\"\ntoken = \"t\"\n")
+		cfg, err := LoadConfig(p, noEnv)
+		if err != nil {
+			t.Fatalf("LoadConfig(%q): %v", u, err)
+		}
+		if cfg.ServerURL != u {
+			t.Fatalf("ServerURL = %q, want %q", cfg.ServerURL, u)
+		}
 	}
 }

@@ -4,6 +4,7 @@ package agent
 import (
 	"bufio"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -73,10 +74,31 @@ func LoadConfig(path string, getenv func(string) string) (Config, error) {
 	if cfg.ServerURL == "" {
 		return Config{}, fmt.Errorf("%s: server_url is required", path)
 	}
+	if err := validateServerURL(cfg.ServerURL); err != nil {
+		return Config{}, fmt.Errorf("%s: server_url: %w", path, err)
+	}
 	if cfg.Token == "" {
 		return Config{}, fmt.Errorf("%s: token is required (or set %s)", path, TokenEnvVar)
 	}
 	return cfg, nil
+}
+
+// validateServerURL rejects anything that would only fail later, inside Send,
+// with "unsupported protocol scheme" — a defect that never fixes itself and
+// so must be a config error (exit 1), not a transient one (exit 3) that the
+// hourly timer retries forever.
+func validateServerURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("scheme must be http or https, got %q", u.Scheme)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("missing host")
+	}
+	return nil
 }
 
 // parseConfigLine returns the key and value of one config line. A blank line
@@ -96,7 +118,11 @@ func parseConfigLine(raw string) (key, value string, err error) {
 
 	k, v, ok := strings.Cut(line, "=")
 	if !ok {
-		return "", "", fmt.Errorf("expected `key = \"value\"`, got %q", raw)
+		// Deliberately does not echo raw: a line missing "=" is exactly the
+		// shape of an operator typo like `token "secret"`, and raw may be the
+		// token itself. Every other error in this parser reports only the key,
+		// never the value; this path has no key to report either.
+		return "", "", fmt.Errorf("expected `key = \"value\"`")
 	}
 	key = strings.TrimSpace(k)
 	v = strings.TrimSpace(v)
@@ -117,9 +143,11 @@ func parseConfigLine(raw string) (key, value string, err error) {
 	}
 
 	// Check what follows the closing quote: only whitespace or # comment allowed.
+	// The offending text is deliberately not echoed: it can be a fragment of
+	// the value itself (an extra quote inside a token splits it exactly here).
 	afterQuote := strings.TrimSpace(v[1+end+1:])
 	if afterQuote != "" && !strings.HasPrefix(afterQuote, "#") {
-		return "", "", fmt.Errorf("unexpected text after value for %q: %q (only comments allowed)", key, afterQuote)
+		return "", "", fmt.Errorf("unexpected text after value for %q (only comments allowed)", key)
 	}
 
 	return key, valueContent, nil

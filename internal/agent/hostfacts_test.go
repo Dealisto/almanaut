@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -46,6 +47,21 @@ func TestCollectHostFactsToleratesMissingFiles(t *testing.T) {
 	got := CollectHostFacts(r)
 	if got.OS != "" {
 		t.Fatalf("OS = %q, want empty when os-release is absent", got.OS)
+	}
+}
+
+// A scanner error partway through os-release must discard whatever was
+// already accumulated rather than return a partial read as if it were
+// complete: NAME was captured before the oversized line breaks the scan, but
+// the function must still report "could not determine", not that fragment.
+func TestCollectHostFactsEmptyOnTruncatedOSRelease(t *testing.T) {
+	longLine := strings.Repeat("x", 100000)
+	r := fixtureRoot(t, map[string]string{
+		"etc/os-release": "NAME=\"Debian\"\n" + longLine + "\nPRETTY_NAME=\"Debian GNU/Linux 12\"\n",
+	})
+	got := CollectHostFacts(r)
+	if got.OS != "" {
+		t.Fatalf("OS = %q, want empty when the scan hits an error before completing", got.OS)
 	}
 }
 
@@ -141,6 +157,14 @@ func TestDetectVirtKind(t *testing.T) {
 			name:  "kubernetes pod in kubepods",
 			files: map[string]string{"proc/1/cgroup": "0::/kubepods/besteffort/pod123/abc\n"},
 			want:  "lxc",
+		},
+		{
+			name: "lxc via proc/1/environ when cgroup names no runtime (non-systemd init)",
+			files: map[string]string{
+				"proc/1/cgroup":  "0::/init.scope\n",
+				"proc/1/environ": "PATH=/usr/bin\x00container=lxc\x00HOME=/root\x00",
+			},
+			want: "lxc",
 		},
 
 		// VM detection

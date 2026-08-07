@@ -76,7 +76,9 @@ func writeNewAgentID(dir string) (string, error) {
 	if err := os.Rename(tmpPath, path); err != nil {
 		return "", fmt.Errorf("rename agent id: %w", err)
 	}
-	// Cancel the defer cleanup now that the file is successfully in place.
+	// The deferred os.Remove(tmpPath) above still runs on return, but the
+	// rename already moved tmpPath to path, so it finds nothing to remove and
+	// its discarded error is harmless.
 	return id, nil
 }
 

@@ -1,6 +1,9 @@
 package agent
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 const cpuinfo4Core = `processor	: 0
 model name	: AMD Ryzen 9 5950X 16-Core Processor
@@ -94,6 +97,43 @@ func TestCollectCPUCountsProcessorsWithoutCgroup(t *testing.T) {
 func TestCollectCPUEmptyWithoutCpuinfo(t *testing.T) {
 	if got := CollectCPU(fixtureRoot(t, map[string]string{})); got != "" {
 		t.Fatalf("CollectCPU = %q, want empty", got)
+	}
+}
+
+// A cgroup v2 mount alone does not mean the container is capped: cpuset.cpus
+// lists every processor on bare metal too. "Allocated" wording is reserved
+// for when the cgroup actually restricts the count below the host's total.
+func TestCollectCPUPlainWordingWhenCgroupMatchesHost(t *testing.T) {
+	r := fixtureRoot(t, map[string]string{
+		"proc/cpuinfo":                        cpuinfo4Core,
+		"sys/fs/cgroup/cpuset.cpus.effective": "0-3\n",
+	})
+	want := "AMD Ryzen 9 5950X 16-Core Processor (4 cores)"
+	if got := CollectCPU(r); got != want {
+		t.Fatalf("CollectCPU = %q, want %q (cgroup reports the whole host, not an allocation)", got, want)
+	}
+}
+
+// A scanner error partway through cpuinfo must discard the partial counts
+// already accumulated (model name found, only one "processor" line seen)
+// rather than report them as if the read had completed.
+func TestCollectCPUEmptyOnTruncatedCpuinfo(t *testing.T) {
+	longLine := strings.Repeat("x", 100000)
+	content := "model name\t: AMD Ryzen 9 5950X 16-Core Processor\nprocessor\t: 0\n" + longLine + "\n"
+	r := fixtureRoot(t, map[string]string{"proc/cpuinfo": content})
+	if got := CollectCPU(r); got != "" {
+		t.Fatalf("CollectCPU = %q, want empty when the scan hits an error, not a partial parse", got)
+	}
+}
+
+// Symmetrical with the cpuinfo case: a scan error before MemTotal is reached
+// must not be distinguishable from a genuinely partial read.
+func TestCollectRAMEmptyOnTruncatedMeminfo(t *testing.T) {
+	longLine := strings.Repeat("x", 100000)
+	content := "MemFree:        1234 kB\n" + longLine + "\nMemTotal:       65805304 kB\n"
+	r := fixtureRoot(t, map[string]string{"proc/meminfo": content})
+	if got := CollectRAM(r); got != "" {
+		t.Fatalf("CollectRAM = %q, want empty when the scan hits an error before MemTotal is reached", got)
 	}
 }
 

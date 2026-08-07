@@ -53,6 +53,12 @@ func prettyOSName(r Root) string {
 			name = value
 		}
 	}
+	if sc.Err() != nil {
+		// A scan error partway through means name may be an incomplete read
+		// (e.g. NAME= was seen but PRETTY_NAME never got a chance to be).
+		// Report "could not determine" rather than that partial value.
+		return ""
+	}
 	return name
 }
 
@@ -88,15 +94,25 @@ var vmVendorMarkers = []string{
 // container as far as the inventory is concerned, and its DMI would otherwise
 // report the hypervisor underneath it.
 //
-// The pid-1 cgroup is the fallback because a container without systemd — a
-// plain `docker run` — has no /run/systemd/container marker at all, but its
-// init process is always in a namespaced cgroup path naming the runtime.
+// The pid-1 cgroup is the second signal because a container without systemd —
+// a plain `docker run` — has no /run/systemd/container marker at all, but its
+// init process is usually in a namespaced cgroup path naming the runtime.
+//
+// The pid-1 environment is the third signal, needed because neither of the
+// above holds for an LXC container running a non-systemd init (Alpine with
+// OpenRC, common on Proxmox): under a cgroup namespace pid 1's cgroup reads
+// "0::/init.scope" with no runtime name in it at all, and there is no systemd
+// to write the /run marker. LXC still stamps container=lxc into pid 1's
+// environment regardless of what init the container runs.
 func detectVirtKind(r Root) string {
 	if marker := readTrimmed(r.Path(r.Run, "systemd/container")); marker != "" {
 		return "lxc"
 	}
 	cgroupContent := readTrimmed(r.Path(r.Proc, "1/cgroup"))
 	if cgroupContent != "" && detectContainerFromCgroup(cgroupContent) {
+		return "lxc"
+	}
+	if detectContainerFromEnviron(r) {
 		return "lxc"
 	}
 
@@ -109,6 +125,23 @@ func detectVirtKind(r Root) string {
 		}
 	}
 	return "physical"
+}
+
+// detectContainerFromEnviron examines /proc/1/environ for LXC's container=lxc
+// marker, a NUL-separated "KEY=value" environment dump. This is the fallback
+// for a container whose init is not systemd and whose cgroup path names no
+// runtime, since both other signals are silent in that case.
+func detectContainerFromEnviron(r Root) bool {
+	raw, err := os.ReadFile(r.Path(r.Proc, "1/environ"))
+	if err != nil {
+		return false
+	}
+	for _, field := range strings.Split(string(raw), "\x00") {
+		if field == "container=lxc" {
+			return true
+		}
+	}
+	return false
 }
 
 // detectContainerFromCgroup examines /proc/1/cgroup to detect container runtimes.

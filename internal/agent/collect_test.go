@@ -128,6 +128,38 @@ func TestCollectDetectsLXCAndRoutesToRootfs(t *testing.T) {
 	}
 }
 
+// The defect this guards against: an LXC container running a non-systemd
+// init (Alpine/OpenRC, common on Proxmox) has neither the systemd container
+// marker nor a cgroup path naming the runtime — only /proc/1/environ says
+// container=lxc. Detection must still catch it, and the disk collector must
+// still refuse to enumerate the host's <sys>/block devices even though they
+// are present in the fixture and would otherwise be read as this machine's own.
+func TestCollectDetectsLXCViaEnvironAndAvoidsHostDisks(t *testing.T) {
+	r := fixtureRoot(t, map[string]string{
+		"proc/1/cgroup":          "0::/init.scope\n",
+		"proc/1/environ":         "PATH=/usr/bin\x00container=lxc\x00",
+		"sys/block/nvme0n1/size": "1953525168\n",
+	})
+	rep := Collect(CollectOptions{
+		Root:       r,
+		AgentID:    "id",
+		Hostname:   "ct-alpine",
+		Interfaces: fakeLister(),
+		Usage: func(string) (int64, int64, error) {
+			return 34359738368, 19327352832, nil
+		},
+	})
+	if rep.VirtKind != "lxc" {
+		t.Fatalf("VirtKind = %q, want lxc (detected via /proc/1/environ)", rep.VirtKind)
+	}
+	if len(rep.Disks) != 1 || rep.Disks[0].Device != "rootfs" {
+		t.Fatalf("disks = %+v, want the rootfs entry, not the host's nvme0n1", rep.Disks)
+	}
+	if contains(rep.Disk, "nvme0n1") {
+		t.Fatalf("Disk summary %q leaks the host's block device", rep.Disk)
+	}
+}
+
 // Nothing readable must still produce a structurally valid report: the server
 // treats every empty field as "leave the existing value alone".
 func TestCollectOnBarrenRootStillValidates(t *testing.T) {

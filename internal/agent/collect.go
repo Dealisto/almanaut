@@ -27,7 +27,7 @@ func Collect(opts CollectOptions) agentapi.Report {
 		virt = facts.VirtKind
 	}
 
-	diskSummary, disks := CollectDisks(opts.Root, virt == "lxc", opts.Usage)
+	diskSummary, disks := CollectDisks(opts.Root, virt, opts.Usage)
 
 	return agentapi.Report{
 		SchemaVersion: agentapi.SchemaVersion,

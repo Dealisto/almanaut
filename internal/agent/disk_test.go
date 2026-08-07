@@ -17,7 +17,7 @@ func TestCollectDisksListsBlockDevices(t *testing.T) {
 		"sys/block/loop0/size": "0\n",
 		"sys/block/dm-0/size":  "1953525168\n",
 	})
-	summary, disks := CollectDisks(r, false, nil)
+	summary, disks := CollectDisks(r, "physical", nil)
 	if len(disks) != 2 {
 		t.Fatalf("disks = %+v, want exactly the two real devices", disks)
 	}
@@ -50,7 +50,7 @@ func TestCollectDisksInContainerReportsRootFilesystem(t *testing.T) {
 		}
 		return 34359738368, 19327352832, nil // 32 GB total, 18 GB used
 	}
-	summary, disks := CollectDisks(r, true, usage)
+	summary, disks := CollectDisks(r, "lxc", usage)
 	if len(disks) != 1 || disks[0].Mount != "/" {
 		t.Fatalf("disks = %+v, want a single rootfs entry", disks)
 	}
@@ -65,15 +65,36 @@ func TestCollectDisksInContainerReportsRootFilesystem(t *testing.T) {
 func TestCollectDisksEmptyWhenUsageFails(t *testing.T) {
 	r := fixtureRoot(t, map[string]string{})
 	usage := func(string) (int64, int64, error) { return 0, 0, errors.New("nope") }
-	summary, disks := CollectDisks(r, true, usage)
+	summary, disks := CollectDisks(r, "lxc", usage)
 	if summary != "" || len(disks) != 0 {
 		t.Fatalf("summary=%q disks=%+v, want empty so the server keeps the existing value", summary, disks)
 	}
 }
 
 func TestCollectDisksEmptyWhenNoBlockDir(t *testing.T) {
-	summary, disks := CollectDisks(fixtureRoot(t, map[string]string{}), false, nil)
+	summary, disks := CollectDisks(fixtureRoot(t, map[string]string{}), "physical", nil)
 	if summary != "" || len(disks) != 0 {
 		t.Fatalf("summary=%q disks=%+v, want empty", summary, disks)
+	}
+}
+
+// A vm is not a container: its block devices really are its own, so a VM
+// should be enumerated exactly like physical hardware.
+func TestCollectDisksListsBlockDevicesOnVM(t *testing.T) {
+	r := fixtureRoot(t, map[string]string{"sys/block/nvme0n1/size": "1953525168\n"})
+	_, disks := CollectDisks(r, "vm", nil)
+	if len(disks) != 1 || disks[0].Device != "nvme0n1" {
+		t.Fatalf("disks = %+v, want the vm's own block device enumerated", disks)
+	}
+}
+
+// An inconclusive virt kind must not enumerate the host's block devices: the
+// guard requires a positive "physical" or "vm" determination, not merely the
+// absence of container evidence.
+func TestCollectDisksInconclusiveVirtKindAvoidsBlockDevices(t *testing.T) {
+	r := fixtureRoot(t, map[string]string{"sys/block/nvme0n1/size": "1953525168\n"})
+	summary, disks := CollectDisks(r, "", nil)
+	if summary != "" || len(disks) != 0 {
+		t.Fatalf("summary=%q disks=%+v, want empty rather than the host's block devices", summary, disks)
 	}
 }
