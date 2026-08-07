@@ -1,10 +1,15 @@
 package agent
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Dealisto/almanaut/internal/agentapi"
 )
+
+func contains(s, substr string) bool {
+	return strings.Contains(s, substr)
+}
 
 func TestCollectFillsAReportableStructure(t *testing.T) {
 	r := fixtureRoot(t, map[string]string{
@@ -32,14 +37,31 @@ func TestCollectFillsAReportableStructure(t *testing.T) {
 	if err := rep.Validate(); err != nil {
 		t.Fatalf("assembled report is invalid: %v", err)
 	}
-	if rep.Hostname != "nas01" || rep.AgentID == "" || rep.AgentVersion != "0.1.0" {
+	if rep.Hostname != "nas01" || rep.AgentID != "11111111-2222-4333-8444-555555555555" || rep.AgentVersion != "0.1.0" {
 		t.Fatalf("identity fields = %+v", rep)
 	}
 	if rep.VirtKind != "physical" {
 		t.Fatalf("VirtKind = %q, want physical", rep.VirtKind)
 	}
-	if rep.OS == "" || rep.Kernel == "" || rep.CPU == "" || rep.RAM == "" || rep.Disk == "" {
-		t.Fatalf("a scalar field is unexpectedly empty: %+v", rep)
+	// Assert actual values against fixture data, not just non-emptiness
+	if rep.OS != "Debian GNU/Linux 12 (bookworm)" {
+		t.Fatalf("OS = %q, want Debian GNU/Linux 12 (bookworm)", rep.OS)
+	}
+	if rep.Kernel != "6.1.0-18-amd64" {
+		t.Fatalf("Kernel = %q, want 6.1.0-18-amd64", rep.Kernel)
+	}
+	if rep.CPU != "AMD Ryzen 9 5950X 16-Core Processor (4 cores)" {
+		t.Fatalf("CPU = %q, want AMD Ryzen 9 5950X 16-Core Processor (4 cores)", rep.CPU)
+	}
+	if rep.RAM != "62.8 GB" {
+		t.Fatalf("RAM = %q, want 62.8 GB", rep.RAM)
+	}
+	if rep.Uptime != 12345 {
+		t.Fatalf("Uptime = %d, want 12345", rep.Uptime)
+	}
+	// Disk summary should contain the device name, preventing transposition
+	if !contains(rep.Disk, "nvme0n1") {
+		t.Fatalf("Disk = %q, want it to contain nvme0n1", rep.Disk)
 	}
 	if len(rep.Interfaces) != 1 || len(rep.Disks) != 1 {
 		t.Fatalf("structured fields = %+v", rep)
@@ -76,6 +98,33 @@ func TestCollectInContainerUsesRootFilesystem(t *testing.T) {
 	}
 	if rep.RAM != "4.0 GB" {
 		t.Fatalf("RAM = %q, want the cgroup allocation", rep.RAM)
+	}
+}
+
+// The inContainer decision must be derived from detected virtualization kind,
+// not just from an explicit override. This test exercises the detection path
+// where VirtKind is left empty and the fixture supplies a container marker.
+func TestCollectDetectsLXCAndRoutesToRootfs(t *testing.T) {
+	r := fixtureRoot(t, map[string]string{
+		"run/systemd/container":    "lxc\n",
+		"proc/cpuinfo":             cpuinfo4Core,
+		"sys/fs/cgroup/memory.max": "4294967296\n",
+		"sys/block/nvme0n1/size":   "1953525168\n",
+	})
+	rep := Collect(CollectOptions{
+		Root:       r,
+		AgentID:    "id",
+		Hostname:   "ct100",
+		Interfaces: fakeLister(),
+		Usage: func(string) (int64, int64, error) {
+			return 34359738368, 19327352832, nil
+		},
+	})
+	if rep.VirtKind != "lxc" {
+		t.Fatalf("VirtKind = %q, want lxc (detected from container marker)", rep.VirtKind)
+	}
+	if len(rep.Disks) != 1 || rep.Disks[0].Device != "rootfs" {
+		t.Fatalf("disks = %+v, want the rootfs entry (proves inContainer was derived from detection)", rep.Disks)
 	}
 }
 

@@ -54,10 +54,13 @@ func SystemInterfaces() ([]NetInterface, error) {
 // shared with the server. Filtering here too would create a second definition
 // that could drift from it.
 //
-// A lister error yields no interfaces rather than an error, because an empty
-// list is the wire signal for "could not determine" and the server then keeps
-// the host's existing addresses.
+// A nil lister or lister error yields no interfaces rather than an error or
+// panic, because an empty list is the wire signal for "could not determine" and
+// the server then keeps the host's existing addresses.
 func CollectInterfaces(list InterfaceLister) []agentapi.Interface {
+	if list == nil {
+		return nil
+	}
 	ifaces, err := list()
 	if err != nil {
 		return nil

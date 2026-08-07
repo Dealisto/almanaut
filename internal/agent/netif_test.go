@@ -54,6 +54,13 @@ func TestCollectInterfacesToleratesListerError(t *testing.T) {
 	}
 }
 
+func TestCollectInterfacesToleratesNilLister(t *testing.T) {
+	got := CollectInterfaces(nil)
+	if len(got) != 0 {
+		t.Fatalf("got %+v, want empty on nil lister, not panic", got)
+	}
+}
+
 var errFake = errTest("boom")
 
 type errTest string
