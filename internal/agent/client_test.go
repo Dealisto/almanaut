@@ -123,3 +123,42 @@ func TestSendFailsOnUnreachableServer(t *testing.T) {
 		t.Fatal("Send to a closed server = nil, want error")
 	}
 }
+
+// A 200 with no host_id is a misconfigured server (pointing at wrong endpoint).
+func TestSendRejectsEmptyHostIDObject(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{})
+	}))
+	defer srv.Close()
+	_, err := Send(context.Background(), srv.Client(), srv.URL, "t", testReport())
+	if !errors.Is(err, ErrRejected) {
+		t.Fatalf("err = %v, want ErrRejected", err)
+	}
+	if !strings.Contains(err.Error(), "/api/agent/report") {
+		t.Fatalf("err %q does not name the endpoint", err)
+	}
+}
+
+// A 200 with null body is a misconfigured server.
+func TestSendRejectsNullHostID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("null"))
+	}))
+	defer srv.Close()
+	_, err := Send(context.Background(), srv.Client(), srv.URL, "t", testReport())
+	if !errors.Is(err, ErrRejected) {
+		t.Fatalf("err = %v, want ErrRejected", err)
+	}
+}
+
+// A 200 with explicit 0 host_id is a misconfigured server.
+func TestSendRejectsZeroHostID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]int64{"host_id": 0})
+	}))
+	defer srv.Close()
+	_, err := Send(context.Background(), srv.Client(), srv.URL, "t", testReport())
+	if !errors.Is(err, ErrRejected) {
+		t.Fatalf("err = %v, want ErrRejected", err)
+	}
+}
