@@ -34,7 +34,61 @@ func TestFingerprintIsOrderIndependentAndLowercased(t *testing.T) {
 func TestReportedIPsFlattensInterfaces(t *testing.T) {
 	got := sample().ReportedIPs()
 	if len(got) != 2 {
-		t.Fatalf("ReportedIPs() = %v, want 2 entries", got)
+		t.Fatalf("ReportedIPs() got len %d, want 2", len(got))
+	}
+	// Assert actual contents and order
+	want := []string{"10.0.0.5", "192.168.1.10"}
+	if got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("ReportedIPs() = %v, want %v", got, want)
+	}
+}
+
+// ReportedIPs must trim whitespace and skip empty strings
+func TestReportedIPsTrimsAndSkipsEmpty(t *testing.T) {
+	r := Report{
+		Interfaces: []Interface{
+			{Name: "eth0", MAC: "aa:bb:cc:00:00:01", Addrs: []string{"  192.168.1.10  ", "", "  "}},
+			{Name: "eth1", MAC: "aa:bb:cc:00:00:02", Addrs: []string{"10.0.0.5"}},
+		},
+	}
+	got := r.ReportedIPs()
+	if len(got) != 2 {
+		t.Fatalf("ReportedIPs() got len %d, want 2", len(got))
+	}
+	want := []string{"192.168.1.10", "10.0.0.5"}
+	if got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("ReportedIPs() = %v, want %v", got, want)
+	}
+}
+
+// Fingerprint must skip interfaces with empty or whitespace-only MACs
+func TestFingerprintSkipsEmptyMACs(t *testing.T) {
+	r := Report{
+		Hostname: "testhost",
+		Interfaces: []Interface{
+			{Name: "eth0", MAC: "aa:bb:cc:00:00:01"},
+			{Name: "eth1", MAC: ""},
+			{Name: "eth2", MAC: "  "},
+			{Name: "eth3", MAC: "AA:BB:CC:00:00:02"},
+		},
+	}
+	got := r.Fingerprint()
+	want := "testhost|aa:bb:cc:00:00:01,aa:bb:cc:00:00:02"
+	if got != want {
+		t.Fatalf("Fingerprint() = %q, want %q", got, want)
+	}
+}
+
+// Fingerprint must handle zero interfaces gracefully and not panic
+func TestFingerprintWithZeroInterfaces(t *testing.T) {
+	r := Report{
+		Hostname:   "lonely",
+		Interfaces: []Interface{},
+	}
+	got := r.Fingerprint()
+	want := "lonely|"
+	if got != want {
+		t.Fatalf("Fingerprint() = %q, want %q", got, want)
 	}
 }
 
