@@ -565,13 +565,35 @@ func TestAgentReportAgentIDConflictReturns409(t *testing.T) {
 // fakeAgentRepo wraps a real *store.AgentRepo but can be told to fail Upsert
 // on demand, so a test can force the store.ErrAgentIDConflict branch
 // deterministically instead of hoping two racing goroutines land on it.
+//
+// busyRemaining additionally simulates transient SQLite write-write
+// contention (SQLITE_BUSY/SQLITE_LOCKED): while its pointee is greater than
+// zero, Upsert returns a contentionError instead of delegating, decrementing
+// it first. It is a pointer, not a plain int, because agentReport calls
+// d.agents.WithTx(tx) fresh on every store.WithTxRetry attempt — each retry
+// gets a new fakeAgentRepo value, so the remaining-failure count has to live
+// outside any single value to be observed across attempts.
 type fakeAgentRepo struct {
-	real      *store.AgentRepo
-	upsertErr error // non-nil: Upsert returns this instead of delegating
+	real          *store.AgentRepo
+	upsertErr     error // non-nil: Upsert returns this instead of delegating
+	busyRemaining *int  // non-nil: Upsert fails with contentionError while *busyRemaining > 0
 }
 
+// contentionError simulates the transient contention store.WithTxRetry
+// retries on. It exposes the same Code() int method modernc.org/sqlite's
+// *sqlite.Error does — which is what store.sqliteBusyOrLocked actually
+// inspects — so this fake is classified through the identical code path a
+// real SQLITE_BUSY/SQLITE_LOCKED error would be, without needing a second
+// real connection to actually contend for the write lock.
+type contentionError struct{ code int }
+
+func (e contentionError) Error() string { return fmt.Sprintf("simulated sqlite contention (code %d)", e.code) }
+func (e contentionError) Code() int     { return e.code }
+
+const sqliteBusyCode = 5 // SQLITE_BUSY; see store.sqliteBusyOrLocked
+
 func (f fakeAgentRepo) WithTx(tx *sql.Tx) agentRepo {
-	return fakeAgentRepo{real: f.real.WithTx(tx), upsertErr: f.upsertErr}
+	return fakeAgentRepo{real: f.real.WithTx(tx), upsertErr: f.upsertErr, busyRemaining: f.busyRemaining}
 }
 
 func (f fakeAgentRepo) ByAgentID(agentID string) (store.AgentBinding, error) {
@@ -579,6 +601,10 @@ func (f fakeAgentRepo) ByAgentID(agentID string) (store.AgentBinding, error) {
 }
 
 func (f fakeAgentRepo) Upsert(b store.AgentBinding) error {
+	if f.busyRemaining != nil && *f.busyRemaining > 0 {
+		*f.busyRemaining--
+		return contentionError{code: sqliteBusyCode}
+	}
 	if f.upsertErr != nil {
 		return f.upsertErr
 	}
@@ -681,5 +707,114 @@ func TestAgentReportRollsBackHostOnAgentIDConflict(t *testing.T) {
 	}
 	if got := dispatcher.all(); len(got) != 0 {
 		t.Fatalf("dispatched %d webhook event(s), want 0 (nothing should be dispatched for a rolled-back transaction)", len(got))
+	}
+}
+
+// agentDepsWithFake builds the same wiring TestAgentReportRollsBackHostOnAgentIDConflict
+// uses — a real DB plus a fakeAgentRepo standing in for the agent repo — so
+// the retry tests below can vary just the fake's contention behavior.
+func agentDepsWithFake(t *testing.T, fake fakeAgentRepo) (agentDeps, *sql.DB, *recordingDispatcher) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := store.Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	hosts := store.NewHostRepo(db)
+	hostRS := resource[domain.Host]{
+		sing:  "host",
+		repo:  hosts,
+		label: func(h domain.Host) string { return h.Name },
+		id:    func(h domain.Host) int64 { return h.ID },
+	}
+	deps := handlerDeps{
+		changelog:    store.NewChangelogRepo(db),
+		customFields: store.NewCustomFieldRepo(db),
+		db:           db,
+	}
+	fake.real = store.NewAgentRepo(db)
+	dispatcher := &recordingDispatcher{}
+
+	return agentDeps{
+		db:       db,
+		agents:   fake,
+		hosts:    hosts,
+		webhooks: dispatcher,
+		createHost: func(tx *sql.Tx, h domain.Host, actor string, ev *[]webhook.Event) (int64, error) {
+			return hostRS.createEntityTx(tx, deps, h, nil, actor, ev)
+		},
+		updateHost: func(tx *sql.Tx, h domain.Host, actor string, ev *[]webhook.Event) error {
+			return hostRS.updateEntityTx(tx, deps, h, nil, actor, ev)
+		},
+	}, db, dispatcher
+}
+
+func postReportDirect(d agentDeps, rep agentapi.Report) *httptest.ResponseRecorder {
+	body, _ := json.Marshal(rep)
+	req := httptest.NewRequest(http.MethodPost, "/api/agent/report", bytes.NewReader(body))
+	ctx := withTokenScope(req.Context(), domain.ScopeAgent)
+	ctx = withUser(ctx, domain.User{ID: 1, Username: "alice", Role: domain.RoleEditor})
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+	agentReport(d)(rec, req)
+	return rec
+}
+
+// TestAgentReportRetriesTransientContentionThenSucceeds pins the fix for the
+// CI flake in TestAgentReportAgentIDConflictReturns409: under real write-write
+// contention, SQLite can fail a racing report's transaction with a transient
+// SQLITE_BUSY/SQLITE_LOCKED error before it ever reaches the agent_id UNIQUE
+// check, and that must not surface as a 500. Here the fake forces exactly one
+// such failure — deterministically, unlike the real race — so the assertion
+// is that the handler retries and the report still succeeds, rather than
+// answering 500 on the first transient error it sees.
+func TestAgentReportRetriesTransientContentionThenSucceeds(t *testing.T) {
+	remaining := 1
+	d, db, _ := agentDepsWithFake(t, fakeAgentRepo{busyRemaining: &remaining})
+
+	rec := postReportDirect(d, baseReport())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("report with one transient contention failure = %d, want 200 (body %s)", rec.Code, rec.Body)
+	}
+	if remaining != 0 {
+		t.Fatalf("busyRemaining = %d after the call, want 0 (the fake must have been made to fail once, then delegate)", remaining)
+	}
+
+	var hostCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM hosts`).Scan(&hostCount); err != nil {
+		t.Fatalf("count hosts: %v", err)
+	}
+	if hostCount != 1 {
+		t.Fatalf("hosts = %d after a retried-then-successful report, want exactly 1 (no duplicate from the failed first attempt)", hostCount)
+	}
+	var bindingCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM host_agents`).Scan(&bindingCount); err != nil {
+		t.Fatalf("count host_agents: %v", err)
+	}
+	if bindingCount != 1 {
+		t.Fatalf("host_agents = %d after a retried-then-successful report, want exactly 1", bindingCount)
+	}
+}
+
+// TestAgentReportGivesUpAfterBoundedRetries asserts the other half of the
+// retry contract: it must be bounded. A fake that fails with transient
+// contention forever must eventually make the handler give up and answer 500
+// (there is no correct 200/409 to converge on when the underlying store
+// never stops erroring) rather than retrying forever or hanging the request.
+func TestAgentReportGivesUpAfterBoundedRetries(t *testing.T) {
+	remaining := 1000 // far more than store.WithTxRetry's bound; never reaches 0 in this test
+	d, _, dispatcher := agentDepsWithFake(t, fakeAgentRepo{busyRemaining: &remaining})
+
+	rec := postReportDirect(d, baseReport())
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("report with permanent transient contention = %d, want 500 (body %s)", rec.Code, rec.Body)
+	}
+	if got := dispatcher.all(); len(got) != 0 {
+		t.Fatalf("dispatched %d webhook event(s), want 0 (nothing should be dispatched for a report that never succeeded)", len(got))
 	}
 }

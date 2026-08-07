@@ -111,7 +111,15 @@ func agentReport(d agentDeps) http.HandlerFunc {
 			changed = []string{}
 			events  []webhook.Event
 		)
-		err = store.WithTx(d.db, func(tx *sql.Tx) error {
+		// store.WithTxRetry, not store.WithTx: two first-time reports racing on
+		// the same agent_id can make SQLite fail the transaction with transient
+		// write-write contention (SQLITE_BUSY/SQLITE_LOCKED) before either side
+		// ever reaches the agent_id UNIQUE check below, which would otherwise
+		// surface as a raw 500 instead of the clean 409 the losing report is
+		// supposed to get. Retrying re-runs this whole closure against fresh
+		// state, so the loser's second attempt observes the winner's now-
+		// committed binding and takes the ordinary DecideConflict path.
+		err = store.WithTxRetry(d.db, func(tx *sql.Tx) error {
 			agents := d.agents.WithTx(tx)
 
 			var existing *agentapi.Binding
