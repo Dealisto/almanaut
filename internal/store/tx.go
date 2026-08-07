@@ -55,20 +55,30 @@ func WithTx(db *sql.DB, fn func(*sql.Tx) error) error {
 }
 
 // sqliteBusyOrLocked reports whether err is SQLite's transient write-write
-// contention signal: SQLITE_BUSY (5) or SQLITE_LOCKED (6). Those are two of
-// SQLite's public result codes, and their numeric values are part of the
-// documented, permanently-stable C API (https://www.sqlite.org/rescode.html)
-// — a plain integer comparison is exact, so no message string matching
-// ("database is locked") is needed.
+// contention signal: SQLITE_BUSY (5) or SQLITE_LOCKED (6), or any extended
+// variant of either. Those are two of SQLite's public result codes, and
+// their numeric values are part of the documented, permanently-stable C API
+// (https://www.sqlite.org/rescode.html) — a plain integer comparison is
+// exact, so no message string matching ("database is locked") is needed.
 //
-// modernc.org/sqlite (the driver Open registers) reports both through a
-// *sqlite.Error whose Code() returns sqlite3_errcode(db), the primary
-// (non-extended) result code, so the plain values 5/6 are what actually
-// comes back — never an extended variant like SQLITE_BUSY_SNAPSHOT that
-// would need masking. Confirmed empirically: two goroutines writing
-// concurrently through database/sql with busy_timeout(0) surface
-// *sqlite.Error with Code()==5 unchanged, i.e. database/sql does not wrap or
-// rewrite the driver's error on the way out.
+// modernc.org/sqlite (the driver Open registers) enables extended result
+// codes on every connection it opens, and *sqlite.Error.Code() returns
+// exactly the raw result code sqlite3_step/sqlite3_exec produced — so an
+// extended variant comes back unmodified, not masked down to its primary
+// code. Confirmed empirically (see the probe behind this fix): a deferred
+// transaction that has already executed a read and then attempts to write
+// gets a result code that depends on timing. If the write lock is actively
+// held by the other side at that exact instant, SQLite's own btree layer
+// downgrades the internal SQLITE_BUSY_SNAPSHOT to plain SQLITE_BUSY (5)
+// before it ever reaches the driver — this is the case two racing goroutines
+// on an otherwise-idle machine usually hit, since they tend to run in
+// lockstep. But if the other side's commit has already fully landed — lock
+// free — by the time this transaction attempts its write, SQLite finds its
+// read snapshot stale and returns SQLITE_BUSY_SNAPSHOT (517) directly, with
+// no masking. The busier and jitterier the scheduler (a loaded CI runner,
+// unlike a quiet dev machine), the more often that second timing occurs.
+// Masking the low byte before comparing (code & 0xFF) classifies both
+// outcomes, and every other extended BUSY/LOCKED variant, identically.
 //
 // The check below is written against a minimal structural interface
 // (Code() int) rather than the concrete *sqlite.Error type. *sqlite.Error's
@@ -86,7 +96,7 @@ func sqliteBusyOrLocked(err error) bool {
 		sqliteBusy   = 5
 		sqliteLocked = 6
 	)
-	code := coder.Code()
+	code := coder.Code() & 0xFF // strip the extended-result-code high bits
 	return code == sqliteBusy || code == sqliteLocked
 }
 

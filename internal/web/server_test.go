@@ -73,6 +73,16 @@ func newTestServerDB(t *testing.T) (http.Handler, *sql.DB) {
 // migrated db (used by the auth/session tests).
 func newAuthedTestHandler(t *testing.T, db *sql.DB) http.Handler {
 	t.Helper()
+	return newAuthedTestHandlerWithLogger(t, db, log.New(io.Discard, "", 0))
+}
+
+// newAuthedTestHandlerWithLogger is newAuthedTestHandler but lets the caller
+// supply the logger, so a test can capture what the handler logs (e.g. via
+// apiServerError) instead of discarding it. Used by agent_test.go's
+// TestAgentReportAgentIDConflictReturns409 to surface the real error behind
+// an unexpected 500 in the failure message.
+func newAuthedTestHandlerWithLogger(t *testing.T, db *sql.DB, logger *log.Logger) http.Handler {
+	t.Helper()
 	return New(Config{
 		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
 		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
@@ -80,7 +90,7 @@ func newAuthedTestHandler(t *testing.T, db *sql.DB) http.Handler {
 		Sites: store.NewSiteRepo(db), Locations: store.NewLocationRepo(db), Racks: store.NewRackRepo(db),
 		Contacts:      store.NewContactRepo(db),
 		Relationships: store.NewRelationshipRepo(db), Tags: store.NewTagRepo(db), VLANs: store.NewVLANRepo(db), Reservations: store.NewReservationRepo(db), DB: db,
-		Logger: log.New(io.Discard, "", 0),
+		Logger: logger,
 		Docker: fakeScanner{}, NetScan: fakeNetworkScanner{}, NetOpts: NetDiscoveryOptions{}, Proxmox: fakeProxmoxScanner{}, PVEOpts: ProxmoxOptions{},
 		AuthEnabled: true,
 	})

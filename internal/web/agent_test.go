@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -24,6 +25,17 @@ import (
 // apiAuthServer (api_write_test.go), which differs only in hard-coding
 // read-write.
 func agentServer(t *testing.T, scope domain.Scope) (http.Handler, *sql.DB, string) {
+	t.Helper()
+	return agentServerLogging(t, scope, testLogger())
+}
+
+// agentServerLogging is agentServer but with the caller's logger wired into
+// the handler instead of the usual io.Discard one, so a test can inspect
+// what apiServerError/serverError logged for an unexpected response — e.g.
+// the real error behind a 500 that should never happen. Handing in a
+// different logger is the only difference from agentServer; every other
+// behavior (routes, auth, storage) is identical.
+func agentServerLogging(t *testing.T, scope domain.Scope, logger *log.Logger) (http.Handler, *sql.DB, string) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := store.Open(dbPath)
@@ -52,7 +64,7 @@ func agentServer(t *testing.T, scope domain.Scope) (http.Handler, *sql.DB, strin
 	}); err != nil {
 		t.Fatalf("Create token: %v", err)
 	}
-	return newAuthedTestHandler(t, db), db, raw
+	return newAuthedTestHandlerWithLogger(t, db, logger), db, raw
 }
 
 func postReport(t *testing.T, h http.Handler, token string, r agentapi.Report) *httptest.ResponseRecorder {
@@ -502,8 +514,14 @@ func TestAgentReportRejectsUnknownSchemaVersion(t *testing.T) {
 // same 409 a clone conflict gets. Both outcomes are legitimate depending on
 // scheduling, so the assertion only pins down what must hold under either:
 // exactly one 200 and one 409, never a 500 with a raw SQL string in the body.
+//
+// The server is wired to a buffering logger (instead of the usual io.Discard)
+// purely so a failure can report what apiServerError actually logged for the
+// 500 — this is diagnostic only and does not change any behavior under test:
+// a passing run never reads logBuf.
 func TestAgentReportAgentIDConflictReturns409(t *testing.T) {
-	h, db, raw := agentServer(t, domain.ScopeAgent)
+	var logBuf bytes.Buffer
+	h, db, raw := agentServerLogging(t, domain.ScopeAgent, log.New(&logBuf, "", 0))
 
 	a := baseReport()
 	a.AgentID = "race-id"
@@ -530,7 +548,7 @@ func TestAgentReportAgentIDConflictReturns409(t *testing.T) {
 		case http.StatusConflict:
 			conflict++
 		default:
-			t.Fatalf("racing reports with the same agent_id got status %d, want 200 or 409 (codes=%v)", c, codes)
+			t.Fatalf("racing reports with the same agent_id got status %d, want 200 or 409 (codes=%v); logged errors:\n%s", c, codes, logBuf.String())
 		}
 	}
 	if ok != 1 || conflict != 1 {
@@ -567,16 +585,18 @@ func TestAgentReportAgentIDConflictReturns409(t *testing.T) {
 // deterministically instead of hoping two racing goroutines land on it.
 //
 // busyRemaining additionally simulates transient SQLite write-write
-// contention (SQLITE_BUSY/SQLITE_LOCKED): while its pointee is greater than
-// zero, Upsert returns a contentionError instead of delegating, decrementing
-// it first. It is a pointer, not a plain int, because agentReport calls
-// d.agents.WithTx(tx) fresh on every store.WithTxRetry attempt — each retry
-// gets a new fakeAgentRepo value, so the remaining-failure count has to live
-// outside any single value to be observed across attempts.
+// contention (SQLITE_BUSY/SQLITE_LOCKED, or an extended variant of either —
+// see busyCode): while its pointee is greater than zero, Upsert returns a
+// contentionError instead of delegating, decrementing it first. It is a
+// pointer, not a plain int, because agentReport calls d.agents.WithTx(tx)
+// fresh on every store.WithTxRetry attempt — each retry gets a new
+// fakeAgentRepo value, so the remaining-failure count has to live outside
+// any single value to be observed across attempts.
 type fakeAgentRepo struct {
 	real          *store.AgentRepo
 	upsertErr     error // non-nil: Upsert returns this instead of delegating
 	busyRemaining *int  // non-nil: Upsert fails with contentionError while *busyRemaining > 0
+	busyCode      int   // the Code() the simulated contentionError carries; 0 means sqliteBusyCode
 }
 
 // contentionError simulates the transient contention store.WithTxRetry
@@ -592,10 +612,14 @@ func (e contentionError) Error() string {
 }
 func (e contentionError) Code() int { return e.code }
 
-const sqliteBusyCode = 5 // SQLITE_BUSY; see store.sqliteBusyOrLocked
+const (
+	sqliteBusyCode              = 5   // SQLITE_BUSY; see store.sqliteBusyOrLocked
+	sqliteBusySnapshotCode      = 517 // SQLITE_BUSY_SNAPSHOT (SQLITE_BUSY | (2<<8))
+	sqliteLockedSharedCacheCode = 262 // SQLITE_LOCKED_SHAREDCACHE (SQLITE_LOCKED | (1<<8))
+)
 
 func (f fakeAgentRepo) WithTx(tx *sql.Tx) agentRepo {
-	return fakeAgentRepo{real: f.real.WithTx(tx), upsertErr: f.upsertErr, busyRemaining: f.busyRemaining}
+	return fakeAgentRepo{real: f.real.WithTx(tx), upsertErr: f.upsertErr, busyRemaining: f.busyRemaining, busyCode: f.busyCode}
 }
 
 func (f fakeAgentRepo) ByAgentID(agentID string) (store.AgentBinding, error) {
@@ -605,7 +629,11 @@ func (f fakeAgentRepo) ByAgentID(agentID string) (store.AgentBinding, error) {
 func (f fakeAgentRepo) Upsert(b store.AgentBinding) error {
 	if f.busyRemaining != nil && *f.busyRemaining > 0 {
 		*f.busyRemaining--
-		return contentionError{code: sqliteBusyCode}
+		code := f.busyCode
+		if code == 0 {
+			code = sqliteBusyCode
+		}
+		return contentionError{code: code}
 	}
 	if f.upsertErr != nil {
 		return f.upsertErr
@@ -800,6 +828,47 @@ func TestAgentReportRetriesTransientContentionThenSucceeds(t *testing.T) {
 	}
 	if bindingCount != 1 {
 		t.Fatalf("host_agents = %d after a retried-then-successful report, want exactly 1", bindingCount)
+	}
+}
+
+// TestAgentReportRetriesExtendedContentionCodesThenSucceeds pins the actual
+// root cause of the CI-only flake in TestAgentReportAgentIDConflictReturns409:
+// a deferred transaction that reads before it writes (exactly agentReport's
+// shape) can fail with an extended SQLite result code — SQLITE_BUSY_SNAPSHOT
+// or SQLITE_LOCKED_SHAREDCACHE — rather than the primary SQLITE_BUSY/
+// SQLITE_LOCKED codes. A probe reproducing agentReport's transaction pattern
+// against a real modernc.org/sqlite database confirmed both extended codes
+// occur in practice, not just in theory. store.sqliteBusyOrLocked must mask
+// the extended bits so store.WithTxRetry still retries instead of letting
+// the error escape as a 500.
+func TestAgentReportRetriesExtendedContentionCodesThenSucceeds(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		code int
+	}{
+		{"SQLITE_BUSY_SNAPSHOT", sqliteBusySnapshotCode},
+		{"SQLITE_LOCKED_SHAREDCACHE", sqliteLockedSharedCacheCode},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			remaining := 1
+			d, db, _ := agentDepsWithFake(t, fakeAgentRepo{busyRemaining: &remaining, busyCode: tt.code})
+
+			rec := postReportDirect(d, baseReport())
+			if rec.Code != http.StatusOK {
+				t.Fatalf("report with one %s failure = %d, want 200 (body %s)", tt.name, rec.Code, rec.Body)
+			}
+			if remaining != 0 {
+				t.Fatalf("busyRemaining = %d after the call, want 0 (the fake must have been made to fail once, then delegate)", remaining)
+			}
+
+			var hostCount int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM hosts`).Scan(&hostCount); err != nil {
+				t.Fatalf("count hosts: %v", err)
+			}
+			if hostCount != 1 {
+				t.Fatalf("hosts = %d after a retried-then-successful report, want exactly 1", hostCount)
+			}
+		})
 	}
 }
 
