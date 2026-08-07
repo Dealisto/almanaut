@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// HostFacts are the scalar facts that do not need cgroup interpretation.
+// HostFacts are OS, kernel version, virtualization kind, and system uptime.
 type HostFacts struct {
 	OS            string
 	Kernel        string
@@ -92,22 +92,32 @@ var vmVendorMarkers = []string{
 // plain `docker run` — has no /run/systemd/container marker at all, but its
 // init process is always in a namespaced cgroup path naming the runtime.
 func detectVirtKind(r Root) string {
-	// The marker's value names the runtime (lxc, docker, podman…), but any
-	// value at all means "in a container", so the map is a readability aid
-	// rather than a gate.
 	if marker := readTrimmed(r.Path(r.Run, "systemd/container")); marker != "" {
-		_ = containerRuntimes[strings.ToLower(marker)]
 		return "lxc"
 	}
 	initCgroup := strings.ToLower(readTrimmed(r.Path(r.Proc, "1/cgroup")))
-	for runtime := range containerRuntimes {
-		if strings.Contains(initCgroup, "/"+runtime) {
+
+	// Check for container runtimes by matching path segments, not raw substrings.
+	// This avoids false positives: systemd unit names like "lxcbackup.service"
+	// would match "/lxc" in "/system.slice/lxcbackup.service" with a substring check.
+	// We match either exact segments ("docker") or scope prefixes ("docker-<id>.scope").
+	segments := strings.Split(initCgroup, "/")
+	for _, segment := range segments {
+		segment = strings.TrimSpace(segment)
+		if segment == "" {
+			continue
+		}
+		for runtime := range containerRuntimes {
+			if segment == runtime || strings.HasPrefix(segment, runtime+"-") {
+				return "lxc"
+			}
+		}
+		// Kubernetes pods are always containers, detected as whole-segment containment.
+		if strings.Contains(segment, "kubepods") {
 			return "lxc"
 		}
 	}
-	if strings.Contains(initCgroup, "kubepods") {
-		return "lxc"
-	}
+
 	for _, file := range []string{"class/dmi/id/product_name", "class/dmi/id/sys_vendor"} {
 		v := strings.ToLower(readTrimmed(r.Path(r.Sys, file)))
 		for _, marker := range vmVendorMarkers {

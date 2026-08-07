@@ -107,6 +107,31 @@ func TestDetectVirtKind(t *testing.T) {
 			files: map[string]string{"sys/class/dmi/id/sys_vendor": "ASUSTeK COMPUTER INC.\n"},
 			want:  "physical",
 		},
+		{
+			name:  "systemd unit lxcbackup.service is not a container",
+			files: map[string]string{"proc/1/cgroup": "0::/system.slice/lxcbackup.service\n"},
+			want:  "physical",
+		},
+		{
+			name:  "systemd unit dockerize.service is not a container",
+			files: map[string]string{"proc/1/cgroup": "0::/system.slice/dockerize.service\n"},
+			want:  "physical",
+		},
+		{
+			name:  "real docker container with scope format",
+			files: map[string]string{"proc/1/cgroup": "0::/docker-abc123def456.scope\n"},
+			want:  "lxc",
+		},
+		{
+			name:  "lxc container with payload format",
+			files: map[string]string{"proc/1/cgroup": "0::/lxc.payload/lxc-container-123\n"},
+			want:  "lxc",
+		},
+		{
+			name:  "kubernetes pod in kubepods slice",
+			files: map[string]string{"proc/1/cgroup": "0::/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pod123.slice\n"},
+			want:  "lxc",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
