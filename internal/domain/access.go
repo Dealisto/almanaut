@@ -35,13 +35,19 @@ type Scope string
 const (
 	ScopeReadOnly  Scope = "read-only"
 	ScopeReadWrite Scope = "read-write"
+	// ScopeAgent is the inventory agent's report-only ceiling: it authenticates
+	// POST /api/agent/report and nothing else. It deliberately fails CanWrite so
+	// the generic entity API stays closed to it.
+	ScopeAgent Scope = "agent"
 )
 
 // Scopes lists the valid token scopes (for form selectors).
-var Scopes = []Scope{ScopeReadWrite, ScopeReadOnly}
+var Scopes = []Scope{ScopeReadWrite, ScopeReadOnly, ScopeAgent}
 
 // Valid reports whether s is one of the built-in scopes.
-func (s Scope) Valid() bool { return s == ScopeReadOnly || s == ScopeReadWrite }
+func (s Scope) Valid() bool {
+	return s == ScopeReadOnly || s == ScopeReadWrite || s == ScopeAgent
+}
 
 // CanWrite reports whether a token with this scope may perform mutations.
 func (s Scope) CanWrite() bool { return s == ScopeReadWrite }

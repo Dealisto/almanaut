@@ -69,6 +69,50 @@ func TestWithTxBoundRepoIsolatedUntilCommit(t *testing.T) {
 	}
 }
 
+// fakeCodedError exposes the same structural Code() int method
+// *sqlite.Error does, letting a test simulate any SQLite result code
+// (including extended variants) without a real locked database.
+type fakeCodedError struct{ code int }
+
+func (e fakeCodedError) Error() string { return "simulated sqlite error" }
+func (e fakeCodedError) Code() int     { return e.code }
+
+// TestSqliteBusyOrLockedRecognizesExtendedCodes pins the regression this
+// package's flaky agent-report test exposed: a deferred transaction that
+// reads before it writes can fail with the extended SQLITE_BUSY_SNAPSHOT
+// (517) rather than plain SQLITE_BUSY (5) — see sqliteBusyOrLocked's doc
+// comment for how that was confirmed. Every extended variant of BUSY/LOCKED
+// must be classified as transient contention, not just the two primary
+// codes.
+func TestSqliteBusyOrLockedRecognizesExtendedCodes(t *testing.T) {
+	const (
+		sqliteBusySnapshot      = 517 // SQLITE_BUSY | (2<<8)
+		sqliteLockedSharedCache = 262 // SQLITE_LOCKED | (1<<8)
+		sqliteBusy              = 5
+		sqliteLocked            = 6
+		sqliteConstraintUnique  = 2067 // unrelated code: must stay unrecognized
+	)
+	tests := []struct {
+		name string
+		code int
+		want bool
+	}{
+		{"plain SQLITE_BUSY", sqliteBusy, true},
+		{"plain SQLITE_LOCKED", sqliteLocked, true},
+		{"SQLITE_BUSY_SNAPSHOT", sqliteBusySnapshot, true},
+		{"SQLITE_LOCKED_SHAREDCACHE", sqliteLockedSharedCache, true},
+		{"unrelated SQLITE_CONSTRAINT_UNIQUE", sqliteConstraintUnique, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sqliteBusyOrLocked(fakeCodedError{code: tt.code})
+			if got != tt.want {
+				t.Fatalf("sqliteBusyOrLocked(code=%d) = %v, want %v", tt.code, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestWithTxPanicRollsBack(t *testing.T) {
 	db := newTestDB(t)
 	panicked := false

@@ -188,6 +188,30 @@ func TestEntitySchemaReflection(t *testing.T) {
 	}
 }
 
+// The agent endpoint must appear in the generated spec: the document is
+// advertised as describing every route.
+func TestOpenAPIIncludesAgentReport(t *testing.T) {
+	h := newTestServer(t)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/openapi.json", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var doc struct {
+		Paths map[string]map[string]any `json:"paths"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	op, ok := doc.Paths["/api/agent/report"]
+	if !ok {
+		t.Fatalf("spec paths missing /api/agent/report (have %d paths)", len(doc.Paths))
+	}
+	if _, ok := op["post"]; !ok {
+		t.Fatalf("/api/agent/report has no post operation: %v", op)
+	}
+}
+
 func TestJSONFieldNameSkipsAndFallsBack(t *testing.T) {
 	type sample struct {
 		Kept    string `json:"kept"`
@@ -211,6 +235,25 @@ func TestJSONFieldNameSkipsAndFallsBack(t *testing.T) {
 		c := cases[f.Name]
 		if skip != c.skip || (!skip && name != c.want) {
 			t.Errorf("%s: got (%q,%v), want (%q,%v)", f.Name, name, skip, c.want, c.skip)
+		}
+	}
+}
+
+// TestAPIDocsPageIncludesAgentReport guards the human-readable docs page
+// against the same omission the generated OpenAPI spec had to be fixed for:
+// the agent endpoint is not an entity route, so it needs its own hand-added
+// section in buildAPIDocs rather than being picked up by the catalog loop.
+func TestAPIDocsPageIncludesAgentReport(t *testing.T) {
+	h := newTestServer(t)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/docs", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{"/api/agent/report", "AgentReport"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("docs page missing %q", want)
 		}
 	}
 }

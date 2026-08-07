@@ -169,3 +169,47 @@ func TestUserRoleColumnBackfillsAdmin(t *testing.T) {
 		t.Fatalf("legacy role = %q, want admin (no silent privilege loss)", role)
 	}
 }
+
+// TestAgentTablesCreated locks the 0035 schema: the agent binding lives in its
+// own table so that the hourly heartbeat never becomes a host field diff.
+func TestAgentTablesCreated(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+	if err := Migrate(db, dbPath); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	for _, table := range []string{"host_agents", "agent_reports"} {
+		var name string
+		err := db.QueryRow(
+			`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, table,
+		).Scan(&name)
+		if err != nil {
+			t.Fatalf("table %q missing: %v", table, err)
+		}
+	}
+	// A second agent claiming the same agent_id must violate the UNIQUE index.
+	if _, err := db.Exec(
+		`INSERT INTO hosts (name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height, check_address)
+		 VALUES ('a','physical','','','','','', '[]', '', 0, 0, 0, '')`); err != nil {
+		t.Fatalf("insert host a: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO hosts (name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height, check_address)
+		 VALUES ('b','physical','','','','','', '[]', '', 0, 0, 0, '')`); err != nil {
+		t.Fatalf("insert host b: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO host_agents (host_id, agent_id, fingerprint, last_seen) VALUES (1,'uuid-1','fp','t')`,
+	); err != nil {
+		t.Fatalf("first binding: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO host_agents (host_id, agent_id, fingerprint, last_seen) VALUES (2,'uuid-1','fp','t')`,
+	); err == nil {
+		t.Fatal("duplicate agent_id was accepted, want UNIQUE violation")
+	}
+}
