@@ -1,0 +1,18 @@
+# Hourly inventory reporting, with jitter.
+#
+# RandomizedDelaySec is not decoration: without it every machine installed from
+# the same script reports on the same second of the hour, and a fleet turns
+# into a synchronized thundering herd against one small server.
+[Unit]
+Description=Hourly almanaut inventory report
+Documentation=https://github.com/Dealisto/almanaut
+
+[Timer]
+Unit=almanaut-agent.service
+OnBootSec=2min
+OnUnitActiveSec=1h
+RandomizedDelaySec=5min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
