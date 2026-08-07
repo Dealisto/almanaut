@@ -6,6 +6,8 @@ package packaging
 
 import (
 	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -123,5 +125,45 @@ func TestTimerTargetsTheService(t *testing.T) {
 	lines := sectionLines(timer, "[Timer]")
 	if !containsDirective(lines, "Unit=almanaut-agent.service") {
 		t.Errorf("timer is missing %q in [Timer] section", "Unit=almanaut-agent.service")
+	}
+}
+
+// The installer writes a file containing an API token, so its permissions and
+// its refusal to clobber an existing config are the two properties that matter.
+func TestInstallerProtectsTheConfig(t *testing.T) {
+	script := readFile(t, "install.sh")
+	for _, want := range []string{
+		"chmod 600", // the config holds a token
+		"chmod 700", // so does its directory
+		"systemctl daemon-reload",
+		"systemctl enable --now almanaut-agent.timer",
+	} {
+		if !strings.Contains(script, want) {
+			t.Errorf("install.sh is missing %q", want)
+		}
+	}
+	// Re-running the installer during an upgrade must not blank a token the
+	// operator pasted by hand, so the write must be guarded by an existence
+	// check rather than being unconditional.
+	if !strings.Contains(script, "if [ -f \"$CONFIG_FILE\" ]") {
+		t.Errorf("install.sh does not guard against overwriting an existing config:\n%s", script)
+	}
+}
+
+// A syntax error in a shell script only surfaces when an operator runs it on a
+// real machine, which is the worst possible moment. `sh -n` parses without
+// executing. Linux-only: this is where the script runs and where CI runs.
+//
+// This is not a command-injection vector, despite the shape: all three
+// arguments are compile-time constants, there is no `-c` and nothing is
+// interpolated, so no shell parsing of untrusted input occurs. `-n` also means
+// sh only parses and never executes the file.
+func TestInstallerParses(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("sh is not available on this platform; CI runs this check on Linux")
+	}
+	out, err := exec.Command("sh", "-n", "install.sh").CombinedOutput()
+	if err != nil {
+		t.Fatalf("sh -n install.sh failed: %v\n%s", err, out)
 	}
 }
