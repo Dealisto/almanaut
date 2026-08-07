@@ -72,11 +72,15 @@ validate_config_value() {
 		echo "install.sh: $name contains a backslash, which the agent's config parser rejects" >&2
 		exit 1
 	fi
-	if echo "$value" | grep -q '
-'; then
+	# Detect newlines using case: a pattern built from * cannot match a newline,
+	# so if the value contains one, it will not match the pattern and we fall through.
+	case "$value" in
+	*"
+"*)
 		echo "install.sh: $name contains a newline" >&2
 		exit 1
-	fi
+		;;
+	esac
 }
 if [ -n "$SERVER_URL" ]; then
 	validate_config_value "SERVER_URL" "$SERVER_URL"

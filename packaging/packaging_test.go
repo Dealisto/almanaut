@@ -7,6 +7,7 @@ package packaging
 import (
 	"os"
 	"os/exec"
+	"os/user"
 	"runtime"
 	"strings"
 	"testing"
@@ -163,9 +164,10 @@ func TestInstallerProtectsTheConfig(t *testing.T) {
 	// Re-running the installer during an upgrade must not blank a token the
 	// operator pasted by hand, so the write must be guarded by an existence
 	// check rather than being unconditional. Check that printf (the write)
-	// appears after the guard.
-	guardIdx := strings.Index(script, "if [ -f \"$CONFIG_FILE\" ]")
-	printfIdx := strings.Index(script, "printf")
+	// appears after the guard. Use stripped text to avoid spurious fails from
+	// comments mentioning printf before the guard.
+	guardIdx := strings.Index(scriptNoComments, "if [ -f \"$CONFIG_FILE\" ]")
+	printfIdx := strings.Index(scriptNoComments, "printf")
 	if guardIdx == -1 {
 		t.Errorf("install.sh does not guard against overwriting an existing config (missing 'if [ -f')")
 	}
@@ -186,6 +188,7 @@ func TestInstallerValidatesConfigValues(t *testing.T) {
 	requiredValidation := []string{
 		"grep -q '\"'",   // reject double-quote
 		"grep -q '\\\\'", // reject backslash
+		"case",           // detect newlines using case, not grep with embedded newline
 		"validate_config_value",
 	}
 	for _, want := range requiredValidation {
@@ -194,13 +197,69 @@ func TestInstallerValidatesConfigValues(t *testing.T) {
 		}
 	}
 	// Verify that validation is called for both SERVER_URL and TOKEN.
-	if !strings.Contains(script, "validate_config_value") {
-		t.Errorf("install.sh missing validate_config_value function")
-	}
-	// Check that the function is actually invoked on both values.
-	if !strings.Contains(script, "validate_config_value") ||
-		strings.Count(script, "validate_config_value") < 2 {
+	if strings.Count(script, "validate_config_value") < 2 {
 		t.Errorf("install.sh must call validate_config_value for both SERVER_URL and TOKEN")
+	}
+}
+
+// TestInstallerBehavior runs the installer for real to verify that validation
+// actually works. Running as a non-root user is safe: the script fails at the
+// root check, so no installation occurs. This catches regressions like the
+// broken newline check that would reject every value.
+func TestInstallerBehavior(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("sh is not available on this platform; CI runs this check on Linux")
+	}
+	currentUser, err := user.Current()
+	if err != nil {
+		t.Fatalf("failed to get current user: %v", err)
+	}
+	if currentUser.Uid == "0" {
+		t.Skip("test must run as non-root; it validates by attempting an unprivileged install")
+	}
+
+	// Valid values should pass validation and fail on the root check, not validation.
+	out, err := exec.Command("sh", "install.sh", "--server", "https://alm.lan", "--token", "alm_abc123").CombinedOutput()
+	if err == nil {
+		t.Fatalf("script should fail (no root): %s", out)
+	}
+	outStr := string(out)
+	if !strings.Contains(outStr, "must run as root") {
+		t.Fatalf("expected 'must run as root' error, got: %s", outStr)
+	}
+	if strings.Contains(outStr, "validation") || strings.Contains(outStr, "double-quote") ||
+		strings.Contains(outStr, "backslash") || strings.Contains(outStr, "newline") {
+		t.Fatalf("legitimate values should pass validation, got: %s", outStr)
+	}
+
+	// Token with double-quote should fail validation before the root check.
+	out, err = exec.Command("sh", "install.sh", "--token", `alm_"bad`).CombinedOutput()
+	if err == nil {
+		t.Fatalf("token with double-quote should fail validation: %s", out)
+	}
+	outStr = string(out)
+	if !strings.Contains(outStr, "double-quote") {
+		t.Fatalf("expected validation error for double-quote, got: %s", outStr)
+	}
+
+	// Token with backslash should fail validation.
+	out, err = exec.Command("sh", "install.sh", "--token", `alm_\bad`).CombinedOutput()
+	if err == nil {
+		t.Fatalf("token with backslash should fail validation: %s", out)
+	}
+	outStr = string(out)
+	if !strings.Contains(outStr, "backslash") {
+		t.Fatalf("expected validation error for backslash, got: %s", outStr)
+	}
+
+	// Token with newline should fail validation.
+	out, err = exec.Command("sh", "install.sh", "--token", "alm_bad\nmore").CombinedOutput()
+	if err == nil {
+		t.Fatalf("token with newline should fail validation: %s", out)
+	}
+	outStr = string(out)
+	if !strings.Contains(outStr, "newline") {
+		t.Fatalf("expected validation error for newline, got: %s", outStr)
 	}
 }
 
