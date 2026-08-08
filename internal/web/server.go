@@ -717,7 +717,7 @@ func New(cfg Config) http.Handler {
 			r.Get("/discovery/proxmox", scanProxmox(proxmox, hosts, pveOpts))
 			r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts, db))
 			r.Post("/certificates/{id}/probe", probeCertificate(cat, cfg.CertProber, certificates))
-			r.Post("/hosts/{id}/agent/unbind", unbindAgent(deps, agents))
+			r.Post("/hosts/{id}/agent/unbind", unbindAgent(deps, agents, hosts))
 		})
 	})
 

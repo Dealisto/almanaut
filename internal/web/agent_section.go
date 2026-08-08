@@ -150,11 +150,11 @@ func duplicatesOf(h domain.Host, agents *store.AgentRepo, hosts *store.HostRepo,
 			continue
 		}
 		reason := ""
-		switch {
+		switch ip := sharedIP(ips, other.IPs); {
 		case discovery.NormalizeName(other.Name) == name:
 			reason = "same name"
-		case sharedIP(ips, other.IPs) != "":
-			reason = "shares " + sharedIP(ips, other.IPs)
+		case ip != "":
+			reason = "shares " + ip
 		default:
 			continue
 		}

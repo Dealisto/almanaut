@@ -85,6 +85,34 @@ func TestUnbindWithNoBindingRedirectsAndWritesNoHistory(t *testing.T) {
 	}
 }
 
+// A binding read that fails for a reason other than "no binding exists" (here,
+// a dropped table standing in for a scan or driver error) must not let the
+// delete proceed: a changelog entry naming no agent would look like a record
+// of what happened while actually recording nothing.
+func TestUnbindReadFailureWritesNoChangelogEntry(t *testing.T) {
+	h, db, id := unbindFixture(t)
+	admin := seedUserAndLogin(t, h, db, "admin", domain.RoleAdmin)
+
+	if _, err := db.Exec(`DROP TABLE host_agents`); err != nil {
+		t.Fatalf("drop host_agents: %v", err)
+	}
+
+	rec := csrfPostRec(t, h, admin, unbindPath(id), "")
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500 when the binding read fails (body %s)", rec.Code, rec.Body)
+	}
+
+	var n int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM changelog WHERE entity_type='host' AND entity_id=?`, id,
+	).Scan(&n); err != nil {
+		t.Fatalf("count changelog: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("changelog rows = %d, want 0 — a failed read must not produce a hollow history entry", n)
+	}
+}
+
 func TestUnbindRejectsAViewer(t *testing.T) {
 	h, db, id := unbindFixture(t)
 	viewer := seedUserAndLogin(t, h, db, "viewer", domain.RoleViewer)

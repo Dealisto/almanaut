@@ -626,6 +626,11 @@ a second host with the same name and addresses instead.
 
 ### Recovering from a duplicate
 
+The order below matters: unbind before you delete. A bound host is excluded
+from adoption candidates, so if the redundant record is deleted first while
+the kept record is still bound, the next report finds no name match and
+creates a *third* host instead of re-adopting the one you kept.
+
 1. On the **record you want to keep** (typically the older one, with the
    history you care about), click **Unbind agent**. This only removes the
    stale binding; the host record, its tags, notes, and history are

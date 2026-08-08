@@ -145,8 +145,9 @@
   <h2>Agent</h2>
   {{if .ConflictAt}}
   <div class="error">
-    <strong>Conflict:</strong> agent <code>{{.AgentID}}</code> last reported under a different hostname
-    (<code>{{.ConflictHostname}}</code>) at {{.ConflictAt}}. Verify this isn't two machines sharing one agent identity.
+    <strong>Conflict:</strong> a report from <code>{{.ConflictHostname}}</code> was rejected at {{.ConflictAt}} —
+    it used this host's agent id (<code>{{.AgentID}}</code>) but is a different machine. Verify this isn't two
+    machines sharing one agent identity.
   </div>
   {{end}}
   {{if .Duplicates}}
