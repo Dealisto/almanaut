@@ -75,12 +75,15 @@ func stripShellComments(content string) string {
 // agent — or a bug in it — can reach. Each must appear in the [Service]
 // section, not accidentally placed under [Unit].
 //
-// ProtectControlGroups and RestrictAddressFamilies are checked here as exact
-// strings (not just presence, via containsDirective) because their *values*
-// are load-bearing: ProtectControlGroups must stay false (see the comment in
-// the unit file) and RestrictAddressFamilies must include AF_NETLINK (see
-// finding 1) or a syntactically-valid edit can silently break either
-// property while every other check here stays green.
+// Every entry below is matched by the same exact-line equality
+// (containsDirective); none is checked more strictly than another. What sets
+// CapabilityBoundingSet, ProtectControlGroups and RestrictAddressFamilies
+// apart is that their *values* carry the meaning, not just their presence:
+// an empty CapabilityBoundingSet must stay empty (dropping the line entirely
+// reverts to systemd's unrestricted default), ProtectControlGroups must stay
+// false (see the comment in the unit file), and RestrictAddressFamilies must
+// include AF_NETLINK (see finding 1) — so each is listed with its full,
+// exact right-hand side rather than as a bare directive name.
 func TestServiceUnitKeepsItsHardening(t *testing.T) {
 	unit := readFile(t, "systemd/almanaut-agent.service")
 	lines := sectionLines(unit, "[Service]")
@@ -91,6 +94,7 @@ func TestServiceUnitKeepsItsHardening(t *testing.T) {
 		"PrivateTmp=true",
 		"NoNewPrivileges=true",
 		"StateDirectory=almanaut-agent",
+		"CapabilityBoundingSet=",
 		"ProtectControlGroups=false",
 		"RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK",
 	}
