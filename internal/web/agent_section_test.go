@@ -35,6 +35,32 @@ func TestAgentSectionUnboundHostStillRenders(t *testing.T) {
 	}
 }
 
+// A binding lookup that fails for a reason other than "no binding exists" —
+// here, a closed database connection standing in for a transient backend
+// error — must not render the same as a confirmed absence of an agent: the
+// panel needs to say the status is unknown, not assert "no agent" to an
+// operator who may have installed one.
+func TestAgentSectionFlagsALookupFailureDistinctlyFromUnbound(t *testing.T) {
+	db := rbacDB(t)
+	hr := store.NewHostRepo(db)
+	if _, err := hr.Create(domain.Host{Name: "nas01", Type: "physical"}); err != nil {
+		t.Fatalf("create host: %v", err)
+	}
+	agents := store.NewAgentRepo(db)
+	db.Close()
+
+	sec := agentSectionFor(agents, hr, entityCatalog{})(domain.Host{ID: 1, Name: "nas01"})
+	if sec == nil {
+		t.Fatal("section is nil after a lookup failure; the host page must still render")
+	}
+	if sec.Bound {
+		t.Fatalf("Bound = true after a lookup failure: %+v", sec)
+	}
+	if !sec.StatusUnavailable {
+		t.Fatalf("StatusUnavailable = false, want true when the binding lookup itself failed: %+v", sec)
+	}
+}
+
 func TestAgentSectionShowsBindingAndReport(t *testing.T) {
 	agents, hosts := agentSectionDB(t, domain.Host{Name: "nas01", Type: "physical"})
 	if err := agents.Upsert(store.AgentBinding{

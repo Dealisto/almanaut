@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -33,9 +34,12 @@ type duplicateHostView struct {
 // agentSection is the host detail page's agent panel: whether the host has a
 // reporting agent, its latest report (when one parsed), any outstanding
 // clone conflict, and any other host record that looks like the same
-// machine.
+// machine. StatusUnavailable is set instead of Bound when the binding lookup
+// itself failed, so the panel can say the agent status is unknown rather
+// than assert an absence it never confirmed.
 type agentSection struct {
 	Bound                        bool
+	StatusUnavailable            bool
 	AgentID, LastSeen            string
 	AgentVersion, Kernel, Uptime string
 	Disks                        []agentDiskView
@@ -51,18 +55,27 @@ func agentSectionFor(agents *store.AgentRepo, hosts *store.HostRepo, cat entityC
 	return func(h domain.Host) *agentSection {
 		sec := &agentSection{}
 
-		// ErrNotFound means the host has no agent, which is the normal,
-		// common case. Any other error is a database hiccup: rather than
-		// fail the whole host page over it, fall back to the same
-		// unbound-looking section — "no agent" is a survivable inaccuracy,
-		// a 500 is not.
-		if binding, err := agents.ByHostID(h.ID); err == nil {
+		binding, err := agents.ByHostID(h.ID)
+		switch {
+		case err == nil:
 			sec.Bound = true
 			sec.AgentID = binding.AgentID
 			sec.LastSeen = binding.LastSeen
 			sec.ConflictAt = binding.LastConflictAt
 			sec.ConflictHostname = binding.LastConflictHostname
 			fillReport(sec, agents, h.ID)
+		case errors.Is(err, store.ErrNotFound):
+			// The host genuinely has no binding. This is the common case and
+			// not a failure: the section stays unbound so the panel can
+			// explain how to install the agent.
+		default:
+			// The lookup itself failed (e.g. a transient SQLite lock), which
+			// is not the same fact as "no binding exists". Rendering it as a
+			// plain "no agent" would mislead an operator who installed one
+			// and has nothing telling them the check didn't run. Flagging it
+			// instead — rather than failing the whole host page — keeps the
+			// page rendering while being honest that the status is unknown.
+			sec.StatusUnavailable = true
 		}
 
 		sec.Duplicates = duplicatesOf(h, agents, hosts, cat)
@@ -165,10 +178,12 @@ func sharedIP(ips map[string]bool, otherIPs []string) string {
 }
 
 // humanizeUptime renders a duration in seconds as "N day(s), N hour(s),
-// N minute(s)", omitting the leading units that are zero. Seconds are
-// dropped: the panel is for a glance at how long the machine has been up,
-// not a precise timer. A non-positive value (unknown, or the agent hasn't
-// reported one) yields "".
+// N minute(s)", dropping any of the three units that is zero — e.g. a day
+// and a minute with no full hour renders "1 day, 1 minute", not "1 day,
+// 0 hours, 1 minute" — except minutes is always shown when days and hours
+// are both zero. Seconds are dropped entirely: the panel is for a glance at
+// how long the machine has been up, not a precise timer. A non-positive
+// value (unknown, or the agent hasn't reported one) yields "".
 func humanizeUptime(seconds int64) string {
 	if seconds <= 0 {
 		return ""
