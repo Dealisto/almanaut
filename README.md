@@ -481,10 +481,14 @@ each machine to monitor:
 1. Create an **`agent`**-scoped token at **API tokens**
    (`/account/tokens`) — report-only, so a leaked token can't read or
    change anything else in the inventory.
-2. Download and extract the archive for the machine's architecture:
+2. Download and extract the archive for the machine's architecture into a
+   fresh private directory (`tar -C` does not create the target directory,
+   and extracting into a shared, world-writable one such as `/tmp` itself
+   would let another unprivileged user on the box replace the binary or the
+   unit file before the next step installs them as root):
 
    ```bash
-   tar -xzf almanaut-agent_*_linux_amd64.tar.gz -C /tmp/agent && cd /tmp/agent
+   d=$(mktemp -d) && tar -xzf almanaut-agent_*_linux_amd64.tar.gz -C "$d" && cd "$d"
    ```
 
 3. Install and enable it:
@@ -523,7 +527,7 @@ rack placement, tags, relationships, and custom fields — the agent never
 writes at all.
 
 **`ips` is replaced, not merged**, exactly as described under
-[API tokens](#api-tokens) above: an out-of-band management address such as
+[API tokens](#api-tokens) below: an out-of-band management address such as
 IPMI, iDRAC, or iLO is invisible from inside the OS, so it disappears from
 the host record on the very first agent report. That warning applies in
 full here — an agent-managed host is exactly where it bites.

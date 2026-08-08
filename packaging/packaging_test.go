@@ -74,6 +74,13 @@ func stripShellComments(content string) string {
 // directives is load-bearing. Losing one silently widens what a compromised
 // agent — or a bug in it — can reach. Each must appear in the [Service]
 // section, not accidentally placed under [Unit].
+//
+// ProtectControlGroups and RestrictAddressFamilies are checked here as exact
+// strings (not just presence, via containsDirective) because their *values*
+// are load-bearing: ProtectControlGroups must stay false (see the comment in
+// the unit file) and RestrictAddressFamilies must include AF_NETLINK (see
+// finding 1) or a syntactically-valid edit can silently break either
+// property while every other check here stays green.
 func TestServiceUnitKeepsItsHardening(t *testing.T) {
 	unit := readFile(t, "systemd/almanaut-agent.service")
 	lines := sectionLines(unit, "[Service]")
@@ -84,7 +91,8 @@ func TestServiceUnitKeepsItsHardening(t *testing.T) {
 		"PrivateTmp=true",
 		"NoNewPrivileges=true",
 		"StateDirectory=almanaut-agent",
-		"CapabilityBoundingSet=CAP_SYS_PTRACE",
+		"ProtectControlGroups=false",
+		"RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK",
 	}
 	for _, directive := range required {
 		if !containsDirective(lines, directive) {
@@ -93,9 +101,9 @@ func TestServiceUnitKeepsItsHardening(t *testing.T) {
 	}
 }
 
-// StateDirectory is what makes /var/lib/almanaut-agent writable under
-// ProtectSystem=strict. Without it the agent cannot persist its identity and
-// would generate a new one every hour, creating a duplicate host each time.
+// The service must exec the installed binary at its fixed, absolute path
+// rather than something resolved from $PATH or a relative location, since
+// systemd runs it with none of the invoking shell's environment.
 func TestServiceUnitRunsTheInstalledBinary(t *testing.T) {
 	unit := readFile(t, "systemd/almanaut-agent.service")
 	lines := sectionLines(unit, "[Service]")
@@ -179,25 +187,56 @@ func TestInstallerProtectsTheConfig(t *testing.T) {
 	}
 }
 
+// A world-writable working directory (e.g. /tmp itself, or a directory
+// another unprivileged user pre-created there) lets that user replace
+// ./almanaut-agent or a unit file between the installer's -f existence
+// checks and its install calls, which run as root. The installer must
+// refuse to run from one instead of relying on the documentation alone.
+func TestInstallerRefusesWorldWritableDirectory(t *testing.T) {
+	script := readFile(t, "install.sh")
+	scriptNoComments := stripShellComments(script)
+	if !strings.Contains(scriptNoComments, "cut -c9") {
+		t.Errorf("install.sh does not check the working directory's world-write bit (missing 'cut -c9', not counting comments)")
+	}
+	if !strings.Contains(scriptNoComments, "world-writable") {
+		t.Errorf("install.sh does not report a clear world-writable-directory error (not counting comments)")
+	}
+}
+
 // The installer must validate that SERVER_URL and TOKEN contain no characters
 // that would corrupt the TOML config or enable shell injection.
+//
+// This asserts against the comment-stripped script, not the raw text: an
+// earlier version of this test matched raw text, so moving the real checks
+// into a comment (or deleting them) while leaving a description behind would
+// still pass. `echo "$value" | grep -q '\'` is deliberately not required
+// here (and must not appear in real code): under an XSI-conformant echo —
+// dash's builtin, which is /bin/sh on Debian/Ubuntu and ubuntu-latest — echo
+// itself interprets the backslash escape before grep ever sees it, so that
+// check never fires. See TestInstallerBehavior for the case that guards this.
 func TestInstallerValidatesConfigValues(t *testing.T) {
 	script := readFile(t, "install.sh")
+	scriptNoComments := stripShellComments(script)
 	// Check that validation exists (the script must contain the validation logic).
 	// These are the dangerous characters that must be rejected.
 	requiredValidation := []string{
-		"grep -q '\"'",   // reject double-quote
-		"grep -q '\\\\'", // reject backslash
-		"case",           // detect newlines using case, not grep with embedded newline
+		`*'"'*`, // reject double-quote via case, not echo | grep
+		`*'\'*`, // reject backslash via case, not echo | grep
+		"case",  // detect newlines using case, not grep with embedded newline
 		"validate_config_value",
 	}
 	for _, want := range requiredValidation {
-		if !strings.Contains(script, want) {
-			t.Errorf("install.sh is missing validation check for %q", want)
+		if !strings.Contains(scriptNoComments, want) {
+			t.Errorf("install.sh is missing validation check for %q (not counting comments)", want)
 		}
 	}
+	// The vulnerable pattern must not appear anywhere, including in a
+	// comment restating the old approach as something still done.
+	if strings.Contains(scriptNoComments, "grep -q '\\\\'") || strings.Contains(scriptNoComments, `echo "$value" | grep`) {
+		t.Errorf("install.sh must not validate via echo | grep (backslash escaping breaks under dash's XSI echo)")
+	}
 	// Verify that validation is called for both SERVER_URL and TOKEN.
-	if strings.Count(script, "validate_config_value") < 2 {
+	if strings.Count(scriptNoComments, "validate_config_value") < 2 {
 		t.Errorf("install.sh must call validate_config_value for both SERVER_URL and TOKEN")
 	}
 }

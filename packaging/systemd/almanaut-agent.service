@@ -27,17 +27,12 @@ ProtectHome=true
 PrivateTmp=true
 NoNewPrivileges=true
 PrivateDevices=true
-# The agent reads /proc, /sys, and /etc files (no capabilities needed for these).
-# However, it reads /proc/1/environ to detect Alpine/OpenRC containers on Proxmox
-# under private cgroup namespaces — a signal added to prevent silent data corruption.
-# Access to another process's environ requires CAP_SYS_PTRACE under ptrace_scope=1
-# (Debian/Ubuntu/Proxmox default). Without this capability, container detection
-# falls back to cgroup inspection, which under a private namespace returns "0::/"
-# with no runtime marker, causing the agent to misclassify the container as physical
-# and report the host's block devices as its own — exactly the bug this signal was
-# added to prevent. Granting only this one capability ensures nothing else can be
-# done with root.
-CapabilityBoundingSet=CAP_SYS_PTRACE
+# The agent reads /proc, /sys, and /etc files, including /proc/1/environ, all
+# as plain reads performed while running as uid 0 (root reading root's own
+# files, and reading another process's environ needs no capability once the
+# credentials already match). No capability is required for anything the
+# agent does, so the bounding set is left empty.
+CapabilityBoundingSet=
 # Must remain false: the agent inspects /sys/fs/cgroup to determine container
 # resource allocations. Setting this to true would hide cgroups and cause
 # every LXC to silently report the host's values instead.
@@ -48,5 +43,8 @@ RestrictSUIDSGID=true
 RestrictRealtime=true
 LockPersonality=true
 
-# The agent only ever talks to the almanaut server over TCP.
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# The agent talks to the almanaut server over TCP (AF_INET/AF_INET6) and
+# enumerates network interfaces via net.Interfaces(), which on Linux is
+# implemented purely over netlink (AF_NETLINK) — without it, that call fails
+# with EAFNOSUPPORT and every report ships no network addresses at all.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK

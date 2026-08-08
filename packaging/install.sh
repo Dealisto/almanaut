@@ -64,17 +64,26 @@ done
 validate_config_value() {
 	local name="$1"
 	local value="$2"
-	if echo "$value" | grep -q '"'; then
+	# Detect double-quote, backslash and newlines using case, not
+	# `echo | grep`: under an XSI-conformant echo (dash's builtin echo, which
+	# is /bin/sh on Debian/Ubuntu and on ubuntu-latest CI runners), a
+	# backslash in the value is interpreted as an escape by echo itself
+	# before grep ever sees it — so `alm_\bad` becomes `alm_<BS>ad` and the
+	# grep check never fires. In POSIX case patterns, * matches literally and
+	# also matches across newlines, so none of these checks are subject to
+	# that misinterpretation.
+	case "$value" in
+	*'"'*)
 		echo "install.sh: $name contains a double-quote, which would corrupt the TOML config" >&2
 		exit 1
-	fi
-	if echo "$value" | grep -q '\\'; then
+		;;
+	esac
+	case "$value" in
+	*'\'*)
 		echo "install.sh: $name contains a backslash, which the agent's config parser rejects" >&2
 		exit 1
-	fi
-	# Detect newlines using case: in POSIX case patterns, * matches across
-	# newlines, so *"<newline>"* matches any value containing one, triggering
-	# the error branch.
+		;;
+	esac
 	case "$value" in
 	*"
 "*)
@@ -97,6 +106,17 @@ fi
 
 if ! command -v systemctl >/dev/null 2>&1; then
 	echo "install.sh: systemctl not found; this installer targets systemd hosts" >&2
+	exit 1
+fi
+
+# Refuse a world-writable working directory. The documented install flow
+# extracts the archive into a fresh `$(mktemp -d)`, but if it lands somewhere
+# world-writable instead (/tmp itself, or a directory another user
+# pre-created there), any other unprivileged user on the box can replace
+# ./almanaut-agent or ./systemd/almanaut-agent.service between the -f checks
+# below and the install commands that copy them into place as root.
+if [ "$(ls -ld . | cut -c9)" = "w" ]; then
+	echo "install.sh: refusing to run from a world-writable directory ($(pwd)); extract the archive into a private directory first, e.g. d=\$(mktemp -d)" >&2
 	exit 1
 fi
 
