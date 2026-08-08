@@ -202,3 +202,96 @@ func TestRecordReportCrossHostIsolation(t *testing.T) {
 		t.Fatalf("host 2 latest changed to %s, want %s", host2LatestAfter, host2Latest)
 	}
 }
+
+func TestByHostIDReturnsTheBinding(t *testing.T) {
+	r := agentTestDB(t)
+	if _, err := r.ByHostID(1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("ByHostID with no binding = %v, want ErrNotFound", err)
+	}
+	want := AgentBinding{HostID: 1, AgentID: "uuid-1", Fingerprint: "h|aa", LastSeen: "2026-08-07T10:00:00Z"}
+	if err := r.Upsert(want); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	got, err := r.ByHostID(1)
+	if err != nil {
+		t.Fatalf("ByHostID: %v", err)
+	}
+	if got.AgentID != want.AgentID || got.LastSeen != want.LastSeen {
+		t.Fatalf("ByHostID = %+v, want %+v", got, want)
+	}
+	if got.LastConflictAt != "" || got.LastConflictHostname != "" {
+		t.Fatalf("a fresh binding reports a conflict: %+v", got)
+	}
+}
+
+// The handler must distinguish "unbound it" from "there was nothing to unbind",
+// or a double-submitted form reports success twice.
+func TestUnbindRemovesTheBindingAndReportsAbsence(t *testing.T) {
+	r := agentTestDB(t)
+	if err := r.Unbind(1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Unbind with no binding = %v, want ErrNotFound", err)
+	}
+	if err := r.Upsert(AgentBinding{HostID: 1, AgentID: "uuid-1", Fingerprint: "f", LastSeen: "t"}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if err := r.Unbind(1); err != nil {
+		t.Fatalf("Unbind: %v", err)
+	}
+	if _, err := r.ByHostID(1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("binding survived Unbind: %v", err)
+	}
+	// The agent id is free again, which is what makes the host adoptable.
+	if _, err := r.ByAgentID("uuid-1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("agent id still bound after Unbind: %v", err)
+	}
+}
+
+func TestRecordConflictStampsTheBinding(t *testing.T) {
+	r := agentTestDB(t)
+	if err := r.Upsert(AgentBinding{HostID: 1, AgentID: "uuid-1", Fingerprint: "f", LastSeen: "t"}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if err := r.RecordConflict("uuid-1", "web02", "2026-08-07T12:00:00Z"); err != nil {
+		t.Fatalf("RecordConflict: %v", err)
+	}
+	got, err := r.ByHostID(1)
+	if err != nil {
+		t.Fatalf("ByHostID: %v", err)
+	}
+	if got.LastConflictHostname != "web02" || got.LastConflictAt != "2026-08-07T12:00:00Z" {
+		t.Fatalf("conflict not recorded: %+v", got)
+	}
+	// It must not disturb the binding itself — the original machine keeps the host.
+	if got.AgentID != "uuid-1" || got.LastSeen != "t" || got.Fingerprint != "f" {
+		t.Fatalf("RecordConflict altered the binding: %+v", got)
+	}
+}
+
+// An unknown agent id is not an error: the conflict write happens after a
+// rolled-back transaction, so the binding it refers to may legitimately have
+// been removed in between. Failing here would turn a clean 409 into a 500.
+func TestRecordConflictOnUnknownAgentIsNoError(t *testing.T) {
+	r := agentTestDB(t)
+	if err := r.RecordConflict("nobody", "web02", "2026-08-07T12:00:00Z"); err != nil {
+		t.Fatalf("RecordConflict on an unknown agent id = %v, want nil", err)
+	}
+}
+
+// A later successful report must clear the stale conflict, or the panel would
+// warn about a clone forever after the operator fixed it.
+func TestUpsertClearsARecordedConflict(t *testing.T) {
+	r := agentTestDB(t)
+	if err := r.Upsert(AgentBinding{HostID: 1, AgentID: "uuid-1", Fingerprint: "f", LastSeen: "t1"}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if err := r.RecordConflict("uuid-1", "web02", "2026-08-07T12:00:00Z"); err != nil {
+		t.Fatalf("RecordConflict: %v", err)
+	}
+	if err := r.Upsert(AgentBinding{HostID: 1, AgentID: "uuid-1", Fingerprint: "f", LastSeen: "t2"}); err != nil {
+		t.Fatalf("second Upsert: %v", err)
+	}
+	got, _ := r.ByHostID(1)
+	if got.LastConflictAt != "" || got.LastConflictHostname != "" {
+		t.Fatalf("a successful report left the conflict standing: %+v", got)
+	}
+}
