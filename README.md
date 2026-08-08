@@ -463,6 +463,117 @@ optionally keep "Link VMs/LXC to their Proxmox node" checked to create
 "runs on" relationships, and import. Proxmox nodes become `physical` hosts,
 QEMU VMs become `vm` hosts, and LXC containers become `lxc` hosts.
 
+## Inventory agent
+
+`almanaut-agent` is a one-shot binary that reports one machine's own facts —
+hardware, OS, kernel, CPU, RAM, disks, and network addresses — to almanaut,
+run hourly by a systemd timer. It's the push counterpart to
+[auto-discovery](#auto-discovery) above: use it for machines the server
+cannot reach over the network, or where you'd rather not expose the Docker
+socket to cover it by discovery instead.
+
+### Install
+
+Releases publish a Linux-only `almanaut-agent_<version>_linux_<arch>.tar.gz`
+archive (`amd64` and `arm64`), separate from the main `almanaut` binary. On
+each machine to monitor:
+
+1. Create an **`agent`**-scoped token at **API tokens**
+   (`/account/tokens`) — report-only, so a leaked token can't read or
+   change anything else in the inventory.
+2. Download and extract the archive for the machine's architecture into a
+   fresh private directory (`tar -C` does not create the target directory,
+   and extracting into a shared, world-writable one such as `/tmp` itself
+   would let another unprivileged user on the box replace the binary or the
+   unit file before the next step installs them as root):
+
+   ```bash
+   d=$(mktemp -d) && tar -xzf almanaut-agent_*_linux_amd64.tar.gz -C "$d" && cd "$d"
+   ```
+
+3. Install and enable it:
+
+   ```bash
+   sudo ./install.sh --server https://almanaut.lan --token alm_xxx
+   ```
+
+`install.sh` installs the `almanaut-agent` binary, writes
+`/etc/almanaut-agent/config.toml` (root-only, mode 600), installs the
+`almanaut-agent.service`/`.timer` units, and enables the timer: the first
+report fires 2 minutes after boot, then hourly with up to 5 minutes of
+random jitter so a fleet installed from the same script doesn't all hit the
+server in the same second. To report once immediately instead of waiting:
+`sudo systemctl start almanaut-agent.service`.
+
+Re-running `install.sh` — to pick up a new release, for instance — upgrades
+the binary and the units but **never touches an existing config file**: it
+prints `keeping the existing /etc/almanaut-agent/config.toml` and leaves the
+token alone, since rewriting it silently on every upgrade would be a way to
+lose a hand-pasted secret with no obvious cause. `--server`/`--token` can
+also be supplied as `ALMANAUT_SERVER_URL`/`ALMANAUT_AGENT_TOKEN` environment
+variables — worth doing for the token, since a command-line argument is
+visible to every user on the box via `ps` and may end up in shell history.
+
+### What it reports, and what it never touches
+
+Each report replaces the host's `os`, `cpu`, `ram`, `disk`, and `ips` with
+whatever the agent observed; a value it couldn't determine (common inside an
+LXC container without `lxcfs`) is sent empty rather than guessed, and an
+empty value never overwrites an existing one. `name` and `type` are set once
+— from the reported hostname and detected virtualization kind — only when a
+report creates the host; rename it by hand afterwards and it stays renamed.
+Everything else on the host record — `notes`, `status`, `check_address`,
+rack placement, tags, relationships, and custom fields — the agent never
+writes at all.
+
+**`ips` is replaced, not merged**, exactly as described under
+[API tokens](#api-tokens) below: an out-of-band management address such as
+IPMI, iDRAC, or iLO is invisible from inside the OS, so it disappears from
+the host record on the very first agent report. That warning applies in
+full here — an agent-managed host is exactly where it bites.
+
+### Checking on it
+
+- `systemctl list-timers almanaut-agent.timer` — when it last ran and when
+  it runs next.
+- `journalctl -u almanaut-agent.service` — the outcome of the last run; a
+  success line reads `reported host <id>; changed: <fields>`.
+
+The process exit code doubles as a quick diagnosis without opening the logs:
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Accepted |
+| `1` | Config error — bad flags, or an unreadable/incomplete config file |
+| `2` | Rejected — a bad token or a schema version the server doesn't speak; fix the setup, retrying won't help |
+| `3` | Unreachable — a transport failure or a `5xx`; transient, the next hourly run retries on its own |
+| `4` | Conflict — this agent id is already bound to a different host on the server; see `reset-id` below |
+
+### Recovering from a conflict (`reset-id`)
+
+A `409`/exit `4` means the server already has this agent's id bound to a
+different host — the usual cause is a VM cloned or restored from a snapshot
+*after* the agent had already written its identity to
+`/var/lib/almanaut-agent/agent-id`, so both copies now report under the same
+id. Fix it on the **clone**:
+
+```bash
+sudo almanaut-agent reset-id
+```
+
+This discards the stored id and generates a fresh one; the next report (the
+next scheduled run, or `sudo systemctl start almanaut-agent.service` to
+force it) then registers as a new host.
+
+Be aware of a real limitation here: there is currently no way to unbind an
+agent id from a host once the server has accepted it. Run `reset-id` on the
+*original* machine by mistake, or simply lose `/var/lib/almanaut-agent` (a
+reinstalled OS, a restored VM with no persisted state), and the next report
+carries an id the server has never seen — so it does exactly what a genuinely
+new machine would do and **creates a second host record**, with the same
+name and the same addresses as the first. Nothing in almanaut merges or
+retires that duplicate automatically; find it and delete it by hand.
+
 ## Notifications & integrations
 
 ### Expiry notifications (ntfy & Discord)

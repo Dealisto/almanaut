@@ -24,8 +24,28 @@ builds:
       - amd64
       - arm64
 
+  - id: almanaut-agent
+    main: ./cmd/almanaut-agent
+    binary: almanaut-agent
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    # The agent reads /proc, /sys and cgroups; it has no meaning off Linux.
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
 archives:
   - id: default
+    # Without this the archive would also swallow almanaut-agent, and goreleaser
+    # would fail: the two builds target different platform sets, so a shared
+    # archive yields a different binary count per platform.
+    ids: [almanaut]
     formats: [tar.gz]
     # Windows users expect a zip.
     format_overrides:
@@ -33,6 +53,26 @@ archives:
         formats: [zip]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+  - id: agent
+    ids: [almanaut-agent]
+    formats: [tar.gz]
+    # Distinct from the server's template, or the two archives would collide on
+    # linux/amd64 and linux/arm64.
+    name_template: >-
+      almanaut-agent_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    # The installer expects ./almanaut-agent and ./systemd/*.service beside it,
+    # so the layout inside the tarball is part of the contract.
+    files:
+      - src: packaging/install.sh
+        dst: install.sh
+        info:
+          mode: 0755
+      - src: packaging/systemd/*
+        dst: systemd
+        strip_parent: true
+      - LICENSE
+      - README.md
 
 checksum:
   name_template: checksums.txt
