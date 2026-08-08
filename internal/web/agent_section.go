@@ -49,10 +49,12 @@ type agentSection struct {
 }
 
 // agentSectionFor builds the hook closure for the host resource's agent
-// panel, matching the shape of certProbeSection: a builder returning a
-// closure over its repos.
-func agentSectionFor(agents *store.AgentRepo, hosts *store.HostRepo, cat entityCatalog) func(domain.Host) *agentSection {
-	return func(h domain.Host) *agentSection {
+// panel, matching the shape of the children/elevation hooks: the entity
+// catalog does not exist yet when the host resource literal is built (it is
+// itself built from the resource list that includes the host resource), so
+// it is supplied per-call by the detail handler rather than closed over here.
+func agentSectionFor(agents *store.AgentRepo, hosts *store.HostRepo) func(domain.Host, entityCatalog) *agentSection {
+	return func(h domain.Host, cat entityCatalog) *agentSection {
 		sec := &agentSection{}
 
 		binding, err := agents.ByHostID(h.ID)

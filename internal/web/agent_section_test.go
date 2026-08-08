@@ -26,7 +26,7 @@ func agentSectionDB(t *testing.T, hosts ...domain.Host) (*store.AgentRepo, *stor
 
 func TestAgentSectionUnboundHostStillRenders(t *testing.T) {
 	agents, hosts := agentSectionDB(t, domain.Host{Name: "nas01", Type: "physical"})
-	sec := agentSectionFor(agents, hosts, entityCatalog{})(domain.Host{ID: 1, Name: "nas01"})
+	sec := agentSectionFor(agents, hosts)(domain.Host{ID: 1, Name: "nas01"}, entityCatalog{})
 	if sec == nil {
 		t.Fatal("section is nil for an unbound host; the panel must explain how to install the agent")
 	}
@@ -49,7 +49,7 @@ func TestAgentSectionFlagsALookupFailureDistinctlyFromUnbound(t *testing.T) {
 	agents := store.NewAgentRepo(db)
 	db.Close()
 
-	sec := agentSectionFor(agents, hr, entityCatalog{})(domain.Host{ID: 1, Name: "nas01"})
+	sec := agentSectionFor(agents, hr)(domain.Host{ID: 1, Name: "nas01"}, entityCatalog{})
 	if sec == nil {
 		t.Fatal("section is nil after a lookup failure; the host page must still render")
 	}
@@ -79,7 +79,7 @@ func TestAgentSectionShowsBindingAndReport(t *testing.T) {
 		t.Fatalf("RecordReport: %v", err)
 	}
 
-	sec := agentSectionFor(agents, hosts, entityCatalog{})(domain.Host{ID: 1, Name: "nas01"})
+	sec := agentSectionFor(agents, hosts)(domain.Host{ID: 1, Name: "nas01"}, entityCatalog{})
 	if !sec.Bound || sec.AgentID != "uuid-1" || sec.AgentVersion != "1.2.3" {
 		t.Fatalf("binding facts wrong: %+v", sec)
 	}
@@ -110,7 +110,7 @@ func TestAgentSectionSurvivesAnUnparseableReport(t *testing.T) {
 	if err := agents.RecordReport(1, "uuid-1", "t", "1.0.0", 1, []byte("{not json")); err != nil {
 		t.Fatalf("RecordReport: %v", err)
 	}
-	sec := agentSectionFor(agents, hosts, entityCatalog{})(domain.Host{ID: 1, Name: "nas01"})
+	sec := agentSectionFor(agents, hosts)(domain.Host{ID: 1, Name: "nas01"}, entityCatalog{})
 	if sec == nil || !sec.Bound || sec.AgentID != "uuid-1" {
 		t.Fatalf("binding lost when the report was unparseable: %+v", sec)
 	}
@@ -125,7 +125,7 @@ func TestAgentSectionShowsTheConflict(t *testing.T) {
 	if err := agents.RecordConflict("uuid-1", "web02", "2026-08-07T12:00:00Z"); err != nil {
 		t.Fatalf("RecordConflict: %v", err)
 	}
-	sec := agentSectionFor(agents, hosts, entityCatalog{})(domain.Host{ID: 1, Name: "nas01"})
+	sec := agentSectionFor(agents, hosts)(domain.Host{ID: 1, Name: "nas01"}, entityCatalog{})
 	if sec.ConflictHostname != "web02" || sec.ConflictAt == "" {
 		t.Fatalf("conflict not surfaced: %+v", sec)
 	}
@@ -141,7 +141,7 @@ func TestAgentSectionFlagsADuplicateByName(t *testing.T) {
 	_ = agents.Upsert(store.AgentBinding{HostID: 1, AgentID: "old", Fingerprint: "f", LastSeen: "t"})
 	_ = agents.Upsert(store.AgentBinding{HostID: 2, AgentID: "new", Fingerprint: "f", LastSeen: "t"})
 
-	sec := agentSectionFor(agents, hosts, entityCatalog{})(domain.Host{ID: 1, Name: "nas01"})
+	sec := agentSectionFor(agents, hosts)(domain.Host{ID: 1, Name: "nas01"}, entityCatalog{})
 	if len(sec.Duplicates) != 1 || sec.Duplicates[0].ID != 2 {
 		t.Fatalf("duplicates = %+v, want host 2", sec.Duplicates)
 	}
@@ -157,8 +157,8 @@ func TestAgentSectionFlagsADuplicateBySharedIP(t *testing.T) {
 	)
 	_ = agents.Upsert(store.AgentBinding{HostID: 2, AgentID: "new", Fingerprint: "f", LastSeen: "t"})
 
-	sec := agentSectionFor(agents, hosts, entityCatalog{})(
-		domain.Host{ID: 1, Name: "nas01", IPs: []string{"192.168.1.10"}})
+	sec := agentSectionFor(agents, hosts)(
+		domain.Host{ID: 1, Name: "nas01", IPs: []string{"192.168.1.10"}}, entityCatalog{})
 	if len(sec.Duplicates) != 1 || sec.Duplicates[0].ID != 2 {
 		t.Fatalf("duplicates = %+v, want host 2", sec.Duplicates)
 	}
@@ -174,7 +174,7 @@ func TestAgentSectionIgnoresDuplicatesWhenNeitherIsBound(t *testing.T) {
 		domain.Host{Name: "nas01", Type: "physical"},
 		domain.Host{Name: "nas01", Type: "physical"},
 	)
-	sec := agentSectionFor(agents, hosts, entityCatalog{})(domain.Host{ID: 1, Name: "nas01"})
+	sec := agentSectionFor(agents, hosts)(domain.Host{ID: 1, Name: "nas01"}, entityCatalog{})
 	if len(sec.Duplicates) != 0 {
 		t.Fatalf("duplicates = %+v, want none when no agent is involved", sec.Duplicates)
 	}
@@ -183,8 +183,8 @@ func TestAgentSectionIgnoresDuplicatesWhenNeitherIsBound(t *testing.T) {
 func TestAgentSectionNeverListsItself(t *testing.T) {
 	agents, hosts := agentSectionDB(t, domain.Host{Name: "nas01", Type: "physical", IPs: []string{"10.0.0.1"}})
 	_ = agents.Upsert(store.AgentBinding{HostID: 1, AgentID: "uuid-1", Fingerprint: "f", LastSeen: "t"})
-	sec := agentSectionFor(agents, hosts, entityCatalog{})(
-		domain.Host{ID: 1, Name: "nas01", IPs: []string{"10.0.0.1"}})
+	sec := agentSectionFor(agents, hosts)(
+		domain.Host{ID: 1, Name: "nas01", IPs: []string{"10.0.0.1"}}, entityCatalog{})
 	for _, d := range sec.Duplicates {
 		if d.ID == 1 {
 			t.Fatalf("the host listed itself as a duplicate: %+v", sec.Duplicates)

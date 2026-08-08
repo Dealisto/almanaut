@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -17,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Dealisto/almanaut/internal/agentapi"
 	"github.com/Dealisto/almanaut/internal/discovery"
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
@@ -1940,7 +1942,10 @@ func TestDetailPageLayout(t *testing.T) {
 }
 
 // The panel is the only place an operator learns a host is contested, so it
-// has to actually reach the page.
+// has to actually reach the page. It must also render the bound branch's own
+// content (proving the Bound path isn't dead code the conflict block alone
+// would satisfy) and must never leak another host's agent identity onto this
+// one's page.
 func TestHostDetailShowsTheAgentPanel(t *testing.T) {
 	db := rbacDB(t)
 	h := newAuthedTestHandler(t, db)
@@ -1959,12 +1964,42 @@ func TestHostDetailShowsTheAgentPanel(t *testing.T) {
 	if err := agents.RecordConflict("uuid-1", "web02", "2026-08-07T12:00:00Z"); err != nil {
 		t.Fatalf("RecordConflict: %v", err)
 	}
+	rep := agentapi.Report{
+		SchemaVersion: agentapi.SchemaVersion, AgentID: "uuid-1", AgentVersion: "1.2.3",
+		Hostname: "nas01", Kernel: "6.1.0-18-amd64", Uptime: 90061,
+	}
+	payload, err := json.Marshal(rep)
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+	if err := agents.RecordReport(hostID, "uuid-1", "2026-08-07T10:00:00Z", "1.2.3", 1, payload); err != nil {
+		t.Fatalf("RecordReport: %v", err)
+	}
+
+	// A second host with its own, distinct agent binding. With only one host
+	// in the fixture, "rendered for the wrong host" and "rendered correctly"
+	// look identical; this makes them distinguishable.
+	otherID, err := store.NewHostRepo(db).Create(domain.Host{Name: "srv02", Type: "physical"})
+	if err != nil {
+		t.Fatalf("create second host: %v", err)
+	}
+	if err := agents.Upsert(store.AgentBinding{
+		HostID: otherID, AgentID: "uuid-2", Fingerprint: "g", LastSeen: "2026-08-07T11:00:00Z",
+	}); err != nil {
+		t.Fatalf("Upsert second binding: %v", err)
+	}
 
 	body := getWith(t, h, admin, "/hosts/"+strconv.FormatInt(hostID, 10)).Body.String()
-	for _, want := range []string{"uuid-1", "web02"} {
+	// "6.1.0-18-amd64" (the kernel) is only rendered by the Bound branch's
+	// detail grid, so its presence rules out the Bound branch having been
+	// deleted while the conflict warning still passes the test.
+	for _, want := range []string{"uuid-1", "web02", "6.1.0-18-amd64"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("host detail page does not mention %q", want)
 		}
+	}
+	if strings.Contains(body, "uuid-2") {
+		t.Errorf("host 1's page mentions host 2's agent id uuid-2")
 	}
 }
 
@@ -1979,5 +2014,60 @@ func TestHostDetailWithoutAnAgentStillRenders(t *testing.T) {
 	rec := getWith(t, h, admin, "/hosts/"+strconv.FormatInt(hostID, 10))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
+
+// A binding lookup that fails for a reason other than "no binding exists"
+// must render as "status unknown", never as "no agent installed" — that is
+// the entire reason StatusUnavailable exists. It went unread by any renderer
+// after Task 3 introduced it and stayed that way until this task, so this
+// test exercises the actual page render, not just the section builder (which
+// agent_section_test.go's TestAgentSectionFlagsALookupFailureDistinctlyFromUnbound
+// already covers at the struct level).
+//
+// The failure is forced the same way that test does — closing the database
+// out from under a query — but on a second connection used only for the
+// agent repo, so the rest of the detail page's queries (tags, relationships,
+// journal, changelog, all on the healthy main db) keep working and the page
+// still renders 200 with everything else intact.
+func TestHostDetailAgentStatusUnavailableIsHonest(t *testing.T) {
+	db := rbacDB(t)
+
+	agentDBPath := filepath.Join(t.TempDir(), "agents.db")
+	agentDB, err := store.Open(agentDBPath)
+	if err != nil {
+		t.Fatalf("open agent db: %v", err)
+	}
+	t.Cleanup(func() { agentDB.Close() })
+	if err := store.Migrate(agentDB, agentDBPath); err != nil {
+		t.Fatalf("migrate agent db: %v", err)
+	}
+
+	h := New(Config{
+		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
+		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
+		Hardware: store.NewHardwareRepo(db), Subscriptions: store.NewSubscriptionRepo(db), Accounts: store.NewAccountRepo(db),
+		Sites: store.NewSiteRepo(db), Locations: store.NewLocationRepo(db), Racks: store.NewRackRepo(db),
+		Contacts:      store.NewContactRepo(db),
+		Relationships: store.NewRelationshipRepo(db), Tags: store.NewTagRepo(db), VLANs: store.NewVLANRepo(db), Reservations: store.NewReservationRepo(db), DB: db,
+		Agents: store.NewAgentRepo(agentDB),
+		Logger: log.New(io.Discard, "", 0),
+		Docker: fakeScanner{}, NetScan: fakeNetworkScanner{}, NetOpts: NetDiscoveryOptions{}, Proxmox: fakeProxmoxScanner{}, PVEOpts: ProxmoxOptions{},
+		AuthEnabled: true,
+	})
+	admin := seedUserAndLogin(t, h, db, "admin", domain.RoleAdmin)
+
+	hostID, err := store.NewHostRepo(db).Create(domain.Host{Name: "nas01", Type: "physical"})
+	if err != nil {
+		t.Fatalf("create host: %v", err)
+	}
+	agentDB.Close()
+
+	body := getWith(t, h, admin, "/hosts/"+strconv.FormatInt(hostID, 10)).Body.String()
+	if !strings.Contains(body, "could not be checked") {
+		t.Errorf("detail page does not say the agent status could not be checked:\n%s", body)
+	}
+	if strings.Contains(body, "No agent installed on this host") {
+		t.Errorf("detail page claims no agent is installed despite a failed lookup:\n%s", body)
 	}
 }

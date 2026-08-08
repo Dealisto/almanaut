@@ -80,7 +80,7 @@ type resource[T validatable] struct {
 	children  func(T, entityCatalog) (*childrenSection, error)  // optional; nil for all but Site/Location
 	elevation func(T, entityCatalog) (*elevationSection, error) // optional; only Rack
 	probe     func(T) *probeSection                             // optional; only certificates
-	agent     func(T) *agentSection                             // optional; only host
+	agent     func(T, entityCatalog) *agentSection              // optional; only host
 	newItem   T                                                 // zero value with form defaults
 	listTmpl  string                                            // "hosts.html"
 	formTmpl  string                                            // "host_form.html"
@@ -507,7 +507,7 @@ func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
 		}
 		var agent *agentSection
 		if rs.agent != nil {
-			agent = rs.agent(item)
+			agent = rs.agent(item, d.cat)
 		}
 		cfValues, err := d.customFields.ListForEntity(rs.sing, id)
 		if err != nil {
