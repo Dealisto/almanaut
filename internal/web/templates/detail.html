@@ -140,6 +140,77 @@
 </section>
 {{end}}
 
+{{with .Agent}}
+<section class="panel">
+  <h2>Agent</h2>
+  {{if .ConflictAt}}
+  <div class="error">
+    <strong>Conflict:</strong> a report from <code>{{.ConflictHostname}}</code> was rejected at {{.ConflictAt}} —
+    it used this host's agent id (<code>{{.AgentID}}</code>) but is a different machine. Verify this isn't two
+    machines sharing one agent identity.
+  </div>
+  {{end}}
+  {{if .Duplicates}}
+  <div class="error">
+    <strong>Possible duplicate host record(s):</strong>
+    <ul>{{range .Duplicates}}<li><a href="{{.URL}}">{{.Name}}</a> — {{.Reason}}</li>{{end}}</ul>
+  </div>
+  {{end}}
+  {{if .StatusUnavailable}}
+  <p class="muted"><em>Agent status could not be checked right now — this does not mean no agent is installed.</em></p>
+  {{else if .Bound}}
+  <dl class="def-grid">
+    <dt>Agent ID</dt><dd><code>{{.AgentID}}</code></dd>
+    <dt>Last seen</dt><dd>{{.LastSeen}}</dd>
+    <dt>Agent version</dt><dd>{{.AgentVersion}}</dd>
+    <dt>Kernel</dt><dd>{{.Kernel}}</dd>
+    <dt>Uptime</dt><dd>{{.Uptime}}</dd>
+  </dl>
+  {{if .Disks}}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Device</th><th>Model</th><th>Mount</th><th>Size</th><th>Used</th></tr></thead>
+    <tbody>
+      {{range .Disks}}
+      <tr>
+        <td><code>{{.Device}}</code></td>
+        <td>{{.Model}}</td>
+        <td><code>{{.Mount}}</code></td>
+        <td>{{.Size}}</td>
+        <td>{{.Used}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{end}}
+  {{if .Interfaces}}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Interface</th><th>MAC</th><th>Addresses</th></tr></thead>
+    <tbody>
+      {{range .Interfaces}}
+      <tr>
+        <td>{{.Name}}</td>
+        <td><code>{{.MAC}}</code></td>
+        <td>{{.Addrs}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{end}}
+  {{if canWrite}}
+  <form class="form-inline" method="post" action="{{$.ListURL}}/{{$.EntityID}}/agent/unbind"
+        onsubmit="return confirm('Unbind this agent? The host record will stay, but a new report will be needed to re-link it.');">
+    {{ csrfField }}
+    <button class="btn" type="submit">Unbind agent</button>
+  </form>
+  {{end}}
+  {{else}}<p class="muted"><em>No agent installed on this host. See the <a href="https://github.com/Dealisto/almanaut#inventory-agent">agent README</a> to install one.</em></p>{{end}}
+</section>
+{{end}}
+
 {{with .CustomFields}}
 <section class="panel">
   <h2>Custom fields</h2>

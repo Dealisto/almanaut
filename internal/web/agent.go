@@ -50,6 +50,9 @@ type agentRepo interface {
 	// BoundHostIDs returns every host id that already belongs to some agent, so
 	// the adoption candidate list can exclude hosts bound to a different agent.
 	BoundHostIDs() (map[int64]bool, error)
+	// RecordConflict stamps the binding matching agentID with the hostname that
+	// was rejected as a clone of it, and is a no-op for an unknown agent id.
+	RecordConflict(agentID, hostname, at string) error
 }
 
 // storeAgentRepo adapts *store.AgentRepo to agentRepo. The adapter is needed
@@ -208,6 +211,18 @@ func agentReport(d agentDeps) http.HandlerFunc {
 			return agents.RecordReport(hostID, rep.AgentID, now, rep.AgentVersion, rep.SchemaVersion, raw)
 		})
 		if errors.Is(err, errAgentConflict) {
+			// The transaction rolled back, so nothing about this report was
+			// persisted. Stamp the contested binding with a separate write so
+			// the host's page can show which machine is colliding — otherwise
+			// the only record is a journal line on a machine the operator
+			// would have to guess.
+			//
+			// A failure here must not change the answer: the 409 is correct
+			// regardless, and turning it into a 500 would tell the operator the
+			// server broke when it did exactly what it should.
+			if recErr := d.agents.RecordConflict(rep.AgentID, rep.Hostname, nowRFC3339()); recErr != nil {
+				loggerFrom(req.Context()).Printf("agent: recording conflict for %q: %v", rep.AgentID, recErr)
+			}
 			writeJSONError(w, http.StatusConflict,
 				"this agent_id is already bound to a different machine; run 'almanaut-agent reset-id' on the clone")
 			return

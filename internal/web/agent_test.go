@@ -649,6 +649,10 @@ func (f fakeAgentRepo) BoundHostIDs() (map[int64]bool, error) {
 	return f.real.BoundHostIDs()
 }
 
+func (f fakeAgentRepo) RecordConflict(agentID, hostname, at string) error {
+	return f.real.RecordConflict(agentID, hostname, at)
+}
+
 // TestAgentReportRollsBackHostOnAgentIDConflict is the test that actually
 // pins the errAgentConflict rollback fix. TestAgentReportAgentIDConflictReturns409
 // races two real HTTP requests but — empirically, on this platform — the
@@ -887,5 +891,86 @@ func TestAgentReportGivesUpAfterBoundedRetries(t *testing.T) {
 	}
 	if got := dispatcher.all(); len(got) != 0 {
 		t.Fatalf("dispatched %d webhook event(s), want 0 (nothing should be dispatched for a report that never succeeded)", len(got))
+	}
+}
+
+// A rejected clone must leave a trace an operator can find, or the only record
+// of the collision is a journal line on a machine they would have to guess.
+func TestAgentReportRecordsTheConflict(t *testing.T) {
+	h, db, raw := agentServer(t, domain.ScopeAgent)
+
+	first := baseReport()
+	if rec := postReport(t, h, raw, first); rec.Code != http.StatusOK {
+		t.Fatalf("first report = %d", rec.Code)
+	}
+
+	clone := baseReport() // same agent id, different machine
+	clone.Hostname = "web02"
+	clone.Interfaces = []agentapi.Interface{{Name: "eth0", MAC: "de:ad:be:ef:00:09", Addrs: []string{"192.168.1.99"}}}
+	if rec := postReport(t, h, raw, clone); rec.Code != http.StatusConflict {
+		t.Fatalf("clone report = %d, want 409", rec.Code)
+	}
+
+	var at, hostname string
+	if err := db.QueryRow(
+		`SELECT last_conflict_at, last_conflict_hostname FROM host_agents WHERE agent_id = ?`, first.AgentID,
+	).Scan(&at, &hostname); err != nil {
+		t.Fatalf("query conflict: %v", err)
+	}
+	if hostname != "web02" || at == "" {
+		t.Fatalf("conflict not recorded: at=%q hostname=%q", at, hostname)
+	}
+
+	// The rightful machine must still own the host — recording a conflict is
+	// not a rebinding.
+	var hosts int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM hosts`).Scan(&hosts); err != nil {
+		t.Fatalf("count hosts: %v", err)
+	}
+	if hosts != 1 {
+		t.Fatalf("hosts = %d, want 1 — the clone must not have created one", hosts)
+	}
+}
+
+// A successful report from the rightful agent clears the warning, so the panel
+// stops crying clone once the operator has run reset-id on the copy.
+func TestAgentReportClearsAConflictOnTheNextGoodReport(t *testing.T) {
+	h, db, raw := agentServer(t, domain.ScopeAgent)
+	if rec := postReport(t, h, raw, baseReport()); rec.Code != http.StatusOK {
+		t.Fatalf("first report = %d", rec.Code)
+	}
+	clone := baseReport()
+	clone.Hostname = "web02"
+	clone.Interfaces = []agentapi.Interface{{Name: "eth0", MAC: "de:ad:be:ef:00:09"}}
+	if rec := postReport(t, h, raw, clone); rec.Code != http.StatusConflict {
+		t.Fatalf("clone report = %d", rec.Code)
+	}
+
+	// Pin the middle of the sequence: the conflict must actually be recorded
+	// here, or a good report that later finds nothing to clear would make this
+	// test pass for the wrong reason.
+	var at, hostname string
+	if err := db.QueryRow(
+		`SELECT last_conflict_at, last_conflict_hostname FROM host_agents WHERE agent_id = ?`, clone.AgentID,
+	).Scan(&at, &hostname); err != nil {
+		t.Fatalf("query conflict: %v", err)
+	}
+	if hostname != "web02" || at == "" {
+		t.Fatalf("conflict not recorded before recovery: at=%q hostname=%q", at, hostname)
+	}
+
+	good := baseReport()
+	good.RAM = "128 GB" // a real change, so the report is not a no-op
+	if rec := postReport(t, h, raw, good); rec.Code != http.StatusOK {
+		t.Fatalf("recovery report = %d, want 200", rec.Code)
+	}
+
+	if err := db.QueryRow(
+		`SELECT last_conflict_at, last_conflict_hostname FROM host_agents WHERE agent_id = ?`, good.AgentID,
+	).Scan(&at, &hostname); err != nil {
+		t.Fatalf("query conflict after recovery: %v", err)
+	}
+	if at != "" || hostname != "" {
+		t.Fatalf("conflict survived a good report: at=%q hostname=%q", at, hostname)
 	}
 }

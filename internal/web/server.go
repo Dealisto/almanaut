@@ -124,6 +124,7 @@ func New(cfg Config) http.Handler {
 		search: func(h domain.Host) []string {
 			return []string{h.Name, h.OS, h.CPU, h.RAM, h.Disk, h.Status, h.Notes, strings.Join(h.IPs, " ")}
 		},
+		agent:    agentSectionFor(agents, hosts),
 		newItem:  domain.Host{Type: "physical", UHeight: 1},
 		listTmpl: "hosts.html", formTmpl: "host_form.html",
 		extras: func() map[string]any {
@@ -716,6 +717,7 @@ func New(cfg Config) http.Handler {
 			r.Get("/discovery/proxmox", scanProxmox(proxmox, hosts, pveOpts))
 			r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts, db))
 			r.Post("/certificates/{id}/probe", probeCertificate(cat, cfg.CertProber, certificates))
+			r.Post("/hosts/{id}/agent/unbind", unbindAgent(deps, agents, hosts))
 		})
 	})
 

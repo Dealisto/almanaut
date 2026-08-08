@@ -565,14 +565,81 @@ This discards the stored id and generates a fresh one; the next report (the
 next scheduled run, or `sudo systemctl start almanaut-agent.service` to
 force it) then registers as a new host.
 
-Be aware of a real limitation here: there is currently no way to unbind an
-agent id from a host once the server has accepted it. Run `reset-id` on the
-*original* machine by mistake, or simply lose `/var/lib/almanaut-agent` (a
-reinstalled OS, a restored VM with no persisted state), and the next report
-carries an id the server has never seen — so it does exactly what a genuinely
-new machine would do and **creates a second host record**, with the same
-name and the same addresses as the first. Nothing in almanaut merges or
-retires that duplicate automatically; find it and delete it by hand.
+A rejected report is not just a `4` in the logs: the host page for the
+machine that *kept* the binding shows a **Conflict** banner naming the
+hostname that got rejected and when. It means exactly what `reset-id`
+above fixes — a different machine reported using this host's agent id; the
+original machine keeps the host, and the impostor's reports keep getting
+the `409` until it runs `reset-id`. Nothing needs to be cleared by hand
+afterwards: the next report accepted from the rightful agent overwrites the
+binding and wipes the conflict fields with it, so the banner simply
+disappears on its own.
+
+### The agent panel on the host page
+
+Every host's detail page has an **Agent** panel with three states:
+
+- **No agent installed** — the host has no binding at all. This is the
+  normal state for anything not running the agent, and links to this section
+  of the README.
+- **Bound** — agent id, last-seen time, agent version, kernel, and uptime,
+  plus a disk table and a network interface table when the latest report
+  included them. These come from two different sources: agent id and
+  last-seen are binding facts that always show once a binding exists; the
+  rest comes from parsing the most recent raw report, so if that report is
+  missing or fails to parse, the binding facts still show and the report
+  fields are just blank rather than the whole panel disappearing.
+- **Status could not be checked** — the lookup itself failed (for example a
+  transient database lock), as distinct from confirming there is no
+  binding. The panel says so explicitly and **this does not mean the host
+  has no agent** — reload, or check back, rather than assuming the agent
+  needs reinstalling.
+
+A host with a binding also gets an **Unbind agent** button (writers only).
+Unbinding does not touch the host record itself — only the binding row that
+ties it to an agent id — and is the recovery path described next.
+
+### Possible duplicate host records
+
+Separately from a conflict, the panel can also warn about **possible
+duplicate host record(s)**: one or more other hosts that share this one's
+(normalized) name or an IP address. This is **not** a conflict — it is not
+about two machines fighting over one agent id, and it can be raised even
+when there is no contested binding at all. It means two separate host
+*records* look like the same physical or virtual machine, and it is only
+raised when at least one of the two already has an agent binding (two
+hand-entered hosts that happen to share a name are the operator's business,
+not the agent's).
+
+The concrete cause is almost always one of two things happening on the
+machine that already has a bound host record:
+
+- its agent state file, `/var/lib/almanaut-agent`, was lost — a reinstalled
+  OS or a restored VM with no persisted state — so the agent starts fresh
+  with a brand-new id; or
+- `reset-id` was run on the **original** machine instead of the clone.
+
+Either way, the machine now reports under an id the server has never seen,
+but its old host record is still marked bound to the previous id. Because
+that record still looks "taken", the new report can't adopt it — it creates
+a second host with the same name and addresses instead.
+
+### Recovering from a duplicate
+
+The order below matters: unbind before you delete. A bound host is excluded
+from adoption candidates, so if the redundant record is deleted first while
+the kept record is still bound, the next report finds no name match and
+creates a *third* host instead of re-adopting the one you kept.
+
+1. On the **record you want to keep** (typically the older one, with the
+   history you care about), click **Unbind agent**. This only removes the
+   stale binding; the host record, its tags, notes, and history are
+   untouched.
+2. Delete the redundant record the agent just created.
+3. Do nothing else — the agent's *next* report (the next scheduled run, or
+   `sudo systemctl start almanaut-agent.service` to force it now) is now
+   unbound, matches the kept record by hostname or IP the same way a
+   first-ever report would, and re-adopts it.
 
 ## Notifications & integrations
 

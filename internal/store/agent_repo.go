@@ -18,6 +18,13 @@ type AgentBinding struct {
 	AgentID     string
 	Fingerprint string
 	LastSeen    string // RFC3339 UTC
+
+	// LastConflictAt and LastConflictHostname record the most recent report
+	// rejected as a clone of this binding: a different machine using this
+	// agent id. Both are empty when there is no outstanding conflict, and are
+	// cleared by the next successful report.
+	LastConflictAt       string
+	LastConflictHostname string
 }
 
 // AgentRepo persists agent bindings and report history.
@@ -35,9 +42,9 @@ func (r *AgentRepo) WithTx(tx *sql.Tx) *AgentRepo { return &AgentRepo{db: tx} }
 func (r *AgentRepo) ByAgentID(agentID string) (AgentBinding, error) {
 	var b AgentBinding
 	err := r.db.QueryRow(
-		`SELECT host_id, agent_id, fingerprint, last_seen FROM host_agents WHERE agent_id = ?`,
+		`SELECT host_id, agent_id, fingerprint, last_seen, last_conflict_at, last_conflict_hostname FROM host_agents WHERE agent_id = ?`,
 		agentID,
-	).Scan(&b.HostID, &b.AgentID, &b.Fingerprint, &b.LastSeen)
+	).Scan(&b.HostID, &b.AgentID, &b.Fingerprint, &b.LastSeen, &b.LastConflictAt, &b.LastConflictHostname)
 	if err != nil {
 		return AgentBinding{}, notFound(fmt.Errorf("scan agent binding: %w", err))
 	}
@@ -52,7 +59,9 @@ func (r *AgentRepo) Upsert(b AgentBinding) error {
 		 ON CONFLICT(host_id) DO UPDATE SET
 		     agent_id = excluded.agent_id,
 		     fingerprint = excluded.fingerprint,
-		     last_seen = excluded.last_seen`,
+		     last_seen = excluded.last_seen,
+		     last_conflict_at = '',
+		     last_conflict_hostname = ''`,
 		b.HostID, b.AgentID, b.Fingerprint, b.LastSeen,
 	); err != nil {
 		// Detect agent_id UNIQUE constraint violation and wrap with sentinel.
@@ -87,6 +96,49 @@ func (r *AgentRepo) BoundHostIDs() (map[int64]bool, error) {
 		return nil, fmt.Errorf("iterate bound host ids: %w", err)
 	}
 	return out, nil
+}
+
+// ByHostID returns the agent binding for a host, or ErrNotFound when the host
+// has no agent reporting for it.
+func (r *AgentRepo) ByHostID(hostID int64) (AgentBinding, error) {
+	var b AgentBinding
+	err := r.db.QueryRow(
+		`SELECT host_id, agent_id, fingerprint, last_seen, last_conflict_at, last_conflict_hostname
+		 FROM host_agents WHERE host_id = ?`, hostID,
+	).Scan(&b.HostID, &b.AgentID, &b.Fingerprint, &b.LastSeen, &b.LastConflictAt, &b.LastConflictHostname)
+	if err != nil {
+		return AgentBinding{}, notFound(fmt.Errorf("scan agent binding: %w", err))
+	}
+	return b, nil
+}
+
+// Unbind removes a host's agent binding, returning ErrNotFound when there was
+// none. Freeing the agent id is what makes the host adoptable again: the next
+// report from an unbound agent matches it by hostname or IP and re-binds,
+// which is the recovery path for a host record whose agent lost its state file.
+func (r *AgentRepo) Unbind(hostID int64) error {
+	res, err := r.db.Exec(`DELETE FROM host_agents WHERE host_id = ?`, hostID)
+	if err != nil {
+		return fmt.Errorf("unbind agent: %w", err)
+	}
+	return rowsAffectedOrNotFound(res)
+}
+
+// RecordConflict stamps a binding with the machine that was rejected as a clone
+// of it.
+//
+// An unknown agent id is not an error. This runs after agentReport's
+// transaction has already rolled back, so the binding may legitimately have
+// been removed in between — and failing here would turn a clean 409 into a 500,
+// telling the operator the server broke when it in fact did its job.
+func (r *AgentRepo) RecordConflict(agentID, hostname, at string) error {
+	if _, err := r.db.Exec(
+		`UPDATE host_agents SET last_conflict_at = ?, last_conflict_hostname = ? WHERE agent_id = ?`,
+		at, hostname, agentID,
+	); err != nil {
+		return fmt.Errorf("record agent conflict: %w", err)
+	}
+	return nil
 }
 
 // RecordReport appends one report and prunes the host's history to
