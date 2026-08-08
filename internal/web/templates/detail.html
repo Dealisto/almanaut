@@ -199,6 +199,13 @@
   </table>
   </div>
   {{end}}
+  {{if canWrite}}
+  <form class="form-inline" method="post" action="{{$.ListURL}}/{{$.EntityID}}/agent/unbind"
+        onsubmit="return confirm('Unbind this agent? The host record will stay, but a new report will be needed to re-link it.');">
+    {{ csrfField }}
+    <button class="btn" type="submit">Unbind agent</button>
+  </form>
+  {{end}}
   {{else}}<p class="muted"><em>No agent installed on this host. See the <a href="https://github.com/Dealisto/almanaut#inventory-agent">agent README</a> to install one.</em></p>{{end}}
 </section>
 {{end}}
