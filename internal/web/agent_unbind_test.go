@@ -85,16 +85,25 @@ func TestUnbindWithNoBindingRedirectsAndWritesNoHistory(t *testing.T) {
 	}
 }
 
-// A binding read that fails for a reason other than "no binding exists" (here,
-// a dropped table standing in for a scan or driver error) must not let the
-// delete proceed: a changelog entry naming no agent would look like a record
-// of what happened while actually recording nothing.
+// A binding read that fails for a reason other than "no binding exists" must
+// not let the delete proceed: a changelog entry naming no agent would look
+// like a record of what happened while actually recording nothing. The
+// failure is forced by dropping a column ByHostID selects (see below) rather
+// than the whole table, because the two code paths must be distinguishable:
+// with the read's error ignored, Unbind's DELETE still succeeds and a hollow
+// changelog entry is written; with it checked, the DELETE never runs.
 func TestUnbindReadFailureWritesNoChangelogEntry(t *testing.T) {
 	h, db, id := unbindFixture(t)
 	admin := seedUserAndLogin(t, h, db, "admin", domain.RoleAdmin)
 
-	if _, err := db.Exec(`DROP TABLE host_agents`); err != nil {
-		t.Fatalf("drop host_agents: %v", err)
+	// The SELECT in ByHostID must fail while the DELETE in Unbind still
+	// succeeds — dropping the whole table fails both statements the same
+	// way the old, unfixed code did, so it could never tell the two code
+	// paths apart. Dropping one selected column leaves the table (and the
+	// unqualified DELETE) intact while making the SELECT's column list
+	// invalid.
+	if _, err := db.Exec(`ALTER TABLE host_agents DROP COLUMN last_conflict_hostname`); err != nil {
+		t.Fatalf("drop last_conflict_hostname column: %v", err)
 	}
 
 	rec := csrfPostRec(t, h, admin, unbindPath(id), "")
