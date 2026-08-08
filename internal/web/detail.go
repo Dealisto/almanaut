@@ -33,6 +33,7 @@ type detailExtras struct {
 	children     *childrenSection
 	elevation    *elevationSection
 	probe        *probeSection
+	agent        *agentSection
 	customFields []domain.CustomFieldValue
 	attachments  []attachmentView
 }
@@ -65,6 +66,7 @@ type detailData struct {
 	Children     *childrenSection
 	Elevation    *elevationSection
 	Probe        *probeSection
+	Agent        *agentSection
 	CustomFields []domain.CustomFieldValue
 	Attachments  []attachmentView
 
@@ -230,6 +232,7 @@ func renderDetailExtra(
 		Children:     extras.children,
 		Elevation:    extras.elevation,
 		Probe:        extras.probe,
+		Agent:        extras.agent,
 		CustomFields: extras.customFields,
 		Attachments:  extras.attachments,
 

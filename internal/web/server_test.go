@@ -12,11 +12,13 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Dealisto/almanaut/internal/discovery"
+	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
 )
 
@@ -1934,5 +1936,48 @@ func TestDetailPageLayout(t *testing.T) {
 	}
 	if strings.Contains(body, "/hardwares") {
 		t.Error("detail page must not use the pluralized /hardwares path")
+	}
+}
+
+// The panel is the only place an operator learns a host is contested, so it
+// has to actually reach the page.
+func TestHostDetailShowsTheAgentPanel(t *testing.T) {
+	db := rbacDB(t)
+	h := newAuthedTestHandler(t, db)
+	admin := seedUserAndLogin(t, h, db, "admin", domain.RoleAdmin)
+
+	hostID, err := store.NewHostRepo(db).Create(domain.Host{Name: "nas01", Type: "physical"})
+	if err != nil {
+		t.Fatalf("create host: %v", err)
+	}
+	agents := store.NewAgentRepo(db)
+	if err := agents.Upsert(store.AgentBinding{
+		HostID: hostID, AgentID: "uuid-1", Fingerprint: "f", LastSeen: "2026-08-07T10:00:00Z",
+	}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if err := agents.RecordConflict("uuid-1", "web02", "2026-08-07T12:00:00Z"); err != nil {
+		t.Fatalf("RecordConflict: %v", err)
+	}
+
+	body := getWith(t, h, admin, "/hosts/"+strconv.FormatInt(hostID, 10)).Body.String()
+	for _, want := range []string{"uuid-1", "web02"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("host detail page does not mention %q", want)
+		}
+	}
+}
+
+func TestHostDetailWithoutAnAgentStillRenders(t *testing.T) {
+	db := rbacDB(t)
+	h := newAuthedTestHandler(t, db)
+	admin := seedUserAndLogin(t, h, db, "admin", domain.RoleAdmin)
+	hostID, err := store.NewHostRepo(db).Create(domain.Host{Name: "nas01", Type: "physical"})
+	if err != nil {
+		t.Fatalf("create host: %v", err)
+	}
+	rec := getWith(t, h, admin, "/hosts/"+strconv.FormatInt(hostID, 10))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 }

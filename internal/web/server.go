@@ -542,6 +542,14 @@ func New(cfg Config) http.Handler {
 	tokenUses := newTokenUseLog()
 	ssoLog := newTokenUseLog()
 	cat := entityCatalog{resources: resources}
+	// agentSectionFor needs the entity catalog (to link duplicate host records),
+	// but cat is itself built from resources, which already holds a copy of
+	// hostRS. Patch the hook in now that cat exists, then write the updated
+	// value back into resources[0] — the slot the []mountable literal above
+	// copied hostRS into — so the mount loops below (which range over
+	// resources, not hostRS) pick up the change.
+	hostRS.agent = agentSectionFor(agents, hosts, cat)
+	resources[0] = hostRS
 	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, customFields: customFields, attachments: attachments, db: db, webhooks: cfg.Webhooks}
 	r := chi.NewRouter()
 	logger := cfg.Logger
