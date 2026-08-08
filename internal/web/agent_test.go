@@ -946,16 +946,30 @@ func TestAgentReportClearsAConflictOnTheNextGoodReport(t *testing.T) {
 		t.Fatalf("clone report = %d", rec.Code)
 	}
 
+	// Pin the middle of the sequence: the conflict must actually be recorded
+	// here, or a good report that later finds nothing to clear would make this
+	// test pass for the wrong reason.
+	var at, hostname string
+	if err := db.QueryRow(
+		`SELECT last_conflict_at, last_conflict_hostname FROM host_agents WHERE agent_id = ?`, clone.AgentID,
+	).Scan(&at, &hostname); err != nil {
+		t.Fatalf("query conflict: %v", err)
+	}
+	if hostname != "web02" || at == "" {
+		t.Fatalf("conflict not recorded before recovery: at=%q hostname=%q", at, hostname)
+	}
+
 	good := baseReport()
 	good.RAM = "128 GB" // a real change, so the report is not a no-op
 	if rec := postReport(t, h, raw, good); rec.Code != http.StatusOK {
 		t.Fatalf("recovery report = %d, want 200", rec.Code)
 	}
 
-	var at, hostname string
-	_ = db.QueryRow(
+	if err := db.QueryRow(
 		`SELECT last_conflict_at, last_conflict_hostname FROM host_agents WHERE agent_id = ?`, good.AgentID,
-	).Scan(&at, &hostname)
+	).Scan(&at, &hostname); err != nil {
+		t.Fatalf("query conflict after recovery: %v", err)
+	}
 	if at != "" || hostname != "" {
 		t.Fatalf("conflict survived a good report: at=%q hostname=%q", at, hostname)
 	}
