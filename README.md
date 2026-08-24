@@ -154,7 +154,7 @@ ALMANAUT_DATA_DIR=./data ./almanaut
 Release channels at a glance:
 
 | Channel | What you get |
-|---|---|
+| --- | --- |
 | Container `:X.Y.Z` / `:X.Y` / `:latest` | Multi-arch images on GHCR for a tagged release |
 | Container `:dev` | Rolling image built from `master` |
 | GitHub Release binaries | Versioned archives + checksums for a tagged release |
@@ -181,7 +181,7 @@ account:
 - Otherwise it creates username `admin` with a **random password printed once
   to the server log**, as a banner that looks like this:
 
-  ```
+  ```text
   ========================================================
   Almanaut created an initial admin account.
     username: admin
@@ -215,7 +215,7 @@ session-cookie auth check, with no way to run it open.
 Every user has one of three built-in roles (there are no custom roles):
 
 | Role | Can do |
-|---|---|
+| --- | --- |
 | **admin** | Everything, including managing users, webhooks, custom fields, and integrations |
 | **editor** | Create, edit, and delete inventory |
 | **viewer** | Read-only access to everything |
@@ -254,41 +254,41 @@ applies to `ALMANAUT_AUTH_PASS` (see [Secrets from files](#secrets-from-files)).
 
 All configuration is via environment variables; everything is optional.
 
-| Variable                      | Default              | Description                                    |
-|-------------------------------|----------------------|------------------------------------------------|
-| `ALMANAUT_ADDR`               | `:8080`              | TCP listen address                             |
-| `ALMANAUT_DATA_DIR`           | `./data`             | Directory for the SQLite database              |
-| `ALMANAUT_DOCKER_SOCKET`      | `/var/run/docker.sock` | Path to the Docker socket for auto-discovery |
-| `ALMANAUT_ENABLE_NETWORK_SCAN` | `false`              | Enable the opt-in subnet scan                  |
-| `ALMANAUT_SCAN_SUBNET`        | (empty)              | Default subnet (CIDR) pre-filled in the scan form |
-| `ALMANAUT_PROXMOX_URL`        | (empty)              | Proxmox VE API base URL (e.g. `https://pve.lan:8006`); enables Proxmox discovery when set with a token |
-| `ALMANAUT_PROXMOX_TOKEN`      | (empty)              | Proxmox API token (`user@realm!tokenid=secret`) |
-| `ALMANAUT_PROXMOX_INSECURE`   | `false`              | Skip TLS verification for a self-signed Proxmox certificate |
-| `ALMANAUT_AUTH_USER`          | `admin`              | Seeds the username of the initial admin account created on first startup |
-| `ALMANAUT_AUTH_PASS`          | (empty)              | Seeds the password of the initial admin account; a random password is generated and logged once when unset |
-| `ALMANAUT_RESET_ADMIN`        | `false`              | Reset the admin password at startup (lockout recovery) and log the new value; unset it again afterwards |
-| `ALMANAUT_SECURE_COOKIES`     | `false`              | Force the `Secure` flag on cookies; set to `true` when serving HTTPS through a TLS-terminating reverse proxy |
-| `ALMANAUT_NTFY_URL`           | (empty)              | ntfy topic URL for expiry alerts (e.g. `https://ntfy.sh/my-homelab`); empty disables notifications |
-| `ALMANAUT_NTFY_TOKEN`         | (empty)              | Optional bearer token for a protected ntfy topic (supports the `_FILE` convention) |
-| `ALMANAUT_DISCORD_WEBHOOK_URL` | (empty)             | Discord incoming-webhook URL for expiry alerts; empty disables the channel (supports the `_FILE` convention) |
-| `ALMANAUT_NOTIFY_WITHIN_DAYS` | `30`                 | Days ahead to treat certificates/warranties/renewals as "expiring soon" |
-| `ALMANAUT_NOTIFY_INTERVAL`    | `24h`                | How often the notifier checks (Go duration, e.g. `12h`) |
-| `ALMANAUT_WEBHOOKS_ENABLED`   | `false`              | Master switch for outbound webhooks; disabled leaves delivery off |
-| `ALMANAUT_WEBHOOK_TIMEOUT`    | `10s`                | Per-delivery HTTP timeout for webhook requests (Go duration, e.g. `5s`) |
-| `ALMANAUT_WEBHOOK_MAX_ATTEMPTS` | `5`                | Delivery attempts (with backoff) before giving up and logging the drop |
-| `ALMANAUT_KUMA_URL`           | (empty)              | Uptime Kuma base URL (e.g. `http://kuma.lan:3001`); enables the monitor sync when set together with user and pass |
-| `ALMANAUT_KUMA_USER`          | (empty)              | Kuma username (socket.io login; API keys don't cover monitor CRUD) |
-| `ALMANAUT_KUMA_PASS`          | (empty)              | Kuma password (supports the `_FILE` convention) |
-| `ALMANAUT_KUMA_INSECURE`      | `false`              | Skip TLS verification for a self-signed Kuma certificate |
-| `ALMANAUT_LIVENESS_ENABLED`   | `false`              | Master switch for native TCP liveness checks on hosts/services (per-entity check address; empty address = not monitored) |
-| `ALMANAUT_LIVENESS_INTERVAL`  | `60s`                | How often the liveness checker runs (Go duration, e.g. `30s`) |
-| `ALMANAUT_LIVENESS_TIMEOUT`   | `5s`                 | Per-address TCP dial timeout for liveness checks (Go duration) |
-| `ALMANAUT_CERT_PROBE_ENABLED` | `false`              | Master switch for the scheduled certificate-probing job; the per-cert "Probe now" button works regardless |
-| `ALMANAUT_CERT_PROBE_INTERVAL` | `24h`               | How often the scheduled cert-probe job runs (Go duration) |
-| `ALMANAUT_CERT_PROBE_TIMEOUT` | `10s`                | Per-endpoint TLS dial timeout when probing a certificate (Go duration) |
-| `ALMANAUT_DISCOVERY_DOCKER_INTERVAL` | (unset)       | Interval for scheduled Docker discovery (Go duration, e.g. `1h`); unset/0 disables it. Findings surface as proposals on the Discovery page — nothing is auto-imported |
-| `ALMANAUT_DISCOVERY_NETWORK_INTERVAL` | (unset)      | Interval for scheduled network discovery (Go duration); also requires the network scan enabled and a subnet set; unset/0 disables it |
-| `ALMANAUT_DISCOVERY_PROXMOX_INTERVAL` | (unset)      | Interval for scheduled Proxmox discovery (Go duration); also requires Proxmox configured; unset/0 disables it |
+| Variable                              | Default                | Description                                                                                                                                                           |
+|---------------------------------------|------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ALMANAUT_ADDR`                       | `:8080`                | TCP listen address                                                                                                                                                    |
+| `ALMANAUT_DATA_DIR`                   | `./data`               | Directory for the SQLite database                                                                                                                                     |
+| `ALMANAUT_DOCKER_SOCKET`              | `/var/run/docker.sock` | Path to the Docker socket for auto-discovery                                                                                                                          |
+| `ALMANAUT_ENABLE_NETWORK_SCAN`        | `false`                | Enable the opt-in subnet scan                                                                                                                                         |
+| `ALMANAUT_SCAN_SUBNET`                | (empty)                | Default subnet (CIDR) pre-filled in the scan form                                                                                                                     |
+| `ALMANAUT_PROXMOX_URL`                | (empty)                | Proxmox VE API base URL (e.g. `https://pve.lan:8006`); enables Proxmox discovery when set with a token                                                                |
+| `ALMANAUT_PROXMOX_TOKEN`              | (empty)                | Proxmox API token (`user@realm!tokenid=secret`)                                                                                                                       |
+| `ALMANAUT_PROXMOX_INSECURE`           | `false`                | Skip TLS verification for a self-signed Proxmox certificate                                                                                                           |
+| `ALMANAUT_AUTH_USER`                  | `admin`                | Seeds the username of the initial admin account created on first startup                                                                                              |
+| `ALMANAUT_AUTH_PASS`                  | (empty)                | Seeds the password of the initial admin account; a random password is generated and logged once when unset                                                            |
+| `ALMANAUT_RESET_ADMIN`                | `false`                | Reset the admin password at startup (lockout recovery) and log the new value; unset it again afterwards                                                               |
+| `ALMANAUT_SECURE_COOKIES`             | `false`                | Force the `Secure` flag on cookies; set to `true` when serving HTTPS through a TLS-terminating reverse proxy                                                          |
+| `ALMANAUT_NTFY_URL`                   | (empty)                | ntfy topic URL for expiry alerts (e.g. `https://ntfy.sh/my-homelab`); empty disables notifications                                                                    |
+| `ALMANAUT_NTFY_TOKEN`                 | (empty)                | Optional bearer token for a protected ntfy topic (supports the `_FILE` convention)                                                                                    |
+| `ALMANAUT_DISCORD_WEBHOOK_URL`        | (empty)                | Discord incoming-webhook URL for expiry alerts; empty disables the channel (supports the `_FILE` convention)                                                          |
+| `ALMANAUT_NOTIFY_WITHIN_DAYS`         | `30`                   | Days ahead to treat certificates/warranties/renewals as "expiring soon"                                                                                               |
+| `ALMANAUT_NOTIFY_INTERVAL`            | `24h`                  | How often the notifier checks (Go duration, e.g. `12h`)                                                                                                               |
+| `ALMANAUT_WEBHOOKS_ENABLED`           | `false`                | Master switch for outbound webhooks; disabled leaves delivery off                                                                                                     |
+| `ALMANAUT_WEBHOOK_TIMEOUT`            | `10s`                  | Per-delivery HTTP timeout for webhook requests (Go duration, e.g. `5s`)                                                                                               |
+| `ALMANAUT_WEBHOOK_MAX_ATTEMPTS`       | `5`                    | Delivery attempts (with backoff) before giving up and logging the drop                                                                                                |
+| `ALMANAUT_KUMA_URL`                   | (empty)                | Uptime Kuma base URL (e.g. `http://kuma.lan:3001`); enables the monitor sync when set together with user and pass                                                     |
+| `ALMANAUT_KUMA_USER`                  | (empty)                | Kuma username (socket.io login; API keys don't cover monitor CRUD)                                                                                                    |
+| `ALMANAUT_KUMA_PASS`                  | (empty)                | Kuma password (supports the `_FILE` convention)                                                                                                                       |
+| `ALMANAUT_KUMA_INSECURE`              | `false`                | Skip TLS verification for a self-signed Kuma certificate                                                                                                              |
+| `ALMANAUT_LIVENESS_ENABLED`           | `false`                | Master switch for native TCP liveness checks on hosts/services (per-entity check address; empty address = not monitored)                                              |
+| `ALMANAUT_LIVENESS_INTERVAL`          | `60s`                  | How often the liveness checker runs (Go duration, e.g. `30s`)                                                                                                         |
+| `ALMANAUT_LIVENESS_TIMEOUT`           | `5s`                   | Per-address TCP dial timeout for liveness checks (Go duration)                                                                                                        |
+| `ALMANAUT_CERT_PROBE_ENABLED`         | `false`                | Master switch for the scheduled certificate-probing job; the per-cert "Probe now" button works regardless                                                             |
+| `ALMANAUT_CERT_PROBE_INTERVAL`        | `24h`                  | How often the scheduled cert-probe job runs (Go duration)                                                                                                             |
+| `ALMANAUT_CERT_PROBE_TIMEOUT`         | `10s`                  | Per-endpoint TLS dial timeout when probing a certificate (Go duration)                                                                                                |
+| `ALMANAUT_DISCOVERY_DOCKER_INTERVAL`  | (unset)                | Interval for scheduled Docker discovery (Go duration, e.g. `1h`); unset/0 disables it. Findings surface as proposals on the Discovery page — nothing is auto-imported |
+| `ALMANAUT_DISCOVERY_NETWORK_INTERVAL` | (unset)                | Interval for scheduled network discovery (Go duration); also requires the network scan enabled and a subnet set; unset/0 disables it                                  |
+| `ALMANAUT_DISCOVERY_PROXMOX_INTERVAL` | (unset)                | Interval for scheduled Proxmox discovery (Go duration); also requires Proxmox configured; unset/0 disables it                                                         |
 
 ### Secrets from files
 
@@ -352,7 +352,7 @@ relationships, change history, journal, custom fields, attachments, the JSON
 API, and CSV import:
 
 | | |
-|---|---|
+| --- | --- |
 | **Hosts** | Physical machines, VMs, LXC containers, and VPSes |
 | **Services** | The things running on your hosts |
 | **Networks** | Subnets, with built-in IPAM (usage, capacity, next-free IP) |
@@ -542,7 +542,7 @@ full here — an agent-managed host is exactly where it bites.
 The process exit code doubles as a quick diagnosis without opening the logs:
 
 | Exit code | Meaning |
-|---|---|
+| --- | --- |
 | `0` | Accepted |
 | `1` | Config error — bad flags, or an unreadable/incomplete config file |
 | `2` | Rejected — a bad token or a schema version the server doesn't speak; fix the setup, retrying won't help |
@@ -790,7 +790,7 @@ curl -X POST http://localhost:8080/api/hosts \
 ### Endpoints
 
 | Endpoint | Returns |
-|---|---|
+| --- | --- |
 | `GET /api/{type}` | All entities of a type (e.g. `/api/hosts`, `/api/hardware`, `/api/certificates`) |
 | `POST /api/{type}` | Create an entity from a JSON body; `201` + `Location` header + the created entity, or `400` on validation/malformed-JSON errors |
 | `GET /api/{type}/{id}` | One entity, or `404 {"error":"…"}` if absent |
@@ -831,7 +831,7 @@ format. It is authenticated like the JSON API: pass an API token as a bearer
 token (a logged-in browser can also view it via its session cookie).
 
 | Metric | Meaning |
-|---|---|
+| --- | --- |
 | `almanaut_entities_total{type="…"}` | Count of each entity type |
 | `almanaut_relationships_total` | Number of relationships |
 | `almanaut_certificates_expiring_total` | Certificates expiring within 30 days |
@@ -856,10 +856,10 @@ scrape_configs:
 Two unauthenticated endpoints are always available (they bypass the login so
 probes can reach them):
 
-| Endpoint    | Response                                                        |
-|-------------|-----------------------------------------------------------------|
-| `/healthz`  | `200 {"status":"ok","version":"..."}` when the database is reachable, `503` otherwise |
-| `/version`  | `{"version":"..."}` — the build version (`dev` for local builds) |
+| Endpoint   | Response                                                                              |
+|------------|---------------------------------------------------------------------------------------|
+| `/healthz` | `200 {"status":"ok","version":"..."}` when the database is reachable, `503` otherwise |
+| `/version` | `{"version":"..."}` — the build version (`dev` for local builds)                      |
 
 The Docker image ships a `HEALTHCHECK` that runs `almanaut healthcheck`, a
 built-in subcommand that probes the local `/healthz` and exits non-zero when
