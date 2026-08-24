@@ -27,6 +27,8 @@ type Snapshot struct {
 	Sites          []domain.Site         `yaml:"sites"`
 	Locations      []domain.Location     `yaml:"locations"`
 	Racks          []domain.Rack         `yaml:"racks"`
+	NICs           []domain.NIC          `yaml:"nics"`
+	Ports          []domain.Port         `yaml:"ports"`
 	Relationships  []domain.Relationship `yaml:"relationships"`
 	Tags           []domain.Tag          `yaml:"tags"`
 	JournalEntries []domain.JournalEntry `yaml:"journal_entries"`
@@ -70,6 +72,8 @@ func Export(db *sql.DB) (Snapshot, error) {
 		Sites:             exportList(&listErr, NewSiteRepo(db).WithTx(tx).List),
 		Locations:         exportList(&listErr, NewLocationRepo(db).WithTx(tx).List),
 		Racks:             exportList(&listErr, NewRackRepo(db).WithTx(tx).List),
+		NICs:              exportList(&listErr, NewNICRepo(db).WithTx(tx).List),
+		Ports:             exportList(&listErr, NewPortRepo(db).WithTx(tx).List),
 		Relationships:     exportList(&listErr, NewRelationshipRepo(db).WithTx(tx).List),
 		Tags:              exportList(&listErr, NewTagRepo(db).WithTx(tx).List),
 		JournalEntries:    exportList(&listErr, NewJournalRepo(db).WithTx(tx).List),
@@ -116,6 +120,8 @@ func Import(db *sql.DB, snap Snapshot) error {
 		validateAll("site", snap.Sites, func(s domain.Site) int64 { return s.ID }),
 		validateAll("location", snap.Locations, func(l domain.Location) int64 { return l.ID }),
 		validateAll("rack", snap.Racks, func(k domain.Rack) int64 { return k.ID }),
+		validateAll("nic", snap.NICs, func(n domain.NIC) int64 { return n.ID }),
+		validateAll("port", snap.Ports, func(p domain.Port) int64 { return p.ID }),
 		validateAll("relationship", snap.Relationships, func(r domain.Relationship) int64 { return r.ID }),
 		validateAll("tag", snap.Tags, func(t domain.Tag) int64 { return t.ID }),
 		validateAll("journal_entry", snap.JournalEntries, func(e domain.JournalEntry) int64 { return e.ID }),
@@ -135,6 +141,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 			len(snap.Certificates) + len(snap.Backups) + len(snap.Hardware) +
 			len(snap.Subscriptions) + len(snap.Accounts) + len(snap.VLANs) + len(snap.Reservations) + len(snap.Contacts) +
 			len(snap.Sites) + len(snap.Locations) + len(snap.Racks) +
+			len(snap.NICs) + len(snap.Ports) +
 			len(snap.Relationships) + len(snap.Tags) + len(snap.JournalEntries) +
 			len(snap.CustomFieldDefs) + len(snap.CustomFieldValues)
 		return NewChangelogRepo(db).WithTx(tx).Create(ChangeEvent{
@@ -149,7 +156,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 // inside WithTx, which owns begin/commit/rollback and is panic-safe, so any
 // failure rolls the whole replacement back.
 func replaceInventory(tx *sql.Tx, snap Snapshot) error {
-	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"} {
+	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "nics", "ports", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"} {
 		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 			return fmt.Errorf("clear %s: %w", table, err)
 		}
@@ -283,6 +290,22 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 		if err := insert("rack", k.ID,
 			`INSERT INTO racks (id, name, location_id, u_height, notes) VALUES (?, ?, ?, ?, ?)`,
 			k.ID, k.Name, k.LocationID, k.UHeight, k.Notes); err != nil {
+			return err
+		}
+	}
+	for _, n := range snap.NICs {
+		if err := insert("nic", n.ID,
+			`INSERT INTO nics (id, host_id, name, kind, model, serial, notes)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			n.ID, n.HostID, n.Name, n.Kind, n.Model, n.Serial, n.Notes); err != nil {
+			return err
+		}
+	}
+	for _, p := range snap.Ports {
+		if err := insert("port", p.ID,
+			`INSERT INTO ports (id, owner_type, owner_id, nic_id, name, mac, mgmt_only, peer_port_id, notes)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			p.ID, p.OwnerType, p.OwnerID, p.NICID, p.Name, p.MAC, boolToInt(p.MgmtOnly), p.PeerPortID, p.Notes); err != nil {
 			return err
 		}
 	}
