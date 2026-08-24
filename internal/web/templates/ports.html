@@ -1,0 +1,43 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Infrastructure</span>
+    <h1>Ports</h1>
+  </div>
+  <div class="ph-actions">
+    {{if canWrite}}<a class="btn btn-primary" href="/ports/new">+ New port</a>{{end}}
+  </div>
+</div>
+{{template "listcontrols" .Controls}}
+{{if .Items}}
+{{template "bulkactions" .Controls}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="bulk-col"></th><th>Name</th><th>Owner</th><th>NIC</th><th>MAC</th><th>Connected to</th><th></th></tr></thead>
+  <tbody>
+  {{range .Items}}
+    <tr><td class="bulk-col"><input type="checkbox" name="ids" value="{{.ID}}" form="bulkform"></td>
+      <td><a href="/ports/{{.ID}}">{{.Name}}</a>{{if .MgmtOnly}} <span class="muted">[mgmt]</span>{{end}}</td>
+      <td>{{.OwnerName}}</td>
+      <td>{{.NICName}}</td>
+      <td>{{if .MAC}}<code>{{.MAC}}</code>{{end}}</td>
+      <td>{{if .PeerLabel}}⇄ {{.PeerLabel}}{{else}}—{{end}}</td>
+      <td>
+        {{if canWrite}}
+        <a class="btn" href="/ports/{{.ID}}/edit">Edit</a>
+        <form class="form-inline" method="post" action="/ports/{{.ID}}/delete"
+              onsubmit="return confirm('Delete this port?');">
+          {{ csrfField }}
+          <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+        {{end}}
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No ports yet.</div></div>
+{{end}}
+{{end}}

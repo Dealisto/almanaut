@@ -1,0 +1,38 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Infrastructure</span>
+    <h1>{{.Heading}}</h1>
+  </div>
+</div>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+<form class="stack" method="post" action="{{.Action}}">
+{{ csrfField }}
+  <label>Name<input name="name" value="{{.Item.Name}}" placeholder="eth0, Port 1" required></label>
+  <label>Owner
+    <select name="owner">
+      {{range .Extras.Owners}}<option value="{{.Value}}"{{if eq .Value (printf "%s:%d" $.Item.OwnerType $.Item.OwnerID)}} selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+  </label>
+  <label>NIC (host ports only)
+    <select name="nic_id">
+      <option value="0">— none —</option>
+      {{range .Extras.NICs}}<option value="{{.ID}}"{{if eq .ID $.Item.NICID}} selected{{end}}>{{.HostName}} / {{.Name}}</option>{{end}}
+    </select>
+  </label>
+  <label>Connected to
+    <select name="peer_port_id">
+      <option value="0">— not connected —</option>
+      {{range .Extras.Ports}}{{if ne .ID $.Item.ID}}<option value="{{.ID}}"{{if eq .ID $.Item.PeerPortID}} selected{{end}}>{{.OwnerName}} / {{.Name}}</option>{{end}}{{end}}
+    </select>
+  </label>
+  <label>MAC<input name="mac" value="{{.Item.MAC}}" placeholder="aa:bb:cc:dd:ee:ff"></label>
+  <label><input type="checkbox" name="mgmt_only" {{if .Item.MgmtOnly}}checked{{end}}> Management only (IPMI/iDRAC)</label>
+  <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  {{template "customFieldsForm" .Extras.customFields}}
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
+    <a class="btn" href="/ports">Cancel</a>
+  </div>
+</form>
+{{end}}

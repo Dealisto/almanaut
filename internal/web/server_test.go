@@ -1669,6 +1669,7 @@ func TestNewFormPagesRender(t *testing.T) {
 	for _, path := range []string{
 		"/hosts/new", "/services/new", "/networks/new",
 		"/domains/new", "/certificates/new", "/backups/new",
+		"/nics/new", "/ports/new",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()

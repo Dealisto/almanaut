@@ -28,6 +28,8 @@ type entityRepos struct {
 	sites         *store.SiteRepo
 	locations     *store.LocationRepo
 	racks         *store.RackRepo
+	nics          *store.NICRepo
+	ports         *store.PortRepo
 }
 
 // entityOption is one selectable entity in a relationship dropdown.
