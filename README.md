@@ -34,9 +34,9 @@ server-rendered UI. Back it up by copying one file (or one YAML export).
 
 **Inventory**
 
-- **15 entity types** — hosts, services, networks, domains, certificates,
+- **17 entity types** — hosts, services, networks, domains, certificates,
   backups, hardware, subscriptions, accounts, sites, locations, racks,
-  contacts, VLANs, and IP reservations
+  contacts, VLANs, IP reservations, NICs, and ports
 - **Relationships & a neighbourhood graph** on every detail page (a service
   *runs on* a host, *is backed up by* a backup, *administered by* a contact…)
 - **Global search** across every entity type, tags, and custom-field values
@@ -347,7 +347,7 @@ direct internet exposure:
 
 ## The inventory model
 
-Fifteen entity types, all sharing the same machinery — search, tags,
+Seventeen entity types, all sharing the same machinery — search, tags,
 relationships, change history, journal, custom fields, attachments, the JSON
 API, and CSV import:
 
@@ -366,6 +366,18 @@ API, and CSV import:
 | **Contacts** | People and vendors responsible for infrastructure |
 | **VLANs** | 802.1Q VLANs referenced by networks |
 | **IP reservations** | Named reserved ranges within a network |
+| **NICs** | Network cards on a host (onboard or expansion) |
+| **Ports** | Physical ports on hosts and hardware, with port-to-port links |
+
+### NICs & ports
+
+A **port** is a physical network port on a host (a NIC port) or on a hardware
+item (a switch/router port). Connect two ports by setting **Connected to** on
+one side only — the link shows on both ports and on both owners' detail pages.
+A host port can optionally be attributed to a **NIC** (onboard or expansion
+card); deleting the NIC keeps the ports and just clears the attribution. The
+new-port page can also bulk-generate "Port 1..N" for an owner, skipping names
+that already exist.
 
 ### Sites, locations & racks
 

@@ -10,6 +10,16 @@ details are listed there.
 
 ## [Unreleased]
 
+### Added
+
+- NIC and Port entities (modelled after NetBox's DCIM ideas, reduced for a
+  homelab): ports live directly on a host or hardware item, a host port can
+  optionally be attributed to a NIC (onboard or expansion card), and a
+  port-to-port link is stored on one side and shown on both. The new-port
+  page can bulk-generate "Port 1..N" for an owner. Deleting a NIC keeps its
+  ports (attribution is cleared) — a deliberate difference from NetBox's
+  cascade.
+
 ## [1.0.0]
 
 First stable release. almanaut is a single-binary homelab CMDB: SQLite storage,
@@ -17,6 +27,7 @@ server-side-rendered UI, no client-side JS framework. This entry summarizes the
 capabilities that make up v1.0.
 
 ### Core inventory
+
 - Catalog-driven entities with full CRUD, tags, relationships, per-entity change
   history and journal, and attachments: hosts, services, networks, domains,
   certificates, backups, hardware, subscriptions, accounts, sites, locations,
@@ -25,6 +36,7 @@ capabilities that make up v1.0.
 - Whole-inventory YAML export/import and additive per-type CSV import.
 
 ### Infrastructure modelling
+
 - Physical hierarchy (Site → Location → Rack) with U-based rack elevation.
 - First-class IPAM: VLANs and IP ranges, network occupancy, conflict/overlap
   detection, and next-free-address suggestions.
@@ -32,15 +44,18 @@ capabilities that make up v1.0.
   search, the JSON API, and YAML export.
 
 ### Automation & live data
+
 - Internal job scheduler for background tasks.
 - Native TCP liveness checks, TLS certificate expiry probing, and scheduled
   auto-discovery from Docker, Proxmox VE, and network subnet scans.
 
 ### Data quality
+
 - Inventory health report with fixed audit rules, IPAM conflict detection, and
   stale-entity detection.
 
 ### Interfaces & integrations
+
 - Read-write JSON API gated by per-user scoped API tokens, with a generated
   [OpenAPI 3](https://spec.openapis.org/oas/v3.0.3) document (`/api/openapi.json`)
   and a built-in reference page (`/api/docs`).
@@ -48,6 +63,7 @@ capabilities that make up v1.0.
 - Outbound webhooks, Discord and ntfy expiry notifications, and Uptime Kuma sync.
 
 ### Security
+
 - Login required for the whole UI and API; role-based access control
   (admin / editor / viewer).
 - TOTP two-factor authentication with recovery codes.
@@ -55,10 +71,12 @@ capabilities that make up v1.0.
 - Authentication audit log.
 
 ### Productivity & UX
+
 - List filtering, sorting, bulk actions, and saved views.
 - Instrument-panel UI with system/light/dark themes.
 
 ### Operations & release
+
 - Distroless, non-root, multi-arch (`linux/amd64`, `linux/arm64`) container
   image with a built-in `HEALTHCHECK`.
 - `/healthz` liveness probe reports the running version; `/version` exposes it
