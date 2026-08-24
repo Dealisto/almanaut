@@ -35,4 +35,23 @@
     <a class="btn" href="/ports">Cancel</a>
   </div>
 </form>
+{{if not .Item.ID}}
+<div class="page-header">
+  <div class="ph-titles"><h1>Generate multiple ports</h1></div>
+</div>
+<p>Create "Prefix 1" … "Prefix N" on one owner in a single step. Existing names are skipped.</p>
+<form class="stack" method="post" action="/ports/generate">
+{{ csrfField }}
+  <label>Owner
+    <select name="owner">
+      {{range .Extras.Owners}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+    </select>
+  </label>
+  <label>Name prefix<input name="prefix" value="Port "></label>
+  <label>Count<input name="count" type="number" value="8" min="1" max="256"></label>
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">Generate</button>
+  </div>
+</form>
+{{end}}
 {{end}}
