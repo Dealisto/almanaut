@@ -128,6 +128,8 @@ func main() {
 		VLANs:                  store.NewVLANRepo(db),
 		Reservations:           store.NewReservationRepo(db),
 		Agents:                 store.NewAgentRepo(db),
+		NICs:                   store.NewNICRepo(db),
+		Ports:                  store.NewPortRepo(db),
 		CertProber:             prober,
 		CertProbes:             certProbes,
 		DB:                     db,

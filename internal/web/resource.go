@@ -959,3 +959,41 @@ func parseReservation(get func(string) string, id int64) domain.Reservation {
 		Notes:     get("notes"),
 	}
 }
+
+func parseNIC(get func(string) string, id int64) domain.NIC {
+	hostID, _ := strconv.ParseInt(get("host_id"), 10, 64)
+	return domain.NIC{
+		ID:     id,
+		HostID: hostID,
+		Name:   strings.TrimSpace(get("name")),
+		Kind:   strings.TrimSpace(get("kind")),
+		Model:  strings.TrimSpace(get("model")),
+		Serial: strings.TrimSpace(get("serial")),
+		Notes:  get("notes"),
+	}
+}
+
+// parsePort accepts the owner either as the HTML form's combined "owner"
+// select ("host:3") or as the CSV import's owner_type/owner_id columns.
+func parsePort(get func(string) string, id int64) domain.Port {
+	ownerType := strings.TrimSpace(get("owner_type"))
+	ownerID, _ := strconv.ParseInt(get("owner_id"), 10, 64)
+	if ref := strings.TrimSpace(get("owner")); ref != "" {
+		if t, i, err := parseRef(ref); err == nil {
+			ownerType, ownerID = t, i
+		}
+	}
+	nicID, _ := strconv.ParseInt(get("nic_id"), 10, 64)
+	peerID, _ := strconv.ParseInt(get("peer_port_id"), 10, 64)
+	return domain.Port{
+		ID:         id,
+		OwnerType:  ownerType,
+		OwnerID:    ownerID,
+		NICID:      nicID,
+		Name:       strings.TrimSpace(get("name")),
+		MAC:        strings.TrimSpace(get("mac")),
+		MgmtOnly:   parseFormBool(get("mgmt_only")),
+		PeerPortID: peerID,
+		Notes:      get("notes"),
+	}
+}

@@ -1,0 +1,31 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Infrastructure</span>
+    <h1>{{.Heading}}</h1>
+  </div>
+</div>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+<form class="stack" method="post" action="{{.Action}}">
+{{ csrfField }}
+  <label>Name<input name="name" value="{{.Item.Name}}" placeholder="onboard, X540-T2" required></label>
+  <label>Host
+    <select name="host_id">
+      {{range .Extras.Hosts}}<option value="{{.ID}}"{{if eq .ID $.Item.HostID}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+  </label>
+  <label>Kind
+    <select name="kind">
+      {{range .Extras.Kinds}}<option value="{{.}}"{{if eq . $.Item.Kind}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </label>
+  <label>Model<input name="model" value="{{.Item.Model}}"></label>
+  <label>Serial<input name="serial" value="{{.Item.Serial}}"></label>
+  <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  {{template "customFieldsForm" .Extras.customFields}}
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
+    <a class="btn" href="/nics">Cancel</a>
+  </div>
+</form>
+{{end}}

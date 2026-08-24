@@ -42,6 +42,11 @@ type Config struct {
 	// so every existing Config literal (which already sets DB) keeps working
 	// unchanged.
 	Agents        *store.AgentRepo
+	// NICs and Ports back the NIC / port inventory. Nil defaults to
+	// store.NewNICRepo(DB) / store.NewPortRepo(DB) in New, so every existing
+	// Config literal (which already sets DB) keeps working unchanged.
+	NICs          *store.NICRepo
+	Ports         *store.PortRepo
 	DB            *sql.DB
 	Logger        *log.Logger // nil → log.Default()
 	Docker        dockerScanner
@@ -93,6 +98,14 @@ func New(cfg Config) http.Handler {
 	if agents == nil {
 		agents = store.NewAgentRepo(cfg.DB)
 	}
+	nics := cfg.NICs
+	if nics == nil {
+		nics = store.NewNICRepo(cfg.DB)
+	}
+	ports := cfg.Ports
+	if ports == nil {
+		ports = store.NewPortRepo(cfg.DB)
+	}
 	hosts, services, networks := cfg.Hosts, cfg.Services, cfg.Networks
 	domains, certificates, backups := cfg.Domains, cfg.Certificates, cfg.Backups
 	hardware, subscriptions, accounts := cfg.Hardware, cfg.Subscriptions, cfg.Accounts
@@ -124,6 +137,9 @@ func New(cfg Config) http.Handler {
 		search: func(h domain.Host) []string {
 			return []string{h.Name, h.OS, h.CPU, h.RAM, h.Disk, h.Status, h.Notes, strings.Join(h.IPs, " ")}
 		},
+		children: func(h domain.Host, cat entityCatalog) (*childrenSection, error) {
+			return ownedPortsChildren(ports, "host", h.ID, cat)
+		},
 		agent:    agentSectionFor(agents, hosts),
 		newItem:  domain.Host{Type: "physical", UHeight: 1},
 		listTmpl: "hosts.html", formTmpl: "host_form.html",
@@ -131,6 +147,111 @@ func New(cfg Config) http.Handler {
 			rackList, _ := racks.List()
 			return map[string]any{"Types": domain.HostTypes, "Racks": rackList}
 		},
+	}
+	nicRS := resource[domain.NIC]{
+		name: "nics", sing: "nic", title: "NICs", heading: "NIC",
+		repo:  nics,
+		parse: parseNIC,
+		label: func(n domain.NIC) string {
+			if n.HostName == "" {
+				return n.Name
+			}
+			return n.HostName + " / " + n.Name
+		},
+		id:    func(n domain.NIC) int64 { return n.ID },
+		setID: func(n *domain.NIC, id int64) { n.ID = id },
+		notes: func(n domain.NIC) string { return n.Notes },
+		fields: func(n domain.NIC) []fieldRow {
+			return []fieldRow{
+				{"Host", n.HostName},
+				{"Kind", n.Kind},
+				{"Model", n.Model},
+				{"Serial", n.Serial},
+			}
+		},
+		children: func(n domain.NIC, cat entityCatalog) (*childrenSection, error) {
+			list, err := ports.List()
+			if err != nil {
+				return nil, err
+			}
+			items := []childRef{}
+			for _, p := range list {
+				if p.NICID == n.ID {
+					items = append(items, childRef{Label: portChildLabel(p), Path: cat.path("port", p.ID)})
+				}
+			}
+			return &childrenSection{Title: "Ports", Items: items}, nil
+		},
+		search: func(n domain.NIC) []string {
+			return []string{n.Name, n.Kind, n.Model, n.Serial, n.HostName, n.Notes}
+		},
+		extras: func() map[string]any {
+			hostList, _ := hosts.List()
+			return map[string]any{"Kinds": domain.NICKinds, "Hosts": hostList}
+		},
+		newItem:  domain.NIC{Kind: "onboard"},
+		listTmpl: "nics.html", formTmpl: "nic_form.html",
+	}
+	portRS := resource[domain.Port]{
+		name: "ports", sing: "port", title: "Ports", heading: "Port",
+		repo:  ports,
+		parse: parsePort,
+		label: func(p domain.Port) string {
+			if p.OwnerName == "" {
+				return p.Name
+			}
+			return p.OwnerName + " / " + p.Name
+		},
+		id:    func(p domain.Port) int64 { return p.ID },
+		setID: func(p *domain.Port, id int64) { p.ID = id },
+		notes: func(p domain.Port) string { return p.Notes },
+		fields: func(p domain.Port) []fieldRow {
+			mgmt := "no"
+			if p.MgmtOnly {
+				mgmt = "yes"
+			}
+			nic := p.NICName
+			if nic == "" {
+				nic = "—"
+			}
+			peer := p.PeerLabel
+			if peer == "" {
+				peer = "—"
+			}
+			return []fieldRow{
+				{"Owner", p.OwnerName},
+				{"NIC", nic},
+				{"MAC", p.MAC},
+				{"Management only", mgmt},
+				{"Connected to", peer},
+			}
+		},
+		// fieldRow values are plain text, so the owner / NIC / peer links live
+		// in this children section instead.
+		children: func(p domain.Port, cat entityCatalog) (*childrenSection, error) {
+			items := []childRef{{Label: "Owner: " + p.OwnerName, Path: cat.path(p.OwnerType, p.OwnerID)}}
+			if p.NICID != 0 {
+				items = append(items, childRef{Label: "NIC: " + p.NICName, Path: cat.path("nic", p.NICID)})
+			}
+			if p.PeerID != 0 {
+				items = append(items, childRef{Label: "Connected to: " + p.PeerLabel, Path: cat.path("port", p.PeerID)})
+			}
+			return &childrenSection{Title: "Connections", Items: items}, nil
+		},
+		search: func(p domain.Port) []string {
+			return []string{p.Name, p.MAC, p.OwnerName, p.NICName, p.Notes}
+		},
+		extras: func() map[string]any {
+			nicList, _ := nics.List()
+			portList, _ := ports.List()
+			return map[string]any{
+				"Owners": ownerOptions(hosts, hardware),
+				"NICs":   nicList,
+				"Ports":  portList,
+			}
+		},
+		newItem:  domain.Port{OwnerType: "hardware"},
+		listTmpl: "ports.html", formTmpl: "port_form.html",
 	}
 	resources := []mountable{
 		hostRS,
@@ -300,6 +421,9 @@ func New(cfg Config) http.Handler {
 			},
 			search: func(h domain.Hardware) []string {
 				return []string{h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.Status, h.Notes}
+			},
+			children: func(h domain.Hardware, cat entityCatalog) (*childrenSection, error) {
+				return ownedPortsChildren(ports, "hardware", h.ID, cat)
 			},
 			extras: func() map[string]any {
 				rackList, _ := racks.List()
@@ -528,6 +652,8 @@ func New(cfg Config) http.Handler {
 			newItem:  domain.Reservation{},
 			listTmpl: "reservations.html", formTmpl: "reservation_form.html",
 		},
+		nicRS,
+		portRS,
 	}
 	changelog := store.NewChangelogRepo(db)
 	journal := store.NewJournalRepo(db)
@@ -587,6 +713,7 @@ func New(cfg Config) http.Handler {
 		reservations: reservations,
 		contacts:     contacts,
 		sites:        sites, locations: locations, racks: racks,
+		nics: nics, ports: ports,
 	}
 	// Everything else is the application UI: optionally behind session auth and
 	// always behind CSRF. Grouping scopes those middlewares to these routes
@@ -1084,6 +1211,54 @@ func vlanLabel(vlans *store.VLANRepo, id int64) string {
 		return "(unknown)"
 	}
 	return fmt.Sprintf("VLAN %d (%s)", v.VID, v.Name)
+}
+
+// ownerOptions lists every host and hardware item as port-owner options for
+// the port form's combined owner select ("type:id" values).
+func ownerOptions(hosts *store.HostRepo, hardware *store.HardwareRepo) []entityOption {
+	opts := []entityOption{}
+	hs, _ := hosts.List()
+	for _, h := range hs {
+		opts = append(opts, entityOptionOf("host", h.ID, h.Name))
+	}
+	hw, _ := hardware.List()
+	for _, h := range hw {
+		opts = append(opts, entityOptionOf("hardware", h.ID, h.Name))
+	}
+	return opts
+}
+
+// ownedPortsChildren lists the ports owned by (ownerType, ownerID) as a
+// detail-page children section.
+func ownedPortsChildren(ports *store.PortRepo, ownerType string, ownerID int64, cat entityCatalog) (*childrenSection, error) {
+	list, err := ports.List()
+	if err != nil {
+		return nil, err
+	}
+	items := []childRef{}
+	for _, p := range list {
+		if p.OwnerType != ownerType || p.OwnerID != ownerID {
+			continue
+		}
+		items = append(items, childRef{Label: portChildLabel(p), Path: cat.path("port", p.ID)})
+	}
+	return &childrenSection{Title: "Ports", Items: items}, nil
+}
+
+// portChildLabel renders one port line for a parent's Ports section: the name,
+// the NIC attribution in parentheses, and the connected peer after "⇄".
+func portChildLabel(p domain.Port) string {
+	label := p.Name
+	if p.NICName != "" {
+		label += " (" + p.NICName + ")"
+	}
+	if p.MgmtOnly {
+		label += " [mgmt]"
+	}
+	if p.PeerLabel != "" {
+		label += " ⇄ " + p.PeerLabel
+	}
+	return label
 }
 
 // reservationNetworkLabel resolves a Reservation's soft network_id to a name.
