@@ -107,6 +107,22 @@ func TestImportRoundTrip(t *testing.T) {
 	if err := NewTagRepo(db).Add(domain.Tag{EntityType: "host", EntityID: hostID, Name: "critical"}); err != nil {
 		t.Fatal(err)
 	}
+	hwID, err := NewHardwareRepo(db).Create(domain.Hardware{Name: "switch01", Kind: "switch"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nicID, err := NewNICRepo(db).Create(domain.NIC{HostID: hostID, Name: "onboard", Kind: "onboard"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	swPortID, err := NewPortRepo(db).Create(domain.Port{OwnerType: "hardware", OwnerID: hwID, Name: "Port 1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostPortID, err := NewPortRepo(db).Create(domain.Port{OwnerType: "host", OwnerID: hostID, NICID: nicID, Name: "eth0", PeerPortID: swPortID})
+	if err != nil {
+		t.Fatal(err)
+	}
 	first, err := Export(db)
 	if err != nil {
 		t.Fatal(err)
@@ -138,6 +154,20 @@ func TestImportRoundTrip(t *testing.T) {
 	}
 	if svc.CheckAddress != "jellyfin.lan:8096" {
 		t.Errorf("service CheckAddress = %q, want %q", svc.CheckAddress, "jellyfin.lan:8096")
+	}
+	nic, err := NewNICRepo(db2).Get(nicID)
+	if err != nil || nic.HostID != hostID {
+		t.Errorf("nic id %d not preserved: %+v err=%v", nicID, nic, err)
+	}
+	hp, err := NewPortRepo(db2).Get(hostPortID)
+	if err != nil {
+		t.Fatalf("get host port: %v", err)
+	}
+	if hp.NICID != nicID || hp.PeerPortID != swPortID {
+		t.Errorf("port references not restored: %+v", hp)
+	}
+	if hp.PeerLabel != "switch01 / Port 1" {
+		t.Errorf("peer not resolved after import: %q", hp.PeerLabel)
 	}
 }
 

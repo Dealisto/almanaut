@@ -28,6 +28,8 @@ type Snapshot struct {
 	Sites          []domain.Site         `yaml:"sites"`
 	Locations      []domain.Location     `yaml:"locations"`
 	Racks          []domain.Rack         `yaml:"racks"`
+	NICs           []domain.NIC          `yaml:"nics"`
+	Ports          []domain.Port         `yaml:"ports"`
 	Relationships  []domain.Relationship `yaml:"relationships"`
 	Tags           []domain.Tag          `yaml:"tags"`
 	JournalEntries []domain.JournalEntry `yaml:"journal_entries"`
@@ -77,6 +79,8 @@ func Export(db *sql.DB) (Snapshot, error) {
 		Sites:             exportList(&listErr, NewSiteRepo(db).WithTx(tx).List),
 		Locations:         exportList(&listErr, NewLocationRepo(db).WithTx(tx).List),
 		Racks:             exportList(&listErr, NewRackRepo(db).WithTx(tx).List),
+		NICs:              exportList(&listErr, NewNICRepo(db).WithTx(tx).List),
+		Ports:             exportList(&listErr, NewPortRepo(db).WithTx(tx).List),
 		Relationships:     exportList(&listErr, NewRelationshipRepo(db).WithTx(tx).List),
 		Tags:              exportList(&listErr, NewTagRepo(db).WithTx(tx).List),
 		JournalEntries:    exportList(&listErr, NewJournalRepo(db).WithTx(tx).List),
@@ -132,6 +136,8 @@ func Import(db *sql.DB, snap Snapshot) error {
 		validateAll("site", snap.Sites, func(s domain.Site) int64 { return s.ID }),
 		validateAll("location", snap.Locations, func(l domain.Location) int64 { return l.ID }),
 		validateAll("rack", snap.Racks, func(k domain.Rack) int64 { return k.ID }),
+		validateAll("nic", snap.NICs, func(n domain.NIC) int64 { return n.ID }),
+		validateAll("port", snap.Ports, func(p domain.Port) int64 { return p.ID }),
 		validateAll("relationship", snap.Relationships, func(r domain.Relationship) int64 { return r.ID }),
 		validateAll("tag", snap.Tags, func(t domain.Tag) int64 { return t.ID }),
 		validateAll("journal_entry", snap.JournalEntries, func(e domain.JournalEntry) int64 { return e.ID }),
@@ -156,6 +162,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 			len(snap.Certificates) + len(snap.Backups) + len(snap.Hardware) +
 			len(snap.Subscriptions) + len(snap.Accounts) + len(snap.VLANs) + len(snap.Reservations) + len(snap.Contacts) +
 			len(snap.Sites) + len(snap.Locations) + len(snap.Racks) +
+			len(snap.NICs) + len(snap.Ports) +
 			len(snap.Relationships) + len(snap.Tags) + len(snap.JournalEntries) +
 			len(snap.CustomFieldDefs) + len(snap.CustomFieldValues)
 		changes := []domain.FieldChange{{Field: "records", New: fmt.Sprintf("%d", n)}}
@@ -174,7 +181,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 // Import clears and refills exactly these. TestEveryTableIsClassified fails
 // when a migration adds a table that is in neither this list nor one of the
 // documented exclusions, so a new entity cannot silently miss the export.
-var inventoryTables = []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"}
+var inventoryTables = []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "nics", "ports", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"}
 
 // replaceInventory clears every table and re-inserts snap within tx. It must run
 // inside WithTx, which owns begin/commit/rollback and is panic-safe, so any
@@ -317,6 +324,22 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 			return err
 		}
 	}
+	for _, n := range snap.NICs {
+		if err := insert("nic", n.ID,
+			`INSERT INTO nics (id, host_id, name, kind, model, serial, notes)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			n.ID, n.HostID, n.Name, n.Kind, n.Model, n.Serial, n.Notes); err != nil {
+			return err
+		}
+	}
+	for _, p := range snap.Ports {
+		if err := insert("port", p.ID,
+			`INSERT INTO ports (id, owner_type, owner_id, nic_id, name, mac, mgmt_only, peer_port_id, notes)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			p.ID, p.OwnerType, p.OwnerID, p.NICID, p.Name, p.MAC, boolToInt(p.MgmtOnly), p.PeerPortID, p.Notes); err != nil {
+			return err
+		}
+	}
 	for _, rel := range snap.Relationships {
 		if err := insert("relationship", rel.ID,
 			`INSERT INTO relationships (id, from_type, from_id, to_type, to_id, kind)
@@ -367,7 +390,7 @@ var entityTables = map[string]string{
 	"certificate": "certificates", "backup": "backups", "hardware": "hardware",
 	"subscription": "subscriptions", "account": "accounts", "site": "sites",
 	"location": "locations", "rack": "racks", "contact": "contacts", "vlan": "vlans",
-	"reservation": "ip_reservations",
+	"reservation": "ip_reservations", "nic": "nics", "port": "ports",
 }
 
 // derivedStateTables hold state that the background jobs recompute from the
