@@ -65,6 +65,66 @@ func TestPortConnectionShowsOnBothSides(t *testing.T) {
 	}
 }
 
+// /ports/generate bulk-creates "Prefix 1..N" on one owner, skipping names
+// that already exist so re-running it never duplicates.
+func TestGeneratePortsIsIdempotent(t *testing.T) {
+	srv, db := newTestServerDB(t)
+	if rec := postForm(t, srv, "/hardware", url.Values{"name": {"switch01"}, "kind": {"switch"}}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("create hardware = %d", rec.Code)
+	}
+	form := url.Values{"owner": {"hardware:1"}, "prefix": {"Port "}, "count": {"8"}}
+	if rec := postForm(t, srv, "/ports/generate", form); rec.Code != http.StatusSeeOther {
+		t.Fatalf("generate = %d, want 303; body=%s", rec.Code, rec.Body.String())
+	}
+	countPorts := func() int {
+		t.Helper()
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM ports`).Scan(&n); err != nil {
+			t.Fatalf("count ports: %v", err)
+		}
+		return n
+	}
+	if n := countPorts(); n != 8 {
+		t.Fatalf("generated %d ports, want 8", n)
+	}
+	// Re-running must not duplicate.
+	if rec := postForm(t, srv, "/ports/generate", form); rec.Code != http.StatusSeeOther {
+		t.Fatalf("second generate = %d, want 303", rec.Code)
+	}
+	if n := countPorts(); n != 8 {
+		t.Fatalf("re-run duplicated ports: %d, want 8", n)
+	}
+	// The generated names are "Port 1".."Port 8" on the switch.
+	if body := getPage(t, srv, "/ports"); !strings.Contains(body, "Port 8") || strings.Contains(body, "Port 9") {
+		t.Error("generated ports should end at Port 8")
+	}
+}
+
+func TestGeneratePortsClampsCount(t *testing.T) {
+	srv, db := newTestServerDB(t)
+	if rec := postForm(t, srv, "/hardware", url.Values{"name": {"switch01"}, "kind": {"switch"}}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("create hardware = %d", rec.Code)
+	}
+	if rec := postForm(t, srv, "/ports/generate", url.Values{"owner": {"hardware:1"}, "count": {"0"}}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("generate = %d, want 303", rec.Code)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM ports`).Scan(&n); err != nil {
+		t.Fatalf("count ports: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("count=0 should clamp to 1 port, got %d", n)
+	}
+}
+
+func TestGeneratePortsRejectsBadOwner(t *testing.T) {
+	srv, _ := newTestServerDB(t)
+	rec := postForm(t, srv, "/ports/generate", url.Values{"owner": {"service:1"}, "count": {"4"}})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad owner = %d, want 400", rec.Code)
+	}
+}
+
 func TestPortRejectsInvalidOwnerType(t *testing.T) {
 	srv, _ := newTestServerDB(t)
 	rec := postForm(t, srv, "/ports", url.Values{"name": {"eth0"}, "owner": {"service:1"}})
