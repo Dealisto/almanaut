@@ -114,14 +114,19 @@ func agentReport(d agentDeps) http.HandlerFunc {
 			changed = []string{}
 			events  []webhook.Event
 		)
-		// store.WithTxRetry, not store.WithTx: two first-time reports racing on
-		// the same agent_id can make SQLite fail the transaction with transient
-		// write-write contention (SQLITE_BUSY/SQLITE_LOCKED) before either side
-		// ever reaches the agent_id UNIQUE check below, which would otherwise
-		// surface as a raw 500 instead of the clean 409 the losing report is
-		// supposed to get. Retrying re-runs this whole closure against fresh
-		// state, so the loser's second attempt observes the winner's now-
-		// committed binding and takes the ordinary DecideConflict path.
+		// store.WithTxRetry, not store.WithTx, as a backstop. This closure
+		// reads the binding before it writes, and two first-time reports
+		// racing on the same agent_id used to make SQLite fail the losing
+		// transaction with transient write-write contention
+		// (SQLITE_BUSY/SQLITE_LOCKED) before either side reached the agent_id
+		// UNIQUE check below — surfacing as a raw 500 instead of the clean 409
+		// the loser is supposed to get. store.Open now begins these
+		// transactions with BEGIN IMMEDIATE, so the loser waits for the lock
+		// instead of failing, and that is no longer the common case; the retry
+		// still covers the residue, where the wait itself times out. Either
+		// way it re-runs the whole closure against fresh state, so the
+		// loser's next attempt observes the winner's committed binding and
+		// takes the ordinary DecideConflict path.
 		err = store.WithTxRetry(d.db, func(tx *sql.Tx) error {
 			agents := d.agents.WithTx(tx)
 
