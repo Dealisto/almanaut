@@ -31,6 +31,13 @@ func boolToInt(b bool) int {
 
 // WithTx runs fn inside a single transaction, committing if fn returns nil and
 // rolling back if it returns an error or panics.
+//
+// The transaction is read-write, so the _txlock=immediate mode Open sets makes
+// it BEGIN IMMEDIATE: it holds the write lock for its whole body, and fn may
+// freely read before it writes without risking the failed lock upgrade that
+// mode exists to prevent (see Open's doc comment). If fn only ever reads, use
+// a ReadOnly transaction instead so it does not hold the lock — Export is the
+// example.
 func WithTx(db *sql.DB, fn func(*sql.Tx) error) error {
 	tx, err := db.Begin()
 	if err != nil {
@@ -65,9 +72,9 @@ func WithTx(db *sql.DB, fn func(*sql.Tx) error) error {
 // codes on every connection it opens, and *sqlite.Error.Code() returns
 // exactly the raw result code sqlite3_step/sqlite3_exec produced — so an
 // extended variant comes back unmodified, not masked down to its primary
-// code. Confirmed empirically (see the probe behind this fix): a deferred
-// transaction that has already executed a read and then attempts to write
-// gets a result code that depends on timing. If the write lock is actively
+// code. Confirmed empirically against a *deferred* transaction, which is what
+// Open used to produce: one that has already executed a read and then
+// attempts to write gets a result code that depends on timing. If the write lock is actively
 // held by the other side at that exact instant, SQLite's own btree layer
 // downgrades the internal SQLITE_BUSY_SNAPSHOT to plain SQLITE_BUSY (5)
 // before it ever reaches the driver — this is the case two racing goroutines
@@ -103,11 +110,15 @@ func sqliteBusyOrLocked(err error) bool {
 // WithTxRetry runs fn like WithTx, but retries the whole transaction — a
 // fresh Begin, a fresh call to fn, and a fresh Commit — when the attempt
 // fails with the transient contention sqliteBusyOrLocked recognizes.
-// busy_timeout (set in Open) already makes a *blocked* writer wait for the
-// lock rather than fail immediately, but it does not cover every contention
-// outcome: a transaction that gets far enough to actually need the write
-// lock can still lose it outright with SQLITE_BUSY or SQLITE_LOCKED,
-// especially under the write pressure of a loaded CI runner.
+//
+// Since Open began taking the write lock up front (_txlock=immediate), the
+// failure this was written for — a read-then-write transaction losing the
+// lock upgrade the instant another connection commits, which busy_timeout
+// never covered — cannot happen any more: a contender waits on busy_timeout
+// instead. What is left is the case where that wait genuinely expires, i.e.
+// more than five seconds of sustained write contention. This is the backstop
+// for that, not the primary defense; a caller that reads before it writes is
+// already correct with plain WithTx.
 //
 // The whole closure is retried, never a single statement inside it: WithTx
 // has already rolled back the failed attempt, so any decision fn made from

@@ -66,6 +66,27 @@ for one — a deadlock (the test hangs to the 600s timeout). WAL mode plus
 `busy_timeout(5000)` already serialize writers correctly, so no in-process cap
 is needed. `TestOpenDoesNotCapConnectionPool` guards this.
 
+### Write transactions are IMMEDIATE; read-only ones must opt out
+
+`store.Open` sets `_txlock=immediate` in the DSN, so every read-write
+transaction begins `BEGIN IMMEDIATE` and holds the write lock for its whole
+body. This is deliberate: a transaction that reads and *then* writes cannot
+otherwise be made reliable, because SQLite refuses the read-to-write lock
+upgrade immediately — without invoking the busy handler — so `busy_timeout`
+does not apply to it. `WithTx` therefore lets you read before you write.
+
+The driver only applies the mode to transactions that are **not** declared
+read-only. A transaction that genuinely only reads must begin with
+`db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})`, or it will hold the write
+lock and block every writer for as long as it runs — `Export`, which reads
+every table for a consistent snapshot, is the reason this matters.
+`TestReadOnlyTxDoesNotBlockWriters` guards it, and
+`TestWithTxReadThenWriteSurvivesContention` guards the write path.
+
+Note `ReadOnly: true` is only an opt-out of the locking mode here; the driver
+does not enforce it, so a write inside such a transaction still executes — and
+reintroduces exactly the failed upgrade the mode exists to prevent.
+
 ### IPAM attribution depends on *all* networks
 
 In `internal/domain/ipam.go`, each host IP is attributed to the network that

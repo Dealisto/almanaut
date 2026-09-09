@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -45,8 +46,14 @@ type Snapshot struct {
 // hosts list no longer contains — a corruption only discovered at re-import.
 // WAL gives the transaction a stable view, and reading through the tx keeps
 // every list on the one connection (no second-connection deadlock).
+//
+// It begins ReadOnly so it opts out of the _txlock=immediate mode Open sets
+// (see its doc comment): this transaction only reads, and taking the write
+// lock for the whole time it takes to read every table would block every
+// writer for the duration of an export. WAL already gives it the stable
+// snapshot it needs without any lock.
 func Export(db *sql.DB) (Snapshot, error) {
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("begin: %w", err)
 	}
