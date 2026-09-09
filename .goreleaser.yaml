@@ -73,6 +73,10 @@ archives:
         strip_parent: true
       - LICENSE
       - README.md
+      # The agent's install instructions moved out of the README; ship them
+      # beside the installer so an unpacked tarball is self-contained.
+      - src: docs/agent.md
+        dst: agent.md
 
 checksum:
   name_template: checksums.txt

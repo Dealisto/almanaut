@@ -10,6 +10,23 @@ details are listed there.
 
 ## [Unreleased]
 
+### Changed
+- Documentation is now split by topic under `docs/` (installation,
+  configuration, authentication, inventory model, discovery, agent,
+  integrations, export/import, API, monitoring), with the README reduced to a
+  landing page that links to them. Anchors on the old single-page README
+  (e.g. `#inventory-agent`) no longer resolve; use the corresponding page in
+  `docs/`. The agent release archive now also ships `agent.md`.
+
+### Fixed
+- The security model no longer states that two-factor authentication is
+  unavailable — TOTP 2FA shipped in 1.0.0.
+- Documented six environment variables the binary already read but the
+  configuration table omitted: `ALMANAUT_PROXY_AUTH_HEADER`,
+  `ALMANAUT_PROXY_AUTH_ALLOWLIST`, `ALMANAUT_PROXY_AUTH_AUTOPROVISION`,
+  `ALMANAUT_PROXY_AUTH_DEFAULT_ROLE`, `ALMANAUT_AUTH_AUDIT_RETENTION_DAYS`,
+  and `ALMANAUT_STALE_AFTER_DAYS`.
+
 ## [1.0.0]
 
 First stable release. almanaut is a single-binary homelab CMDB: SQLite storage,
