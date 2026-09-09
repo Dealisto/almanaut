@@ -2,7 +2,9 @@
 
 # Configuration
 
-All configuration is via environment variables; everything is optional.
+All configuration is via environment variables; everything is optional. The
+variables that schedule recurring work — liveness, certificate probing and
+discovery — are covered in more depth in [Background jobs](background-jobs.md).
 
 | Variable                      | Default              | Description                                    |
 |-------------------------------|----------------------|------------------------------------------------|
@@ -105,4 +107,4 @@ direct internet exposure:
 
 ---
 
-**See also:** [Installation](installation.md) · [Authentication & access control](authentication.md) · [Notifications & integrations](integrations.md)
+**See also:** [Installation](installation.md) · [Authentication & access control](authentication.md) · [Background jobs](background-jobs.md) · [Notifications & integrations](integrations.md)

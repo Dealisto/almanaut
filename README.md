@@ -71,6 +71,13 @@ server-rendered UI. Back it up by copying one file (or one YAML export).
 
 - **Mandatory login** with **role-based access control** (admin / editor /
   viewer), per-username login throttling, and session-cookie auth
+- **TOTP two-factor authentication** with single-use recovery codes,
+  **reverse-proxy SSO**, and an **authentication audit log**
+- **Inventory health report** with fixed audit rules, IPAM conflict detection,
+  stale-entity tracking, and **impact analysis**
+- **Filter, sort and save views** per user; **bulk actions** on list pages
+- **Live checks** — TCP liveness for hosts and services, TLS certificate
+  probing, and scheduled discovery runs, all on one scheduled-tasks page
 - **YAML export/import** of the whole inventory, plus additive per-entity
   **CSV import**
 - **Dark mode** (System / Light / Dark), Docker `HEALTHCHECK`, multi-arch
@@ -107,10 +114,13 @@ The full documentation lives in [`docs/`](docs/README.md):
 |---|---|
 | [Installation](docs/installation.md) | Docker, Compose, prebuilt binaries, from source, first login, sample data |
 | [Configuration](docs/configuration.md) | Every environment variable, secrets from files, reverse proxy & TLS, the security model |
-| [Authentication & access control](docs/authentication.md) | Roles, sessions, login throttling, lockout recovery |
+| [Authentication & access control](docs/authentication.md) | Roles, sessions, login throttling, lockout recovery, TOTP 2FA, reverse-proxy SSO, the audit log |
 | [The inventory model](docs/inventory-model.md) | The 15 entity types, sites/locations/racks, IPAM, custom fields, attachments, history |
+| [Lists, saved views & bulk editing](docs/lists-and-views.md) | Filtering and sorting, saved views, bulk actions on list pages |
+| [Inventory health](docs/inventory-health.md) | The health report and its audit rules, stale entities, the checks page, impact analysis |
 | [Auto-discovery](docs/discovery.md) | Docker containers, network scan, Proxmox VE |
 | [Inventory agent](docs/agent.md) | Installing `almanaut-agent`, what it reports, conflicts and duplicates |
+| [Background jobs](docs/background-jobs.md) | The scheduled-tasks page, liveness checks, certificate probing, scheduled discovery |
 | [Notifications & integrations](docs/integrations.md) | ntfy & Discord expiry alerts, outbound webhooks, Uptime Kuma sync |
 | [Export & import](docs/export-import.md) | Whole-inventory YAML round-trip, additive CSV import |
 | [JSON API](docs/api.md) | Tokens and scopes, endpoints, the OpenAPI 3 spec |

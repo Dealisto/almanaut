@@ -58,4 +58,4 @@ docker build --build-arg VERSION=v0.2.0 -t almanaut .
 
 ---
 
-**See also:** [JSON API](api.md) · [Configuration](configuration.md)
+**See also:** [JSON API](api.md) · [Background jobs](background-jobs.md) · [Inventory health](inventory-health.md) · [Configuration](configuration.md)

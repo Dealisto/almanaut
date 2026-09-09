@@ -10,6 +10,16 @@ details are listed there.
 
 ## [Unreleased]
 
+### Added
+- Documentation for the v1.0 features that shipped without any. TOTP 2FA,
+  reverse-proxy SSO and the authentication audit log are now covered in
+  `docs/authentication.md`; list filtering/sorting, saved views and bulk
+  actions in a new `docs/lists-and-views.md`; the health report and its audit
+  rules, IPAM conflict detection, stale-entity acknowledgement, the checks page
+  and impact analysis in a new `docs/inventory-health.md`; and the
+  scheduled-tasks page, liveness checks, certificate probing and scheduled
+  discovery runs in a new `docs/background-jobs.md`.
+
 ### Changed
 - Documentation is now split by topic under `docs/` (installation,
   configuration, authentication, inventory model, discovery, agent,
@@ -26,6 +36,12 @@ details are listed there.
   `ALMANAUT_PROXY_AUTH_ALLOWLIST`, `ALMANAUT_PROXY_AUTH_AUTOPROVISION`,
   `ALMANAUT_PROXY_AUTH_DEFAULT_ROLE`, `ALMANAUT_AUTH_AUDIT_RETENTION_DAYS`,
   and `ALMANAUT_STALE_AFTER_DAYS`.
+
+### Security
+- CI and the published container image build on Go 1.26.8, clearing six
+  standard-library advisories reported against 1.26.5 (GO-2026-6218,
+  GO-2026-6091, GO-2026-6090, GO-2026-6089, GO-2026-5972, GO-2026-5026). The
+  toolchain is pinned in both `go.mod` and the `Dockerfile`.
 
 ## [1.0.0]
 
