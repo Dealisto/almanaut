@@ -23,7 +23,7 @@ IPAM, expiry alerts, auto-discovery, a JSON API, and Prometheus metrics.
 It is deliberately small: a single binary, a single SQLite file, and a
 server-rendered UI. Back it up by copying one file (or one YAML export).
 
-> **Status:** stable — **v1.0.0** is released. The NetBox-parity and
+> **Status:** stable — **v1.0.1** is released. The NetBox-parity and
 > automation/quality/security roadmap (M1–M9) is complete: RBAC, TOTP 2FA,
 > reverse-proxy SSO, an audit log, live liveness/TLS probing, scheduled
 > discovery, inventory-health reports, an OpenAPI 3 spec, and versioned
