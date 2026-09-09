@@ -28,9 +28,12 @@ per-username: after 5 consecutive failures, further attempts for that username
 are refused for 15 minutes (state is in-memory and resets on restart).
 
 [`/api/*`](api.md) returns a plain `401` JSON error when called without valid
-credentials (a session cookie or a bearer token). `/healthz` and `/version`
-are the only endpoints that bypass the login, so container health probes keep
-working.
+credentials (a session cookie or a bearer token).
+
+[`/healthz` and `/version`](monitoring.md#health--version) bypass the login so
+container health probes keep working, and the login pages themselves plus the
+stylesheet they need (`/static/app.css`) are public by necessity. Nothing that
+reads or writes inventory is: every other route requires a session or a token.
 
 ## Lockout recovery
 

@@ -81,7 +81,9 @@ See [CHANGELOG.md](../CHANGELOG.md) for what changed in each release.
 
 ## From source
 
-Requires Go 1.26+.
+Requires Go 1.26.8 or newer — the version pinned by the `go` directive in
+`go.mod`. With the default `GOTOOLCHAIN=auto`, an older Go downloads the right
+toolchain itself; with `GOTOOLCHAIN=local` it refuses to build instead.
 
 ```bash
 go build -o almanaut .
