@@ -45,6 +45,12 @@ details are listed there.
   machines reported under the same agent id. Contenders now wait for the lock
   instead. Fixes #130.
 
+  The trade-off, for anyone driving concurrent writes through the API: a write
+  transaction now serializes other writers for its whole body rather than from
+  its first write, so parallel writes queue where they previously overlapped.
+  Reads are unaffected — WAL lets them run alongside the writer — and a whole
+  inventory export, which only reads, explicitly opts out of the lock.
+
 ### Security
 - CI and the published container image build on Go 1.26.8, clearing six
   standard-library advisories reported against 1.26.5 (GO-2026-6218,
