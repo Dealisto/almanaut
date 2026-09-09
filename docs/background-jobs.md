@@ -13,6 +13,9 @@ idle. All the variables named here are described in
 
 ## The scheduled-tasks page (`/tasks`)
 
+**Admin-only**, like the other operational pages — an editor or viewer has no
+nav entry for it and the route rejects them.
+
 One row per registered job, showing its title, interval, when it last ran and
 when it runs next, how long the last pass took, how many times it has run, and
 the error from the last pass if there was one. A job currently executing is
@@ -58,11 +61,14 @@ connection counts as up even if the service behind it is broken.
 Certificate expiry can be read from the live endpoint instead of typed in by
 hand.
 
-**The per-certificate "Probe now" button always works**, whether or not the
-scheduled job is enabled — the prober is built regardless. `ALMANAUT_CERT_PROBE_ENABLED`
+**The per-certificate "Probe now" button works whether or not the scheduled
+job is enabled** — the prober is built regardless. `ALMANAUT_CERT_PROBE_ENABLED`
 only controls whether probing also happens on a schedule, every
-`ALMANAUT_CERT_PROBE_INTERVAL`. Each certificate's detail page shows the outcome
-of its last probe, including when it has never been probed.
+`ALMANAUT_CERT_PROBE_INTERVAL`. Each certificate's detail page shows the
+outcome of its last probe, including when it has never been probed.
+
+Probing on demand is a write action, so it needs an editor or admin role: a
+viewer sees the last probe's result but cannot trigger a new one.
 
 ## Scheduled discovery & the run history (`/discovery/runs`)
 
@@ -74,11 +80,11 @@ and Proxmox requires Proxmox configured; an interval alone is not enough.
 [Discovery](discovery.md) page for you to review and import, exactly like a
 manual scan — the schedule automates the looking, not the writing.
 
-`/discovery/runs` keeps the **last 50 runs**, each with its source, start and
-finish time, how many resources were found, how many of those were new, and the
-error if the run failed. It answers the question the discovery page cannot:
-whether the schedule is actually running, and whether it has been failing
-quietly.
+`/discovery/runs` is admin-only and keeps the **last 50 runs**, each with its
+source, start and finish time, how many resources were found, how many of those
+were new, and the error if the run failed. It answers the question the discovery
+page cannot: whether the schedule is actually running, and whether it has been
+failing quietly.
 
 ---
 

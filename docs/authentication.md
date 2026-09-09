@@ -65,8 +65,9 @@ at `/login/2fa` reached through a short-lived cookie that is only valid between
 the two. A correct password alone creates no session.
 
 Admins can clear a user's second factor at **Users** (`/users`, see
-[Roles](#roles)) for a lost phone with no recovery codes left. Doing so also revokes that user's sessions and is recorded
-in the audit log, so it can never be a silent downgrade of someone's account.
+[Roles](#roles)) for a lost phone with no recovery codes left. Doing so also
+revokes that user's sessions and is recorded in the audit log, so it can never
+be a silent downgrade of someone's account.
 
 ## Reverse-proxy SSO
 

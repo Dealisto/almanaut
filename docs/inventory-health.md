@@ -50,6 +50,10 @@ entity's [change history](inventory-model.md#history--journal) — so "yes, I
 looked at this and it is still correct" is itself a durable, attributable fact
 rather than a silent dismissal.
 
+Acknowledging is a write action and needs an editor or admin role. The report
+itself — like `/checks` and `/impact` — is readable by everyone, viewers
+included.
+
 ## Checks (`/checks`)
 
 A narrower, time-based view: everything falling due within the **next 30 days**,
