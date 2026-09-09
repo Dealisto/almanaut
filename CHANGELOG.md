@@ -10,6 +10,8 @@ details are listed there.
 
 ## [Unreleased]
 
+## [1.0.1]
+
 ### Added
 - Documentation for the v1.0 features that shipped without any. TOTP 2FA,
   reverse-proxy SSO and the authentication audit log are now covered in
@@ -113,5 +115,6 @@ capabilities that make up v1.0.
 - Versioned releases: pushing a `v*` tag publishes prebuilt binaries with
   checksums (goreleaser) and container tags `:X.Y.Z`, `:X.Y`, and `:latest`.
 
-[Unreleased]: https://github.com/Dealisto/almanaut/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Dealisto/almanaut/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/Dealisto/almanaut/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Dealisto/almanaut/releases/tag/v1.0.0
