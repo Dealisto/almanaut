@@ -64,14 +64,15 @@ With 2FA on, logging in becomes two steps — the password form, then a challeng
 at `/login/2fa` reached through a short-lived cookie that is only valid between
 the two. A correct password alone creates no session.
 
-Admins can clear a user's second factor at **Users** (for a lost phone with no
-recovery codes left). Doing so also revokes that user's sessions and is recorded
+Admins can clear a user's second factor at **Users** (`/users`, see
+[Roles](#roles)) for a lost phone with no recovery codes left. Doing so also revokes that user's sessions and is recorded
 in the audit log, so it can never be a silent downgrade of someone's account.
 
 ## Reverse-proxy SSO
 
 If an authenticating proxy already sits in front of almanaut (Authelia,
-Authentik, oauth2-proxy, …), it can assert the identity instead:
+Authentik, oauth2-proxy, …), it can assert the identity instead. All four
+settings below are in the [configuration table](configuration.md):
 
 - `ALMANAUT_PROXY_AUTH_HEADER` — the header carrying the username, e.g.
   `Remote-User`. Empty (the default) disables header auth entirely.
@@ -109,7 +110,7 @@ Admins get an append-only trail of authentication events at **Audit**
 | `logout` | A session was ended from the Logout button |
 | `2fa_success` / `2fa_failure` | A second factor was accepted or rejected |
 | `sso_login` | A proxy-asserted identity was accepted |
-| `token_used` | An API token authenticated a request |
+| `token_used` | An [API token](api.md#api-tokens) authenticated a request |
 | `session_revoked` | Sessions were invalidated (a user deleted, or their 2FA reset) |
 
 Two details make this trail trustworthy rather than decorative:
@@ -126,7 +127,8 @@ Two details make this trail trustworthy rather than decorative:
 a script polling the API every few seconds leaves a usage trail without
 flooding the log. That state is in memory and resets on restart.
 
-Events older than `ALMANAUT_AUTH_AUDIT_RETENTION_DAYS` (default 90) are pruned
+Events older than
+[`ALMANAUT_AUTH_AUDIT_RETENTION_DAYS`](configuration.md) (default 90) are pruned
 opportunistically on successful logins, which keeps the table bounded without a
 dedicated job. Set it to `0` to keep events forever.
 
