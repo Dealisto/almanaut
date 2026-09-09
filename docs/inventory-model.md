@@ -4,7 +4,10 @@
 
 Fifteen entity types, all sharing the same machinery — search, tags,
 relationships, change history, journal, custom fields, attachments, the
-[JSON API](api.md), and [CSV import](export-import.md#additive-csv-import):
+[JSON API](api.md), and [CSV import](export-import.md#additive-csv-import).
+Every list page can also be [filtered, sorted, saved as a view, and edited in
+bulk](lists-and-views.md), and the inventory as a whole is audited on the
+[health report](inventory-health.md):
 
 | | |
 |---|---|
@@ -46,6 +49,24 @@ kept for switches). Reserved addresses show on the network's IPAM view, are
 skipped by the "next free" suggestion, and are subtracted from the
 free-address count.
 
+## Tags
+
+Tags are free-form labels on any entity. Each name is normalized before it is
+stored — surrounding whitespace trimmed, a leading `#` dropped, and the rest
+lowercased — so `#Prod`, `prod` and ` PROD ` are all the same tag rather than
+three near-duplicates.
+
+**Tags** (`/tags`) is their cross-type view: a cloud of every tag in use with
+how many entities carry it, and clicking one drills down to that tag's
+entities — across every type at once. That is what tags are for that
+relationships are not: a `needs-upgrade` or `prod` label can span hosts,
+services and certificates, and this page is the only place that collects them
+into one list.
+
+Tags are searchable from global search, filterable on
+[list pages](lists-and-views.md#filtering--sorting), applicable in
+[bulk](lists-and-views.md#bulk-actions), and round-trip through the YAML export.
+
 ## Custom fields
 
 Admins define **custom fields** at `/custom-fields`: each field belongs to one
@@ -73,4 +94,4 @@ the change log is not.
 
 ---
 
-**See also:** [JSON API](api.md) · [Export & import](export-import.md) · [Auto-discovery](discovery.md)
+**See also:** [Lists, saved views & bulk editing](lists-and-views.md) · [Inventory health](inventory-health.md) · [JSON API](api.md) · [Export & import](export-import.md)

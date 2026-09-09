@@ -58,4 +58,4 @@ Things to know:
 
 ---
 
-**See also:** [Configuration](configuration.md) · [Monitoring](monitoring.md)
+**See also:** [Configuration](configuration.md) · [Background jobs](background-jobs.md) · [Monitoring](monitoring.md)

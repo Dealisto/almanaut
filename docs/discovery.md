@@ -51,4 +51,4 @@ QEMU VMs become `vm` hosts, and LXC containers become `lxc` hosts.
 
 ---
 
-**See also:** [Inventory agent](agent.md) · [Configuration](configuration.md) · [The inventory model](inventory-model.md)
+**See also:** [Inventory agent](agent.md) · [Background jobs](background-jobs.md) · [Configuration](configuration.md) · [The inventory model](inventory-model.md)
