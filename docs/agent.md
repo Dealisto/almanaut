@@ -5,7 +5,7 @@
 `almanaut-agent` is a one-shot binary that reports one machine's own facts —
 hardware, OS, kernel, CPU, RAM, disks, and network addresses — to almanaut,
 run hourly by a systemd timer. It's the push counterpart to
-[auto-discovery](discovery.md) above: use it for machines the server
+[auto-discovery](discovery.md): use it for machines the server
 cannot reach over the network, or where you'd rather not expose the Docker
 socket to cover it by discovery instead.
 
@@ -64,7 +64,7 @@ rack placement, tags, relationships, and custom fields — the agent never
 writes at all.
 
 **`ips` is replaced, not merged**, exactly as described under
-[API tokens](api.md#api-tokens) below: an out-of-band management address such as
+[API tokens](api.md#api-tokens): an out-of-band management address such as
 IPMI, iDRAC, or iLO is invisible from inside the OS, so it disappears from
 the host record on the very first agent report. That warning applies in
 full here — an agent-managed host is exactly where it bites.
@@ -176,3 +176,7 @@ creates a *third* host instead of re-adopting the one you kept.
    `sudo systemctl start almanaut-agent.service` to force it now) is now
    unbound, matches the kept record by hostname or IP the same way a
    first-ever report would, and re-adopts it.
+
+---
+
+**See also:** [Auto-discovery](discovery.md) · [JSON API](api.md) · [Installation](installation.md)

@@ -91,9 +91,10 @@ direct internet exposure:
 - Session cookies and login forms travel over plain HTTP until you terminate
   TLS in front of it.
 - Login throttling slows brute force, and each user can enable TOTP
-  two-factor authentication on their account, but there is no CAPTCHA and
-  no IP-level rate limiting.
-- `/export` returns the **entire inventory**, including account entries
+  two-factor authentication on their account (see
+  [Authentication & access control](authentication.md)), but there is no
+  CAPTCHA and no IP-level rate limiting.
+- [`/export`](export-import.md) returns the **entire inventory**, including account entries
   (usernames, password-manager names, and secret references) — any logged-in
   user (including viewers) can download it, so treat every account you create
   as having read access to all of it.
@@ -101,3 +102,7 @@ direct internet exposure:
   fields** — including account fields such as `username` and `secret_ref`. A
   value you later change is not scrubbed from history. (`secret_ref` is a
   pointer to where a secret lives, not a stored secret.)
+
+---
+
+**See also:** [Installation](installation.md) · [Authentication & access control](authentication.md) · [Notifications & integrations](integrations.md)

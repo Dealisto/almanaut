@@ -3,7 +3,9 @@
 # Auto-discovery
 
 All discovery sources are read-only and additive: they only ever **create**
-new records and never overwrite your manual data.
+new records and never overwrite your manual data. The variables that enable
+them are described in [Configuration](configuration.md); for machines the
+server cannot reach at all, see the [inventory agent](agent.md) instead.
 
 ## Docker containers
 
@@ -46,3 +48,7 @@ Then navigate to **Discover → Proxmox**, review the discovered resources,
 optionally keep "Link VMs/LXC to their Proxmox node" checked to create
 "runs on" relationships, and import. Proxmox nodes become `physical` hosts,
 QEMU VMs become `vm` hosts, and LXC containers become `lxc` hosts.
+
+---
+
+**See also:** [Inventory agent](agent.md) · [Configuration](configuration.md) · [The inventory model](inventory-model.md)

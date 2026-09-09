@@ -27,7 +27,7 @@ use the **Logout** button to end one early. Failed logins are throttled
 per-username: after 5 consecutive failures, further attempts for that username
 are refused for 15 minutes (state is in-memory and resets on restart).
 
-`/api/*` returns a plain `401` JSON error when called without valid
+[`/api/*`](api.md) returns a plain `401` JSON error when called without valid
 credentials (a session cookie or a bearer token). `/healthz` and `/version`
 are the only endpoints that bypass the login, so container health probes keep
 working.
@@ -44,3 +44,7 @@ Note that `ALMANAUT_AUTH_USER` / `ALMANAUT_AUTH_PASS` only seed the *initial*
 admin (or feed `ALMANAUT_RESET_ADMIN`); they are **not** HTTP Basic auth
 credentials and are not checked on every request. The `_FILE` convention
 applies to `ALMANAUT_AUTH_PASS` (see [Secrets from files](configuration.md#secrets-from-files)).
+
+---
+
+**See also:** [Configuration](configuration.md) · [JSON API](api.md)

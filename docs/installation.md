@@ -4,7 +4,8 @@
 
 Every way to get almanaut running: Docker, Docker Compose, a prebuilt
 binary, or from source — then the first-login flow and the optional sample
-inventory.
+inventory. Every `ALMANAUT_*` variable used below is described in
+[Configuration](configuration.md).
 
 ## Docker
 
@@ -40,7 +41,7 @@ services:
       # Uncomment to enable Docker container auto-discovery (read-only):
       # - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      # All optional — see the Configuration table below. A few common ones:
+      # All optional — see docs/configuration.md. A few common ones:
       # ALMANAUT_AUTH_USER: admin        # seeds the initial admin account
       # ALMANAUT_AUTH_PASS: change-me    # seeds the initial admin account
       # ALMANAUT_ENABLE_NETWORK_SCAN: "true"
@@ -121,3 +122,7 @@ populated dashboard with a browsable relationship graph.
 
 Since import wipes existing data, only load the sample into a fresh instance
 (or export your real data first).
+
+---
+
+**See also:** [Configuration](configuration.md) · [Authentication & access control](authentication.md) · [Export & import](export-import.md)

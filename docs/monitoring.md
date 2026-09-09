@@ -7,8 +7,9 @@ The endpoints almanaut exposes for scraping and probing.
 ## Metrics
 
 `GET /metrics` exposes aggregate inventory gauges in the Prometheus text
-format. It is authenticated like the JSON API: pass an API token as a bearer
-token (a logged-in browser can also view it via its session cookie).
+format. It is authenticated like the JSON API: pass an
+[API token](api.md#api-tokens) as a bearer token (a logged-in browser can also
+view it via its session cookie).
 
 | Metric | Meaning |
 |---|---|
@@ -54,3 +55,7 @@ go build -ldflags "-X main.version=v0.2.0" -o almanaut .
 # Docker
 docker build --build-arg VERSION=v0.2.0 -t almanaut .
 ```
+
+---
+
+**See also:** [JSON API](api.md) · [Configuration](configuration.md)

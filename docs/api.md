@@ -14,15 +14,15 @@ a plain form post. Any request missing valid credentials gets a plain
 Create a personal token at **API tokens** (`/account/tokens`) while logged in:
 give it a label and a **scope** — `read-write`, `read-only`, or `agent`. A
 request's effective permission is the intersection of the token's scope and
-its owner's role (a viewer's token can never write, and a read-only token
-can't write even for an admin).
+its owner's [role](authentication.md#roles) (a viewer's token can never write,
+and a read-only token can't write even for an admin).
 
 An **`agent`**-scoped token is report-only: it authenticates nothing but
 `POST /api/agent/report` (see below) and cannot read the inventory or mutate
 any entity, regardless of its owner's role. Because the intersection rule
 above still applies, the token's owner also needs a role that can write
 (`admin` or `editor`) — a viewer's token cannot report, even scoped `agent`.
-Issue one per host running `almanaut-agent`; it never needs read access to
+Issue one per host running [`almanaut-agent`](agent.md); it never needs read access to
 the rest of the API. A report never overwrites `notes`, `status`,
 `check_address`, rack placement, tags, relationships or custom fields — it
 only ever updates `os`, `cpu`, `ram`, `disk` and `ips`. `name` and `type` are
@@ -91,3 +91,7 @@ served as a machine-readable [OpenAPI 3](https://spec.openapis.org/oas/v3.0.3)
 document at `/api/openapi.json`, suitable for client generators or import into
 tools like Postman. Both are generated from the entity catalog, so they always
 match the running build.
+
+---
+
+**See also:** [Authentication & access control](authentication.md) · [The inventory model](inventory-model.md) · [Inventory agent](agent.md) · [Monitoring](monitoring.md)

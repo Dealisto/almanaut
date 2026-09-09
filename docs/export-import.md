@@ -4,8 +4,9 @@
 
 The whole inventory round-trips through a single YAML file. **Data → Export**
 (or `GET /export`) downloads `almanaut-export.yaml`; **Data → Import** uploads
-one back. This is your backup/restore and migration path (attachments
-excepted — they live only in the database file).
+one back. This is your backup/restore and migration path
+([attachments](inventory-model.md#attachments) excepted — they live only in
+the database file).
 
 > ⚠️ Import **replaces the entire inventory** — every existing record is
 > deleted and re-created from the file. It is not a merge. The import form
@@ -37,3 +38,7 @@ name,type,ips
 edge-router,physical,"10.0.0.1,10.0.0.254"
 web-01,vm,10.0.0.10
 ```
+
+---
+
+**See also:** [The inventory model](inventory-model.md) · [JSON API](api.md)

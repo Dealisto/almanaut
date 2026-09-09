@@ -2,6 +2,9 @@
 
 # Notifications & integrations
 
+Each integration below is switched on by environment variables, described in
+full in [Configuration](configuration.md).
+
 ## Expiry notifications (ntfy & Discord)
 
 Set `ALMANAUT_NTFY_URL` to an [ntfy](https://ntfy.sh) topic URL and/or
@@ -52,3 +55,7 @@ Things to know:
   a sync), the monitor can end up created in Kuma with no matching almanaut
   record; almanaut logs this case, and the orphaned monitor should be removed
   by hand in Kuma before the next sync creates a duplicate.
+
+---
+
+**See also:** [Configuration](configuration.md) · [Monitoring](monitoring.md)

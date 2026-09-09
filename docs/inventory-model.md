@@ -3,8 +3,8 @@
 # The inventory model
 
 Fifteen entity types, all sharing the same machinery — search, tags,
-relationships, change history, journal, custom fields, attachments, the JSON
-API, and CSV import:
+relationships, change history, journal, custom fields, attachments, the
+[JSON API](api.md), and [CSV import](export-import.md#additive-csv-import):
 
 | | |
 |---|---|
@@ -70,3 +70,7 @@ you add as a running log — and a collapsible **Change history**. A global
 latest changes across every entity; delete events remain visible there even
 after the entity is gone. Journal entries are included in the YAML export;
 the change log is not.
+
+---
+
+**See also:** [JSON API](api.md) · [Export & import](export-import.md) · [Auto-discovery](discovery.md)
