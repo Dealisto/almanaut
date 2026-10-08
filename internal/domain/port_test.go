@@ -21,6 +21,9 @@ func TestPortValidate(t *testing.T) {
 	if err := (Port{OwnerType: "host", OwnerID: 1, NICID: -1, Name: "eth0"}).Validate(); err == nil {
 		t.Error("negative nic reference should be rejected")
 	}
+	if err := (Port{OwnerType: "hardware", OwnerID: 1, NICID: 3, Name: "Port 1"}).Validate(); err == nil {
+		t.Error("a hardware port attributed to a NIC should be rejected")
+	}
 	if err := (Port{OwnerType: "host", OwnerID: 1, Name: "eth0", PeerPortID: -1}).Validate(); err == nil {
 		t.Error("negative peer reference should be rejected")
 	}

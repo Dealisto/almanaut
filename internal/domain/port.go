@@ -47,6 +47,9 @@ func (p Port) Validate() error {
 	if p.NICID < 0 {
 		return fmt.Errorf("invalid NIC reference")
 	}
+	if p.NICID != 0 && p.OwnerType != "host" {
+		return fmt.Errorf("only a host's ports can belong to a NIC")
+	}
 	if p.PeerPortID < 0 {
 		return fmt.Errorf("invalid peer port reference")
 	}

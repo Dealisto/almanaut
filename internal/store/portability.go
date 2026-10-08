@@ -154,8 +154,12 @@ func Import(db *sql.DB, snap Snapshot) error {
 	if err != nil {
 		return err
 	}
+	ports, unattributed, err := checkPortNICs(ports, snap.NICs)
+	if err != nil {
+		return err
+	}
 	snap.Ports = ports
-	skipped += unlinked
+	skipped += unlinked + unattributed
 
 	return WithTx(db, func(tx *sql.Tx) error {
 		if err := replaceInventory(tx, snap); err != nil {
@@ -557,6 +561,34 @@ func pairPortLinks(ports []domain.Port) ([]domain.Port, int, error) {
 		}
 	}
 	return out, cleared, nil
+}
+
+// checkPortNICs applies PortRepo's NIC rule to a snapshot. It returns ports
+// with every attribution to a NIC the file does not contain cleared (and
+// counted), and fails on a port attributed to another host's NIC. ports must
+// already be a copy the caller owns.
+func checkPortNICs(ports []domain.Port, nics []domain.NIC) ([]domain.Port, int, error) {
+	hostOf := make(map[int64]int64, len(nics))
+	for _, n := range nics {
+		hostOf[n.ID] = n.HostID
+	}
+	cleared := 0
+	for i := range ports {
+		p := &ports[i]
+		if p.NICID == 0 {
+			continue
+		}
+		host, ok := hostOf[p.NICID]
+		if !ok {
+			p.NICID = 0
+			cleared++
+			continue
+		}
+		if host != p.OwnerID {
+			return nil, 0, fmt.Errorf("port %d: NIC %d belongs to host %d, not host %d", p.ID, p.NICID, host, p.OwnerID)
+		}
+	}
+	return ports, cleared, nil
 }
 
 // keep returns a new slice of the items ok accepts, adding the number it

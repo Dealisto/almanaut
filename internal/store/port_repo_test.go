@@ -263,3 +263,52 @@ func TestPortsPeerIsUniqueInSchema(t *testing.T) {
 		t.Fatal("two ports with the same peer_port_id were accepted")
 	}
 }
+
+// A port can only be attributed to a NIC of the host that owns it.
+func TestPortRepoChecksNICHost(t *testing.T) {
+	db := newTestDB(t)
+	nics := NewNICRepo(db)
+	nicA, err := nics.Create(domain.NIC{HostID: 1, Name: "onboard", Kind: "onboard"})
+	if err != nil {
+		t.Fatalf("create nic: %v", err)
+	}
+	repo := NewPortRepo(db)
+	var ce *ConstraintError
+	if _, err := repo.Create(domain.Port{OwnerType: "host", OwnerID: 2, NICID: nicA, Name: "eth0"}); !errors.As(err, &ce) {
+		t.Fatalf("another host's NIC: got %v, want a ConstraintError", err)
+	}
+	if _, err := repo.Create(domain.Port{OwnerType: "host", OwnerID: 1, NICID: 42, Name: "eth0"}); !errors.As(err, &ce) {
+		t.Fatalf("missing NIC: got %v, want a ConstraintError", err)
+	}
+	id, err := repo.Create(domain.Port{OwnerType: "host", OwnerID: 1, NICID: nicA, Name: "eth0"})
+	if err != nil {
+		t.Fatalf("own host's NIC: %v", err)
+	}
+	// Moving the port to another host keeps a NIC that is no longer its own.
+	if err := repo.Update(domain.Port{ID: id, OwnerType: "host", OwnerID: 2, NICID: nicA, Name: "eth0"}); !errors.As(err, &ce) {
+		t.Fatalf("moving the port away from its NIC's host: got %v, want a ConstraintError", err)
+	}
+}
+
+// Moving a NIC to another host clears the attribution of the ports it left
+// behind, as deleting it does.
+func TestNICRepoMoveClearsOldHostPorts(t *testing.T) {
+	db := newTestDB(t)
+	nics := NewNICRepo(db)
+	nic, _ := nics.Create(domain.NIC{HostID: 1, Name: "x520", Kind: "expansion"})
+	repo := NewPortRepo(db)
+	port, err := repo.Create(domain.Port{OwnerType: "host", OwnerID: 1, NICID: nic, Name: "eth0"})
+	if err != nil {
+		t.Fatalf("create port: %v", err)
+	}
+	if err := nics.Update(domain.NIC{ID: nic, HostID: 2, Name: "x520", Kind: "expansion"}); err != nil {
+		t.Fatalf("move nic: %v", err)
+	}
+	got, err := repo.Get(port)
+	if err != nil {
+		t.Fatalf("get port: %v", err)
+	}
+	if got.NICID != 0 {
+		t.Fatalf("port should have lost the moved NIC, NICID=%d", got.NICID)
+	}
+}

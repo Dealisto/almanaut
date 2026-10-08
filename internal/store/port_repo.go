@@ -40,6 +40,9 @@ const portColumns = `id, owner_type, owner_id, nic_id, name, mac, mgmt_only, pee
 // The connection reads and writes other rows, so callers outside tests use the
 // tx-bound CreateTx.
 func (r *PortRepo) Create(v domain.Port) (int64, error) {
+	if err := r.checkNIC(v); err != nil {
+		return 0, err
+	}
 	res, err := r.db.Exec(
 		`INSERT INTO ports (owner_type, owner_id, nic_id, name, mac, mgmt_only, peer_port_id, notes) VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
 		v.OwnerType, v.OwnerID, v.NICID, v.Name, v.MAC, v.MgmtOnly, v.Notes,
@@ -100,6 +103,9 @@ func (r *PortRepo) listRaw() ([]domain.Port, error) {
 // Update overwrites the port and connects it to v.PeerPortID (0 disconnects
 // it). Like Create, it touches other rows; callers use the tx-bound UpdateTx.
 func (r *PortRepo) Update(v domain.Port) error {
+	if err := r.checkNIC(v); err != nil {
+		return err
+	}
 	res, err := r.db.Exec(
 		`UPDATE ports SET owner_type=?, owner_id=?, nic_id=?, name=?, mac=?, mgmt_only=?, notes=? WHERE id=?`,
 		v.OwnerType, v.OwnerID, v.NICID, v.Name, v.MAC, v.MgmtOnly, v.Notes, v.ID,
@@ -111,6 +117,27 @@ func (r *PortRepo) Update(v domain.Port) error {
 		return err
 	}
 	return r.connect(v.ID, v.PeerPortID)
+}
+
+// checkNIC refuses a NIC attribution that names a missing NIC or one on
+// another host: a port can only sit on a card of the machine that owns it.
+func (r *PortRepo) checkNIC(v domain.Port) error {
+	if v.NICID == 0 {
+		return nil
+	}
+	var name string
+	var hostID int64
+	err := r.db.QueryRow(`SELECT name, host_id FROM nics WHERE id = ?`, v.NICID).Scan(&name, &hostID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return &ConstraintError{Reason: fmt.Sprintf("NIC %d does not exist", v.NICID)}
+	}
+	if err != nil {
+		return fmt.Errorf("read port nic: %w", err)
+	}
+	if v.OwnerType != "host" || hostID != v.OwnerID {
+		return &ConstraintError{Reason: fmt.Sprintf("NIC %q belongs to another host", name)}
+	}
+	return nil
 }
 
 // connect makes ports id and peer name each other in peer_port_id, after

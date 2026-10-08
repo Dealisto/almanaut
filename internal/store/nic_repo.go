@@ -77,6 +77,9 @@ func (r *NICRepo) List() ([]domain.NIC, error) {
 	return r.decorate(items)
 }
 
+// Update overwrites the NIC. Moving it to another host clears the attribution
+// of the old host's ports, as deleting it would: a port only belongs to a NIC
+// of the host that owns it.
 func (r *NICRepo) Update(v domain.NIC) error {
 	res, err := r.db.Exec(
 		`UPDATE nics SET host_id=?, name=?, kind=?, model=?, serial=?, notes=? WHERE id=?`,
@@ -85,7 +88,16 @@ func (r *NICRepo) Update(v domain.NIC) error {
 	if err != nil {
 		return fmt.Errorf("update nic: %w", err)
 	}
-	return rowsAffectedOrNotFound(res)
+	if err := rowsAffectedOrNotFound(res); err != nil {
+		return err
+	}
+	if _, err := r.db.Exec(
+		`UPDATE ports SET nic_id = 0 WHERE nic_id = ? AND NOT (owner_type = 'host' AND owner_id = ?)`,
+		v.ID, v.HostID,
+	); err != nil {
+		return fmt.Errorf("clear port nic refs: %w", err)
+	}
+	return nil
 }
 
 // Delete removes the NIC and clears the attribution mark on any port that

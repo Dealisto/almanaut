@@ -582,3 +582,20 @@ func TestPairPortLinks(t *testing.T) {
 		t.Fatal("two ports naming one peer should fail")
 	}
 }
+
+func TestCheckPortNICs(t *testing.T) {
+	nics := []domain.NIC{{ID: 1, HostID: 10, Name: "onboard", Kind: "onboard"}}
+	got, cleared, err := checkPortNICs([]domain.Port{
+		{ID: 1, OwnerType: "host", OwnerID: 10, NICID: 1},
+		{ID: 2, OwnerType: "host", OwnerID: 10, NICID: 7}, // NIC not in the file
+	}, nics)
+	if err != nil {
+		t.Fatalf("checkPortNICs: %v", err)
+	}
+	if cleared != 1 || got[0].NICID != 1 || got[1].NICID != 0 {
+		t.Fatalf("got %+v, cleared %d", got, cleared)
+	}
+	if _, _, err := checkPortNICs([]domain.Port{{ID: 3, OwnerType: "host", OwnerID: 11, NICID: 1}}, nics); err == nil {
+		t.Fatal("a port on another host's NIC should fail the import")
+	}
+}
