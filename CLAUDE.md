@@ -3,8 +3,11 @@
 Guidance for working in this repository.
 
 almanaut is a single-binary Go homelab CMDB: SQLite storage, server-side
-rendered UI (`html/template`), no client-side JS framework. Layout:
-`internal/{config,discovery,domain,store,web}`, entrypoint `main.go`.
+rendered UI (`html/template`), no client-side JS framework. Core layout:
+`internal/{config,discovery,domain,store,web}`, entrypoint `main.go`; the
+background jobs and integrations live alongside (`job`, `liveness`,
+`certprobe`, `scheddiscovery`, `notify`, `webhook`, `kuma`), and the host agent
+is `cmd/almanaut-agent` with `internal/{agent,agentapi}`.
 
 ## Build & test
 
@@ -19,8 +22,19 @@ rendered UI (`html/template`), no client-side JS framework. Layout:
 Each entity is one `resource[T]` literal in `New` (`internal/web/server.go`)
 plus a `*XRepo`. The generic CRUD handlers, the relationship catalog, and
 global search all iterate that list — do not hand-write per-type handlers or
-search blocks. Adding an entity means filling in the literal (incl. its
-`search:` field list, which feeds `/search`) and the repo; nothing else.
+search blocks. Adding an entity means:
+
+- the `resource[T]` literal (incl. its `search:` field list, which feeds
+  `/search`) and the repo, which must satisfy `crud[T]`
+  (`internal/web/resource.go`), `*Tx` methods included;
+- its singular type in `domain.EntityTypes` (`internal/domain/relationship.go`),
+  which gates relationships, tags, journal entries and custom fields;
+- export/import in `internal/store/portability.go`: a `Snapshot` list, its
+  `Export` line, its `validateAll` line, its insert in `replaceInventory`, its
+  table in `inventoryTables`, and its `entityTables` entry.
+  `TestEveryTableIsClassified` and `TestSnapshotHasOneListPerInventoryTable`
+  fail until the table is covered;
+- its count in the `almanaut_entities_total` list (`internal/web/metrics.go`).
 
 ### "Not found" vs real errors
 
