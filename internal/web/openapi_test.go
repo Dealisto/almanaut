@@ -19,6 +19,7 @@ var everyEntityBase = []string{
 	"/api/certificates", "/api/backups", "/api/hardware", "/api/subscriptions",
 	"/api/accounts", "/api/sites", "/api/locations", "/api/racks",
 	"/api/contacts", "/api/vlans", "/api/reservations",
+	"/api/nics", "/api/ports",
 }
 
 func TestOpenAPISpecServed(t *testing.T) {

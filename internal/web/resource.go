@@ -182,6 +182,17 @@ func notFoundOrServerError(w http.ResponseWriter, req *http.Request, sing string
 	serverError(w, req, err)
 }
 
+// constraintError returns the store.ConstraintError in err's chain, or nil. A
+// repository raises one for a write that contradicts other rows; its Reason is
+// shown to the user like a Validate error instead of becoming a 500.
+func constraintError(err error) *store.ConstraintError {
+	var c *store.ConstraintError
+	if errors.As(err, &c) {
+		return c
+	}
+	return nil
+}
+
 func (rs resource[T]) list(d handlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		items, err := rs.repo.List()
@@ -419,6 +430,10 @@ func (rs resource[T]) create(d handlerDeps) http.HandlerFunc {
 			return
 		}
 		if _, err := rs.createEntity(d, item, cf, actor(req)); err != nil {
+			if c := constraintError(err); c != nil {
+				rs.renderCreateError(w, req, d, item, c)
+				return
+			}
 			serverError(w, req, err)
 			return
 		}
@@ -458,6 +473,10 @@ func (rs resource[T]) update(d handlerDeps) http.HandlerFunc {
 			return
 		}
 		if err := rs.updateEntity(d, item, cf, actor(req)); err != nil {
+			if c := constraintError(err); c != nil {
+				rs.renderUpdateError(w, req, d, id, item, c)
+				return
+			}
 			notFoundOrServerError(w, req, rs.sing, err)
 			return
 		}
@@ -658,6 +677,10 @@ func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
 		}
 		id, err := rs.createEntity(d, item, cf, actor(req))
 		if err != nil {
+			if c := constraintError(err); c != nil {
+				writeJSONError(w, http.StatusBadRequest, c.Error())
+				return
+			}
 			apiServerError(w, req, err)
 			return
 		}
@@ -708,6 +731,10 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 		if err := rs.updateEntity(d, item, cf, actor(req)); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
+				return
+			}
+			if c := constraintError(err); c != nil {
+				writeJSONError(w, http.StatusBadRequest, c.Error())
 				return
 			}
 			apiServerError(w, req, err)
@@ -968,5 +995,43 @@ func parseReservation(get func(string) string, id int64) domain.Reservation {
 		StartIP:   strings.TrimSpace(get("start_ip")),
 		EndIP:     strings.TrimSpace(get("end_ip")),
 		Notes:     get("notes"),
+	}
+}
+
+func parseNIC(get func(string) string, id int64) domain.NIC {
+	hostID, _ := strconv.ParseInt(get("host_id"), 10, 64)
+	return domain.NIC{
+		ID:     id,
+		HostID: hostID,
+		Name:   strings.TrimSpace(get("name")),
+		Kind:   strings.TrimSpace(get("kind")),
+		Model:  strings.TrimSpace(get("model")),
+		Serial: strings.TrimSpace(get("serial")),
+		Notes:  get("notes"),
+	}
+}
+
+// parsePort accepts the owner either as the HTML form's combined "owner"
+// select ("host:3") or as the CSV import's owner_type/owner_id columns.
+func parsePort(get func(string) string, id int64) domain.Port {
+	ownerType := strings.TrimSpace(get("owner_type"))
+	ownerID, _ := strconv.ParseInt(get("owner_id"), 10, 64)
+	if ref := strings.TrimSpace(get("owner")); ref != "" {
+		if t, i, err := parseRef(ref); err == nil {
+			ownerType, ownerID = t, i
+		}
+	}
+	nicID, _ := strconv.ParseInt(get("nic_id"), 10, 64)
+	peerID, _ := strconv.ParseInt(get("peer_port_id"), 10, 64)
+	return domain.Port{
+		ID:         id,
+		OwnerType:  ownerType,
+		OwnerID:    ownerID,
+		NICID:      nicID,
+		Name:       strings.TrimSpace(get("name")),
+		MAC:        strings.TrimSpace(get("mac")),
+		MgmtOnly:   parseFormBool(get("mgmt_only")),
+		PeerPortID: peerID,
+		Notes:      get("notes"),
 	}
 }

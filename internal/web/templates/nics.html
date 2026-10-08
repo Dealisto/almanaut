@@ -1,0 +1,43 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Infrastructure</span>
+    <h1>NICs</h1>
+  </div>
+  <div class="ph-actions">
+    {{if canWrite}}<a class="btn btn-primary" href="/nics/new">+ New NIC</a>{{end}}
+  </div>
+</div>
+{{template "listcontrols" .Controls}}
+{{if .Items}}
+{{template "bulkactions" .Controls}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th class="bulk-col"></th><th>Name</th><th>Host</th><th>Kind</th><th>Model</th><th>Serial</th><th></th></tr></thead>
+  <tbody>
+  {{range .Items}}
+    <tr><td class="bulk-col"><input type="checkbox" name="ids" value="{{.ID}}" form="bulkform"></td>
+      <td><a href="/nics/{{.ID}}">{{.Name}}</a></td>
+      <td>{{.HostName}}</td>
+      <td>{{.Kind}}</td>
+      <td>{{.Model}}</td>
+      <td>{{.Serial}}</td>
+      <td>
+        {{if canWrite}}
+        <a class="btn" href="/nics/{{.ID}}/edit">Edit</a>
+        <form class="form-inline" method="post" action="/nics/{{.ID}}/delete"
+              onsubmit="return confirm('Delete this NIC? Its ports remain, unattributed.');">
+          {{ csrfField }}
+          <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+        {{end}}
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">No NICs yet.</div></div>
+{{end}}
+{{end}}

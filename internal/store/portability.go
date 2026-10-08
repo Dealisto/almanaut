@@ -28,6 +28,8 @@ type Snapshot struct {
 	Sites          []domain.Site         `yaml:"sites"`
 	Locations      []domain.Location     `yaml:"locations"`
 	Racks          []domain.Rack         `yaml:"racks"`
+	NICs           []domain.NIC          `yaml:"nics"`
+	Ports          []domain.Port         `yaml:"ports"`
 	Relationships  []domain.Relationship `yaml:"relationships"`
 	Tags           []domain.Tag          `yaml:"tags"`
 	JournalEntries []domain.JournalEntry `yaml:"journal_entries"`
@@ -77,6 +79,8 @@ func Export(db *sql.DB) (Snapshot, error) {
 		Sites:             exportList(&listErr, NewSiteRepo(db).WithTx(tx).List),
 		Locations:         exportList(&listErr, NewLocationRepo(db).WithTx(tx).List),
 		Racks:             exportList(&listErr, NewRackRepo(db).WithTx(tx).List),
+		NICs:              exportList(&listErr, NewNICRepo(db).WithTx(tx).List),
+		Ports:             exportList(&listErr, NewPortRepo(db).WithTx(tx).List),
 		Relationships:     exportList(&listErr, NewRelationshipRepo(db).WithTx(tx).List),
 		Tags:              exportList(&listErr, NewTagRepo(db).WithTx(tx).List),
 		JournalEntries:    exportList(&listErr, NewJournalRepo(db).WithTx(tx).List),
@@ -132,6 +136,8 @@ func Import(db *sql.DB, snap Snapshot) error {
 		validateAll("site", snap.Sites, func(s domain.Site) int64 { return s.ID }),
 		validateAll("location", snap.Locations, func(l domain.Location) int64 { return l.ID }),
 		validateAll("rack", snap.Racks, func(k domain.Rack) int64 { return k.ID }),
+		validateAll("nic", snap.NICs, func(n domain.NIC) int64 { return n.ID }),
+		validateAll("port", snap.Ports, func(p domain.Port) int64 { return p.ID }),
 		validateAll("relationship", snap.Relationships, func(r domain.Relationship) int64 { return r.ID }),
 		validateAll("tag", snap.Tags, func(t domain.Tag) int64 { return t.ID }),
 		validateAll("journal_entry", snap.JournalEntries, func(e domain.JournalEntry) int64 { return e.ID }),
@@ -144,6 +150,16 @@ func Import(db *sql.DB, snap Snapshot) error {
 	}
 
 	snap, skipped := dropDanglingRefs(snap)
+	ports, unlinked, err := pairPortLinks(snap.Ports)
+	if err != nil {
+		return err
+	}
+	ports, unattributed, err := checkPortNICs(ports, snap.NICs)
+	if err != nil {
+		return err
+	}
+	snap.Ports = ports
+	skipped += unlinked + unattributed
 
 	return WithTx(db, func(tx *sql.Tx) error {
 		if err := replaceInventory(tx, snap); err != nil {
@@ -156,6 +172,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 			len(snap.Certificates) + len(snap.Backups) + len(snap.Hardware) +
 			len(snap.Subscriptions) + len(snap.Accounts) + len(snap.VLANs) + len(snap.Reservations) + len(snap.Contacts) +
 			len(snap.Sites) + len(snap.Locations) + len(snap.Racks) +
+			len(snap.NICs) + len(snap.Ports) +
 			len(snap.Relationships) + len(snap.Tags) + len(snap.JournalEntries) +
 			len(snap.CustomFieldDefs) + len(snap.CustomFieldValues)
 		changes := []domain.FieldChange{{Field: "records", New: fmt.Sprintf("%d", n)}}
@@ -174,7 +191,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 // Import clears and refills exactly these. TestEveryTableIsClassified fails
 // when a migration adds a table that is in neither this list nor one of the
 // documented exclusions, so a new entity cannot silently miss the export.
-var inventoryTables = []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"}
+var inventoryTables = []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "nics", "ports", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"}
 
 // replaceInventory clears every table and re-inserts snap within tx. It must run
 // inside WithTx, which owns begin/commit/rollback and is panic-safe, so any
@@ -317,6 +334,22 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 			return err
 		}
 	}
+	for _, n := range snap.NICs {
+		if err := insert("nic", n.ID,
+			`INSERT INTO nics (id, host_id, name, kind, model, serial, notes)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			n.ID, n.HostID, n.Name, n.Kind, n.Model, n.Serial, n.Notes); err != nil {
+			return err
+		}
+	}
+	for _, p := range snap.Ports {
+		if err := insert("port", p.ID,
+			`INSERT INTO ports (id, owner_type, owner_id, nic_id, name, mac, mgmt_only, peer_port_id, notes)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			p.ID, p.OwnerType, p.OwnerID, p.NICID, p.Name, p.MAC, boolToInt(p.MgmtOnly), p.PeerPortID, p.Notes); err != nil {
+			return err
+		}
+	}
 	for _, rel := range snap.Relationships {
 		if err := insert("relationship", rel.ID,
 			`INSERT INTO relationships (id, from_type, from_id, to_type, to_id, kind)
@@ -367,7 +400,7 @@ var entityTables = map[string]string{
 	"certificate": "certificates", "backup": "backups", "hardware": "hardware",
 	"subscription": "subscriptions", "account": "accounts", "site": "sites",
 	"location": "locations", "rack": "racks", "contact": "contacts", "vlan": "vlans",
-	"reservation": "ip_reservations",
+	"reservation": "ip_reservations", "nic": "nics", "port": "ports",
 }
 
 // derivedStateTables hold state that the background jobs recompute from the
@@ -468,6 +501,12 @@ func dropDanglingRefs(snap Snapshot) (Snapshot, int) {
 	for _, x := range snap.Racks {
 		collect("rack", x.ID)
 	}
+	for _, x := range snap.NICs {
+		collect("nic", x.ID)
+	}
+	for _, x := range snap.Ports {
+		collect("port", x.ID)
+	}
 	has := func(typ string, id int64) bool { return ids[typ][id] }
 	defs := map[int64]string{} // custom field definition id -> its entity type
 	for _, d := range snap.CustomFieldDefs {
@@ -487,6 +526,69 @@ func dropDanglingRefs(snap Snapshot) (Snapshot, int) {
 		return ok && defType == v.EntityType && has(v.EntityType, v.EntityID)
 	})
 	return snap, skipped
+}
+
+// pairPortLinks returns a copy of ports in which every link is stored on both
+// ends, as PortRepo keeps it. A link to a port the snapshot does not contain is
+// cleared and counted, like other dangling references. A link recorded on one
+// end only (a hand-written file) is completed on the other. Two ports naming
+// the same peer contradict each other and fail the import.
+func pairPortLinks(ports []domain.Port) ([]domain.Port, int, error) {
+	out := append([]domain.Port(nil), ports...)
+	index := make(map[int64]int, len(out))
+	for i, p := range out {
+		index[p.ID] = i
+	}
+	cleared := 0
+	for i := range out {
+		p := &out[i]
+		if p.PeerPortID == 0 {
+			continue
+		}
+		j, ok := index[p.PeerPortID]
+		if !ok {
+			p.PeerPortID = 0
+			cleared++
+			continue
+		}
+		peer := &out[j]
+		switch peer.PeerPortID {
+		case p.ID:
+		case 0:
+			peer.PeerPortID = p.ID
+		default:
+			return nil, 0, fmt.Errorf("port %d: its peer, port %d, is connected to port %d", p.ID, peer.ID, peer.PeerPortID)
+		}
+	}
+	return out, cleared, nil
+}
+
+// checkPortNICs applies PortRepo's NIC rule to a snapshot. It returns ports
+// with every attribution to a NIC the file does not contain cleared (and
+// counted), and fails on a port attributed to another host's NIC. ports must
+// already be a copy the caller owns.
+func checkPortNICs(ports []domain.Port, nics []domain.NIC) ([]domain.Port, int, error) {
+	hostOf := make(map[int64]int64, len(nics))
+	for _, n := range nics {
+		hostOf[n.ID] = n.HostID
+	}
+	cleared := 0
+	for i := range ports {
+		p := &ports[i]
+		if p.NICID == 0 {
+			continue
+		}
+		host, ok := hostOf[p.NICID]
+		if !ok {
+			p.NICID = 0
+			cleared++
+			continue
+		}
+		if host != p.OwnerID {
+			return nil, 0, fmt.Errorf("port %d: NIC %d belongs to host %d, not host %d", p.ID, p.NICID, host, p.OwnerID)
+		}
+	}
+	return ports, cleared, nil
 }
 
 // keep returns a new slice of the items ok accepts, adding the number it
