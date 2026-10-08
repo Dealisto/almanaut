@@ -61,7 +61,7 @@ func Export(db *sql.DB) (Snapshot, error) {
 
 	var listErr error
 	snap := Snapshot{
-		Version:           1,
+		Version:           snapshotVersion,
 		Hosts:             exportList(&listErr, NewHostRepo(db).WithTx(tx).List),
 		Services:          exportList(&listErr, NewServiceRepo(db).WithTx(tx).List),
 		Networks:          exportList(&listErr, NewNetworkRepo(db).WithTx(tx).List),
@@ -102,11 +102,20 @@ func exportList[T any](err *error, list func() ([]T, error)) []T {
 	return items
 }
 
+// snapshotVersion is the Snapshot format Export writes and Import reads.
+const snapshotVersion = 1
+
 // Import replaces the entire inventory with snap, in a single transaction.
 // It validates every record first (aborting before any delete on the first
 // error), then clears all tables and re-inserts each row with its original id
 // so relationship and tag references stay valid. Any failure rolls back.
+//
+// Rows outside the snapshot that are keyed by entity id are reconciled with
+// the new inventory: see reconcileSideTables.
 func Import(db *sql.DB, snap Snapshot) error {
+	if snap.Version > snapshotVersion {
+		return fmt.Errorf("snapshot version %d is newer than this almanaut supports (%d)", snap.Version, snapshotVersion)
+	}
 	for _, err := range []error{
 		validateAll("host", snap.Hosts, func(h domain.Host) int64 { return h.ID }),
 		validateAll("service", snap.Services, func(s domain.Service) int64 { return s.ID }),
@@ -134,8 +143,13 @@ func Import(db *sql.DB, snap Snapshot) error {
 		}
 	}
 
+	snap, skipped := dropDanglingRefs(snap)
+
 	return WithTx(db, func(tx *sql.Tx) error {
 		if err := replaceInventory(tx, snap); err != nil {
+			return err
+		}
+		if err := reconcileSideTables(tx); err != nil {
 			return err
 		}
 		n := len(snap.Hosts) + len(snap.Services) + len(snap.Networks) + len(snap.Domains) +
@@ -144,19 +158,29 @@ func Import(db *sql.DB, snap Snapshot) error {
 			len(snap.Sites) + len(snap.Locations) + len(snap.Racks) +
 			len(snap.Relationships) + len(snap.Tags) + len(snap.JournalEntries) +
 			len(snap.CustomFieldDefs) + len(snap.CustomFieldValues)
+		changes := []domain.FieldChange{{Field: "records", New: fmt.Sprintf("%d", n)}}
+		if skipped > 0 {
+			changes = append(changes, domain.FieldChange{Field: "dangling references skipped", New: fmt.Sprintf("%d", skipped)})
+		}
 		return NewChangelogRepo(db).WithTx(tx).Create(ChangeEvent{
 			EntityType: "", EntityID: 0, Label: "inventory", Action: domain.ActionImport,
-			Changes:   []domain.FieldChange{{Field: "records", New: fmt.Sprintf("%d", n)}},
+			Changes:   changes,
 			CreatedAt: time.Now().UTC().Format(time.RFC3339),
 		})
 	})
 }
 
+// inventoryTables are the tables a Snapshot carries, one per Snapshot list:
+// Import clears and refills exactly these. TestEveryTableIsClassified fails
+// when a migration adds a table that is in neither this list nor one of the
+// documented exclusions, so a new entity cannot silently miss the export.
+var inventoryTables = []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"}
+
 // replaceInventory clears every table and re-inserts snap within tx. It must run
 // inside WithTx, which owns begin/commit/rollback and is panic-safe, so any
 // failure rolls the whole replacement back.
 func replaceInventory(tx *sql.Tx, snap Snapshot) error {
-	for _, table := range []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"} {
+	for _, table := range inventoryTables {
 		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 			return fmt.Errorf("clear %s: %w", table, err)
 		}
@@ -304,7 +328,7 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 	for _, tg := range snap.Tags {
 		if err := insert("tag", tg.ID,
 			`INSERT INTO tags (id, entity_type, entity_id, name) VALUES (?, ?, ?, ?)`,
-			tg.ID, tg.EntityType, tg.EntityID, tg.Name); err != nil {
+			tg.ID, tg.EntityType, tg.EntityID, domain.NormalizeTag(tg.Name)); err != nil {
 			return err
 		}
 	}
@@ -334,6 +358,149 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 	}
 
 	return nil
+}
+
+// entityTables maps every domain.EntityTypes value to the table holding that
+// entity, for the side tables keyed by (entity_type, entity_id).
+var entityTables = map[string]string{
+	"host": "hosts", "service": "services", "network": "networks", "domain": "domains",
+	"certificate": "certificates", "backup": "backups", "hardware": "hardware",
+	"subscription": "subscriptions", "account": "accounts", "site": "sites",
+	"location": "locations", "rack": "racks", "contact": "contacts", "vlan": "vlans",
+	"reservation": "ip_reservations",
+}
+
+// derivedStateTables hold state that the background jobs recompute from the
+// inventory on their next pass. Import clears them: after a replacement a row
+// may describe whatever entity used to have that id, and a stale "down" status
+// or probe result on the new one is worse than none. Clearing never causes a
+// spurious alert: liveness only notifies on a change from a known status.
+var derivedStateTables = []string{"liveness_state", "cert_probe_state", "notification_state"}
+
+// reconcileSideTables brings the tables that are keyed by entity id but not
+// part of a Snapshot in line with the inventory Import just wrote, inside its
+// transaction:
+//
+//   - derived state (derivedStateTables) is cleared;
+//   - attachments of an entity the snapshot no longer contains are deleted,
+//     since nothing can display them any more. Attachments of an entity that
+//     is still present follow its id, so restoring this instance's own export
+//     keeps them.
+//
+// Left alone on purpose: changelog, which also records the deletion of
+// entities that no longer exist; kuma_monitors, which the Kuma syncer
+// reconciles itself (it deletes the monitor of a service that is gone); and
+// host_agents/agent_reports, which already cascade away with the hosts rows.
+func reconcileSideTables(tx *sql.Tx) error {
+	for _, table := range derivedStateTables {
+		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
+			return fmt.Errorf("clear %s: %w", table, err)
+		}
+	}
+	for typ, table := range entityTables {
+		if _, err := tx.Exec(
+			`DELETE FROM attachments WHERE entity_type = ? AND entity_id NOT IN (SELECT id FROM `+table+`)`, typ,
+		); err != nil {
+			return fmt.Errorf("delete orphaned %s attachments: %w", typ, err)
+		}
+	}
+	return nil
+}
+
+// dropDanglingRefs returns snap without the relationship, tag, journal and
+// custom-field-value rows that point at an entity (or custom field definition)
+// the snapshot does not contain, and how many it dropped. Such a row could
+// never be displayed, and once inserted it would silently attach to whatever
+// entity later gets that id. Entity deletes remove these rows, so a dangling
+// one only comes from a hand-edited file or from an older race between a
+// delete and a tag/relationship add; skipping it keeps that from failing an
+// otherwise good restore. The caller's slices are not modified.
+func dropDanglingRefs(snap Snapshot) (Snapshot, int) {
+	ids := map[string]map[int64]bool{}
+	collect := func(typ string, id int64) {
+		if ids[typ] == nil {
+			ids[typ] = map[int64]bool{}
+		}
+		ids[typ][id] = true
+	}
+	for _, x := range snap.Hosts {
+		collect("host", x.ID)
+	}
+	for _, x := range snap.Services {
+		collect("service", x.ID)
+	}
+	for _, x := range snap.Networks {
+		collect("network", x.ID)
+	}
+	for _, x := range snap.Domains {
+		collect("domain", x.ID)
+	}
+	for _, x := range snap.Certificates {
+		collect("certificate", x.ID)
+	}
+	for _, x := range snap.Backups {
+		collect("backup", x.ID)
+	}
+	for _, x := range snap.Hardware {
+		collect("hardware", x.ID)
+	}
+	for _, x := range snap.Subscriptions {
+		collect("subscription", x.ID)
+	}
+	for _, x := range snap.Accounts {
+		collect("account", x.ID)
+	}
+	for _, x := range snap.VLANs {
+		collect("vlan", x.ID)
+	}
+	for _, x := range snap.Reservations {
+		collect("reservation", x.ID)
+	}
+	for _, x := range snap.Contacts {
+		collect("contact", x.ID)
+	}
+	for _, x := range snap.Sites {
+		collect("site", x.ID)
+	}
+	for _, x := range snap.Locations {
+		collect("location", x.ID)
+	}
+	for _, x := range snap.Racks {
+		collect("rack", x.ID)
+	}
+	has := func(typ string, id int64) bool { return ids[typ][id] }
+	defs := map[int64]string{} // custom field definition id -> its entity type
+	for _, d := range snap.CustomFieldDefs {
+		defs[d.ID] = d.EntityType
+	}
+
+	skipped := 0
+	snap.Relationships = keep(snap.Relationships, &skipped, func(r domain.Relationship) bool {
+		return has(r.FromType, r.FromID) && has(r.ToType, r.ToID)
+	})
+	snap.Tags = keep(snap.Tags, &skipped, func(t domain.Tag) bool { return has(t.EntityType, t.EntityID) })
+	snap.JournalEntries = keep(snap.JournalEntries, &skipped, func(e domain.JournalEntry) bool {
+		return has(e.EntityType, e.EntityID)
+	})
+	snap.CustomFieldValues = keep(snap.CustomFieldValues, &skipped, func(v domain.CustomFieldValueRow) bool {
+		defType, ok := defs[v.DefID]
+		return ok && defType == v.EntityType && has(v.EntityType, v.EntityID)
+	})
+	return snap, skipped
+}
+
+// keep returns a new slice of the items ok accepts, adding the number it
+// rejected to *dropped.
+func keep[T any](items []T, dropped *int, ok func(T) bool) []T {
+	out := make([]T, 0, len(items))
+	for _, it := range items {
+		if ok(it) {
+			out = append(out, it)
+		} else {
+			*dropped++
+		}
+	}
+	return out
 }
 
 // validateAll validates every item, returning the first failure tagged with the

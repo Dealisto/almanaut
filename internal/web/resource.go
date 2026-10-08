@@ -89,6 +89,16 @@ type resource[T validatable] struct {
 
 func (rs resource[T]) singular() string { return rs.sing }
 
+// existsTx returns store.ErrNotFound unless entity id exists, read on tx so a
+// caller attaching a child row (tag, relationship, journal entry, attachment)
+// can check its parent in the same transaction as the insert. Otherwise a
+// concurrent delete leaves the child orphaned, or a child posted for an id not
+// yet used is inherited by whichever entity later gets it.
+func (rs resource[T]) existsTx(tx *sql.Tx, id int64) error {
+	_, err := rs.repo.GetTx(tx, id)
+	return err
+}
+
 // options lists this resource's entities as relationship/catalog options.
 func (rs resource[T]) options() ([]entityOption, error) {
 	items, err := rs.repo.List()
@@ -746,6 +756,7 @@ type mountable interface {
 	mountAPI(r chi.Router, d handlerDeps)
 	options() ([]entityOption, error)
 	singular() string
+	existsTx(tx *sql.Tx, id int64) error
 	basePath() string
 	apiResource() apiResourceInfo
 	searchHeading() string

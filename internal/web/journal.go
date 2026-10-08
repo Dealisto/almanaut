@@ -1,6 +1,7 @@
 package web
 
 import (
+	"database/sql"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Dealisto/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -37,8 +39,15 @@ func (rs resource[T]) addJournal(d handlerDeps) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if _, err := d.journal.Create(entry); err != nil {
-			serverError(w, req, err)
+		err := store.WithTx(d.db, func(tx *sql.Tx) error {
+			if err := rs.existsTx(tx, id); err != nil {
+				return err
+			}
+			_, err := d.journal.WithTx(tx).Create(entry)
+			return err
+		})
+		if err != nil {
+			notFoundOrServerError(w, req, rs.sing, err)
 			return
 		}
 		http.Redirect(w, req, fmt.Sprintf("%s/%d", rs.basePath(), id), http.StatusSeeOther)
