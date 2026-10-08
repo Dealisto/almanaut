@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"io"
 	"log"
 	"path/filepath"
 	"testing"
@@ -180,4 +181,16 @@ func TestDispatchFiltersAndCoalesces(t *testing.T) {
 	if len(y.trigger) != 1 {
 		t.Fatalf("triggers did not coalesce: %d", len(y.trigger))
 	}
+}
+
+type panickingServices struct{}
+
+func (panickingServices) List() ([]domain.Service, error) { panic("boom") }
+
+// TestSyncerPassRecoversPanic: Start runs on a bare goroutine, so a panic in a
+// pass must be recovered rather than crash the server.
+func TestSyncerPassRecoversPanic(t *testing.T) {
+	db := newSyncerDB(t)
+	y := NewSyncer(NewClient("http://127.0.0.1:1", "a", "b", false), panickingServices{}, store.NewKumaRepo(db), log.New(io.Discard, "", 0))
+	y.pass(context.Background()) // must return, not panic
 }

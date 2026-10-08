@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"runtime/debug"
+	"sync"
 	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
@@ -30,6 +32,12 @@ type StateStore interface {
 // DialFunc probes one address; nil error means reachable. Overridable in tests.
 type DialFunc func(ctx context.Context, addr string) error
 
+// maxConcurrentChecks bounds how many dials one pass runs at once. Dialing one
+// target at a time let a handful of unreachable addresses (each waiting out
+// the full timeout) use up the whole pass, so the targets after them were
+// never checked again and their status froze.
+const maxConcurrentChecks = 16
+
 // Checker performs one pass over every monitored host and service per Run.
 type Checker struct {
 	hosts    HostSource
@@ -40,6 +48,7 @@ type Checker struct {
 	timeout  time.Duration
 	log      *slog.Logger
 	now      func() time.Time
+	workers  int // concurrent dials per pass
 }
 
 // New builds a Checker. dial may be nil to use the default TCP dialer; log may
@@ -55,7 +64,7 @@ func New(hosts HostSource, services ServiceSource, state StateStore, sender noti
 	if now == nil {
 		now = time.Now
 	}
-	return &Checker{hosts, services, state, sender, dial, timeout, log, now}
+	return &Checker{hosts, services, state, sender, dial, timeout, log, now, maxConcurrentChecks}
 }
 
 func tcpDial(ctx context.Context, addr string) error {
@@ -67,36 +76,66 @@ func tcpDial(ctx context.Context, addr string) error {
 	return conn.Close()
 }
 
-// Run probes every monitored host/service once. A single entity's error is
-// logged and does not abort the pass. It returns nil unless the context ended.
+// target is one monitored address.
+type target struct {
+	entityType string
+	id         int64
+	label      string
+	addr       string
+}
+
+// Run probes every monitored host/service once, up to c.workers at a time. A
+// single entity's error is logged and does not abort the pass. It returns nil
+// unless the context ended.
 func (c *Checker) Run(ctx context.Context) error {
 	hosts, err := c.hosts.List()
 	if err != nil {
 		return fmt.Errorf("list hosts: %w", err)
 	}
-	for _, h := range hosts {
-		if h.CheckAddress == "" {
-			continue
-		}
-		c.check(ctx, "host", h.ID, h.Name, h.CheckAddress)
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-	}
 	services, err := c.services.List()
 	if err != nil {
 		return fmt.Errorf("list services: %w", err)
 	}
-	for _, s := range services {
-		if s.CheckAddress == "" {
-			continue
-		}
-		c.check(ctx, "service", s.ID, s.Name, s.CheckAddress)
-		if ctx.Err() != nil {
-			return ctx.Err()
+	var targets []target
+	for _, h := range hosts {
+		if h.CheckAddress != "" {
+			targets = append(targets, target{"host", h.ID, h.Name, h.CheckAddress})
 		}
 	}
-	return nil
+	for _, s := range services {
+		if s.CheckAddress != "" {
+			targets = append(targets, target{"service", s.ID, s.Name, s.CheckAddress})
+		}
+	}
+
+	sem := make(chan struct{}, max(c.workers, 1))
+	var wg sync.WaitGroup
+dispatch:
+	for _, t := range targets {
+		select {
+		case <-ctx.Done():
+			break dispatch // the pass is over: start no further dials
+		case sem <- struct{}{}:
+		}
+		wg.Go(func() {
+			defer func() { <-sem }()
+			c.safeCheck(ctx, t)
+		})
+	}
+	wg.Wait()
+	return ctx.Err()
+}
+
+// safeCheck runs check for t and turns a panic into a logged error. The job
+// runner recovers panics in Run itself, but not in goroutines Run starts; one
+// bad target must not take the whole process down.
+func (c *Checker) safeCheck(ctx context.Context, t target) {
+	defer func() {
+		if p := recover(); p != nil {
+			c.log.Error("liveness: check panicked", "type", t.entityType, "id", t.id, "panic", p, "stack", string(debug.Stack()))
+		}
+	}()
+	c.check(ctx, t.entityType, t.id, t.label, t.addr)
 }
 
 func (c *Checker) check(ctx context.Context, entityType string, id int64, label, addr string) {

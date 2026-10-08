@@ -168,3 +168,38 @@ func TestStatusesReturnsRegisteredJobsInOrder(t *testing.T) {
 		t.Fatalf("fresh job should be zero-valued: %+v", got[0])
 	}
 }
+
+// TestPanicIsRecordedAndJobKeepsRunning: a panicking pass must not kill the
+// process; it is recorded as a failed pass and the next trigger runs again.
+func TestPanicIsRecordedAndJobKeepsRunning(t *testing.T) {
+	r := New(discardLogger())
+	ran := make(chan int, 4)
+	var mu sync.Mutex
+	n := 0
+	r.Register(Definition{Name: "p", Run: func(context.Context) error {
+		mu.Lock()
+		i := n
+		n++
+		mu.Unlock()
+		ran <- i
+		if i == 0 {
+			panic("boom")
+		}
+		return nil
+	}})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go r.Start(ctx)
+
+	waitFor(t, ran) // the panicking first pass
+	eventually(t, func() bool { s := statusOf(r, "p"); return s.Runs == 1 && !s.Running })
+	if got := statusOf(r, "p").LastErr; got != "panic: boom" {
+		t.Fatalf("LastErr = %q, want %q", got, "panic: boom")
+	}
+	r.Trigger("p")
+	waitFor(t, ran)
+	eventually(t, func() bool { return statusOf(r, "p").Runs == 2 })
+	if got := statusOf(r, "p").LastErr; got != "" {
+		t.Fatalf("LastErr after a clean pass = %q, want empty", got)
+	}
+}

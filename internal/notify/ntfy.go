@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/Dealisto/almanaut/internal/redact"
 )
 
 // Notification is a single message to deliver.
@@ -41,7 +43,7 @@ func NewNtfyClient(url, token string) Sender {
 func (c *ntfyClient) Send(ctx context.Context, n Notification) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, strings.NewReader(n.Body))
 	if err != nil {
-		return fmt.Errorf("build ntfy request: %w", err)
+		return fmt.Errorf("build ntfy request: %w", redact.Error(err))
 	}
 	if n.Title != "" {
 		req.Header.Set("Title", n.Title)
@@ -54,7 +56,7 @@ func (c *ntfyClient) Send(ctx context.Context, n Notification) error {
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("post ntfy: %w", err)
+		return fmt.Errorf("post ntfy: %w", redact.Error(err)) // the topic in the URL is its credential
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

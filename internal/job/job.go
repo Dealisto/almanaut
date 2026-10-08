@@ -6,7 +6,9 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -158,6 +160,20 @@ func (r *Runner) loop(ctx context.Context, j *job) {
 	}
 }
 
+// runSafely calls j's RunFunc, turning a panic into an error: a job runs on a
+// bare goroutine, where an unrecovered panic would take down the whole server.
+// The pass is then recorded as failed like any other, and the job keeps its
+// schedule.
+func (r *Runner) runSafely(ctx context.Context, j *job) (err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			r.log.Printf("job %q panicked: %v\n%s", j.def.Name, p, debug.Stack())
+			err = fmt.Errorf("panic: %v", p)
+		}
+	}()
+	return j.def.Run(ctx)
+}
+
 // pass runs one bounded execution of j and records the outcome. One pass at a
 // time per job (the loop is single-goroutine), so there is no intra-job overlap.
 func (r *Runner) pass(ctx context.Context, j *job) {
@@ -167,7 +183,7 @@ func (r *Runner) pass(ctx context.Context, j *job) {
 
 	start := time.Now()
 	runCtx, cancel := context.WithTimeout(ctx, j.def.Timeout)
-	err := j.def.Run(runCtx)
+	err := r.runSafely(runCtx, j)
 	cancel()
 
 	j.mu.Lock()

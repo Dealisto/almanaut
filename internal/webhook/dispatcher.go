@@ -6,10 +6,12 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"runtime/debug"
 	"sync"
 	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/redact"
 )
 
 // Dispatcher receives committed entity-change events for outbound delivery.
@@ -135,9 +137,21 @@ func (q *Queue) Wait() { q.wg.Wait() }
 // caller so the DB read and signing never block Dispatch.
 func (q *Queue) expander() {
 	for e := range q.events {
-		q.expand(e)
+		q.safely("expand "+e.Type, func() { q.expand(e) })
 		q.wg.Done() // the event's own slot; each job adds its own slot in expand
 	}
+}
+
+// safely runs fn, logging a panic instead of letting it kill the process: the
+// queue's goroutines are not under the HTTP server's recover middleware, and a
+// dead worker would also strand Wait.
+func (q *Queue) safely(what string, fn func()) {
+	defer func() {
+		if p := recover(); p != nil {
+			q.log.Printf("webhook: %s panicked: %v\n%s", what, p, debug.Stack())
+		}
+	}()
+	fn()
 }
 
 func (q *Queue) expand(e Event) {
@@ -175,7 +189,7 @@ func (q *Queue) enqueue(j *deliveryJob) {
 	case q.jobs <- j:
 	default:
 		q.wg.Done()
-		q.log.Printf("webhook: job queue full, dropping delivery to %s (%s)", j.url, j.logRef)
+		q.log.Printf("webhook: job queue full, dropping delivery to %s (%s)", redact.URL(j.url), j.logRef)
 	}
 }
 
@@ -184,14 +198,15 @@ func (q *Queue) enqueue(j *deliveryJob) {
 // holds the job's wg slot across the delay without occupying a worker.
 func (q *Queue) deliveryWorker() {
 	for j := range q.jobs {
-		err := q.post(j.url, j.body, j.sig, j.deliveryID)
+		err := fmt.Errorf("delivery panicked")
+		q.safely("delivery", func() { err = q.post(j.url, j.body, j.sig, j.deliveryID) })
 		if err == nil {
 			q.wg.Done()
 			continue
 		}
-		q.log.Printf("webhook: deliver to %s attempt %d/%d: %v", j.url, j.attempt, q.max, err)
+		q.log.Printf("webhook: deliver to %s attempt %d/%d: %v", redact.URL(j.url), j.attempt, q.max, err)
 		if j.attempt >= q.max {
-			q.log.Printf("webhook: giving up on %s after %d attempts (%s)", j.url, q.max, j.logRef)
+			q.log.Printf("webhook: giving up on %s after %d attempts (%s)", redact.URL(j.url), q.max, j.logRef)
 			q.wg.Done()
 			continue
 		}
@@ -203,16 +218,18 @@ func (q *Queue) deliveryWorker() {
 }
 
 func (q *Queue) post(url string, body []byte, sig, deliveryID string) error {
+	// Errors carry the endpoint URL, which often embeds a token: redact them,
+	// since the caller logs every failed attempt.
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return redact.Error(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Almanaut-Signature", sig)
 	req.Header.Set("X-Almanaut-Delivery", deliveryID)
 	resp, err := q.client.Do(req)
 	if err != nil {
-		return err
+		return redact.Error(err)
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))

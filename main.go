@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -65,16 +66,23 @@ func main() {
 	}
 
 	var dispatcher webhook.Dispatcher = webhook.Noop{}
+	var webhookQueue *webhook.Queue // nil unless enabled; drained at shutdown
 	if cfg.WebhooksEnabled {
-		dispatcher = webhook.NewQueue(store.NewWebhookRepo(db), webhook.Options{
+		webhookQueue = webhook.NewQueue(store.NewWebhookRepo(db), webhook.Options{
 			Timeout:     cfg.WebhookTimeout,
 			MaxAttempts: cfg.WebhookMaxAttempts,
 		})
+		dispatcher = webhookQueue
 		log.Println("outbound webhooks enabled")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Background loops that use the database. Shutdown waits for them before
+	// the deferred db.Close, so a pass is not cut off between, say, sending a
+	// notification and recording that it was sent.
+	var background sync.WaitGroup
 
 	// Uptime Kuma monitor sync: opt-in, enabled only when URL + user + pass
 	// are all configured. The syncer receives the same post-commit events as
@@ -88,7 +96,7 @@ func main() {
 			store.NewKumaRepo(db),
 			log.Default(),
 		)
-		go syncer.Start(ctx)
+		background.Go(func() { syncer.Start(ctx) })
 		dispatcher = webhook.Multi{dispatcher, syncer}
 		kumaOpts = web.KumaOptions{Enabled: true, URL: cfg.KumaURL, Syncer: syncer}
 		log.Println("uptime kuma sync enabled")
@@ -218,7 +226,7 @@ func main() {
 			Name:     "liveness",
 			Title:    "Liveness checks",
 			Interval: cfg.LivenessInterval,
-			Timeout:  cfg.LivenessInterval, // a batch of sequential dials may exceed the 1m default
+			Timeout:  cfg.LivenessInterval, // many slow dials may exceed the 1m default, even run concurrently
 			Run:      checker.Run,
 		})
 		log.Println("liveness checks enabled")
@@ -264,7 +272,7 @@ func main() {
 		log.Println("scheduled Proxmox discovery enabled")
 	}
 
-	go runner.Start(ctx)
+	background.Go(func() { runner.Start(ctx) })
 
 	select {
 	case err := <-serverErr:
@@ -272,13 +280,39 @@ func main() {
 	case <-ctx.Done():
 		stop() // restore default signal handling so a second signal force-quits
 		log.Println("shutting down...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		// One deadline covers the whole shutdown, inside Docker's default 10s
+		// stop grace period.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 9*time.Second)
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			log.Printf("graceful shutdown failed: %v", err)
-		} else {
-			log.Println("stopped")
+		}
+		// ctx is cancelled, so every loop finishes its current pass and returns.
+		if !waitUntil(shutdownCtx, background.Wait) {
+			log.Println("background jobs still running at the shutdown deadline")
+		}
+		// Deliver what is already queued; retries waiting on a backoff past
+		// the deadline are dropped.
+		if webhookQueue != nil && !waitUntil(shutdownCtx, webhookQueue.Wait) {
+			log.Println("webhook deliveries still pending at the shutdown deadline; dropping them")
 		}
 		cancel()
+		log.Println("stopped")
+	}
+}
+
+// waitUntil runs wait in a goroutine and reports whether it returned before
+// ctx ended.
+func waitUntil(ctx context.Context, wait func()) bool {
+	done := make(chan struct{})
+	go func() {
+		wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 
