@@ -20,6 +20,10 @@ details are listed there.
 - The last admin can no longer be demoted or deleted, and
   `ALMANAUT_RESET_ADMIN` now gives the reset account the admin role back, so
   user management can no longer be lost without a way back.
+- Notification and webhook URLs are no longer written to the log. A failed
+  request's error used to include the full URL, which logged the Discord
+  webhook token, the ntfy topic, or a webhook endpoint's embedded token on
+  every DNS failure or timeout. Logs now show only the scheme and host.
 
 ### Fixed
 - Deleting, or resetting the 2FA of, a user that does not exist now returns
@@ -39,6 +43,17 @@ details are listed there.
   refuses a file from a newer snapshot format.
 - `docs/export-import.md` no longer calls the YAML export a complete backup,
   and lists what it leaves out.
+- Liveness checks now dial up to 16 targets at once. Checked one at a time, a
+  dozen unreachable addresses used up the whole pass, so every target after
+  them stopped being checked and kept a stale status.
+- A panic in a background job, the Uptime Kuma sync, a liveness check or a
+  webhook delivery is now logged and recorded as a failed pass, instead of
+  crashing the server.
+- Shutdown now waits for background jobs and queued webhook deliveries before
+  closing the database, within one 9-second deadline (inside Docker's default
+  10-second stop grace period). Before, a pass could be cut off between sending
+  a notification and recording it, so the notification was sent again after a
+  restart.
 
 ## [1.0.1]
 

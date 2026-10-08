@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -140,5 +141,65 @@ func TestMultiFansOut(t *testing.T) {
 	m.Dispatch(Event{Type: "service", ID: 1}, Event{Type: "host", ID: 2})
 	if len(a.got) != 2 || len(b.got) != 2 {
 		t.Fatalf("fan-out incomplete: a=%d b=%d", len(a.got), len(b.got))
+	}
+}
+
+// TestQueueLogsDoNotLeakEndpointURL: failed deliveries are logged on every
+// attempt, and an endpoint URL often carries a token in its path or query.
+func TestQueueLogsDoNotLeakEndpointURL(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	dead := srv.URL
+	srv.Close()
+
+	var mu sync.Mutex
+	var logs strings.Builder
+	q := NewQueue(fakeLister{hooks: []domain.Webhook{{URL: dead + "/hook/SECRETTOKEN?key=SECRETKEY", Secret: "s", Enabled: true}}},
+		Options{Workers: 1, MaxAttempts: 2, BaseDelay: time.Millisecond, Logger: log.New(lockedWriter{&mu, &logs}, "", 0)})
+
+	e, _ := NewEvent("host", 1, ActionCreated, "a", "t", map[string]string{})
+	q.Dispatch(e)
+	q.Wait()
+
+	mu.Lock()
+	defer mu.Unlock()
+	out := logs.String()
+	if !strings.Contains(out, "giving up") {
+		t.Fatalf("expected delivery failures to be logged, got:\n%s", out)
+	}
+	if strings.Contains(out, "SECRETTOKEN") || strings.Contains(out, "SECRETKEY") {
+		t.Fatalf("webhook log leaks the endpoint URL secret:\n%s", out)
+	}
+}
+
+// lockedWriter serialises writes from the queue's goroutines into b.
+type lockedWriter struct {
+	mu *sync.Mutex
+	b  *strings.Builder
+}
+
+func (w lockedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.b.Write(p)
+}
+
+type panickingTransport struct{}
+
+func (panickingTransport) RoundTrip(*http.Request) (*http.Response, error) { panic("boom") }
+
+// TestQueueRecoversPanickingDelivery: a panic during delivery is logged and
+// treated as a failed attempt; the worker survives and Wait still returns.
+func TestQueueRecoversPanickingDelivery(t *testing.T) {
+	q := testQueue(fakeLister{hooks: []domain.Webhook{{URL: "http://example.invalid/h", Secret: "s", Enabled: true}}},
+		Options{Workers: 1, MaxAttempts: 2, BaseDelay: time.Millisecond, Client: &http.Client{Transport: panickingTransport{}}})
+	e, _ := NewEvent("host", 1, ActionCreated, "a", "t", map[string]string{})
+	q.Dispatch(e, e)
+
+	done := make(chan struct{})
+	go func() { q.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Wait did not return: a panicking delivery stranded the queue")
 	}
 }

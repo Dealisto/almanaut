@@ -3,6 +3,7 @@ package kuma
 import (
 	"context"
 	"log"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -107,6 +108,13 @@ func (y *Syncer) Start(ctx context.Context) {
 }
 
 func (y *Syncer) pass(ctx context.Context) {
+	// Start runs on a bare goroutine: recover so a bug in one pass is logged
+	// and the next trigger still syncs, instead of taking down the server.
+	defer func() {
+		if p := recover(); p != nil {
+			y.log.Printf("kuma: sync panicked: %v\n%s", p, debug.Stack())
+		}
+	}()
 	runCtx, cancel := context.WithTimeout(ctx, passTimeout)
 	defer cancel()
 	sum := y.Reconcile(runCtx)

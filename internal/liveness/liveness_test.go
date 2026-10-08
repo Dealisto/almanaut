@@ -252,3 +252,88 @@ func TestCheckerSkipsWhenParentContextEndsMidDial(t *testing.T) {
 		t.Fatalf("parent context ending mid-dial must not change state: before %+v after %+v", before, after)
 	}
 }
+
+// TestCheckerSlowTargetsDoNotStarveTheRest: with sequential dials, a few
+// targets that each wait out the full timeout used up the pass deadline and
+// the targets after them were never checked. Dials now run concurrently.
+func TestCheckerSlowTargetsDoNotStarveTheRest(t *testing.T) {
+	const n = 40
+	var hosts hostList
+	for i := 1; i <= n; i++ {
+		hosts = append(hosts, domain.Host{ID: int64(i), Name: "h" + strconv.Itoa(i), CheckAddress: "x:1"})
+	}
+	// Every dial takes 100ms: 4s sequentially, ~0.3s with 16 workers.
+	slow := func(ctx context.Context, _ string) error {
+		select {
+		case <-time.After(100 * time.Millisecond):
+			return errors.New("timeout")
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	state := newFakeState()
+	c := New(hosts, noServices{}, state, &countingSender{}, slow, time.Second, nil, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := c.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for i := 1; i <= n; i++ {
+		if _, err := state.Get("host", int64(i)); err != nil {
+			t.Fatalf("host %d was never checked within the pass deadline", i)
+		}
+	}
+}
+
+// TestCheckerBoundsConcurrency: no more than c.workers dials run at once.
+func TestCheckerBoundsConcurrency(t *testing.T) {
+	var hosts hostList
+	for i := 1; i <= 30; i++ {
+		hosts = append(hosts, domain.Host{ID: int64(i), Name: "h", CheckAddress: "x:1"})
+	}
+	var mu sync.Mutex
+	inFlight, peak := 0, 0
+	dial := func(context.Context, string) error {
+		mu.Lock()
+		inFlight++
+		peak = max(peak, inFlight)
+		mu.Unlock()
+		time.Sleep(10 * time.Millisecond)
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		return nil
+	}
+	c := New(hosts, noServices{}, newFakeState(), &countingSender{}, dial, time.Second, nil, nil)
+	c.workers = 4
+	if err := c.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if peak > 4 {
+		t.Fatalf("peak concurrent dials = %d, want <= 4", peak)
+	}
+}
+
+// TestCheckerRecoversPanickingCheck: a panic in one check goroutine is logged
+// and the other targets are still checked, instead of crashing the process.
+func TestCheckerRecoversPanickingCheck(t *testing.T) {
+	hosts := hostList{
+		{ID: 1, Name: "bad", CheckAddress: "panic:1"},
+		{ID: 2, Name: "good", CheckAddress: "ok:1"},
+	}
+	dial := func(_ context.Context, addr string) error {
+		if addr == "panic:1" {
+			panic("boom")
+		}
+		return nil
+	}
+	state := newFakeState()
+	c := New(hosts, noServices{}, state, &countingSender{}, dial, time.Second, nil, nil)
+	if err := c.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := state.Get("host", 2); err != nil {
+		t.Fatal("the healthy target was not checked after another one panicked")
+	}
+}

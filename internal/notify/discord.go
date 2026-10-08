@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/Dealisto/almanaut/internal/redact"
 )
 
 // Discord embed colours (decimal RGB, as the webhook API expects).
@@ -60,12 +62,12 @@ func (c *discordClient) Send(ctx context.Context, n Notification) error {
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("build discord request: %w", err)
+		return fmt.Errorf("build discord request: %w", redact.Error(err))
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("post discord: %w", err)
+		return fmt.Errorf("post discord: %w", redact.Error(err)) // the URL holds the webhook token
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
