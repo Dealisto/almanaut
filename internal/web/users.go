@@ -16,6 +16,10 @@ import (
 // guard runs inside a transaction so a concurrent delete cannot race past it.
 var errLastUser = errors.New("cannot delete the last remaining user")
 
+// errLastAdmin signals an attempt to demote or delete the only admin, which
+// would leave nobody able to manage users (ALMANAUT_RESET_ADMIN restores one).
+var errLastAdmin = errors.New("cannot remove the last admin")
+
 type usersPageData struct {
 	Title   string
 	Users   []domain.User
@@ -84,7 +88,7 @@ func createUser(users *store.UserRepo) http.HandlerFunc {
 	}
 }
 
-func updateUserRole(users *store.UserRepo) http.HandlerFunc {
+func updateUserRole(users *store.UserRepo, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := userIDParam(w, r)
 		if !ok {
@@ -95,12 +99,45 @@ func updateUserRole(users *store.UserRepo) http.HandlerFunc {
 			renderUsers(w, r, users, "invalid role")
 			return
 		}
-		if err := users.UpdateRole(id, role, nowRFC3339()); err != nil {
+		// Demoting the last admin would leave nobody able to manage users. The
+		// count-check-and-update runs in one transaction so two concurrent
+		// demotions cannot both see a second admin and both proceed.
+		err := store.WithTx(db, func(tx *sql.Tx) error {
+			ur := users.WithTx(tx)
+			target, err := ur.Get(id)
+			if err != nil {
+				return err
+			}
+			if target.Role == domain.RoleAdmin && role != domain.RoleAdmin {
+				if err := requireAnotherAdmin(ur); err != nil {
+					return err
+				}
+			}
+			return ur.UpdateRole(id, role, nowRFC3339())
+		})
+		if errors.Is(err, errLastAdmin) {
+			renderUsers(w, r, users, errLastAdmin.Error())
+			return
+		}
+		if err != nil {
 			notFoundOrServerError(w, r, "user", err)
 			return
 		}
 		http.Redirect(w, r, "/users", http.StatusSeeOther)
 	}
+}
+
+// requireAnotherAdmin returns errLastAdmin unless more than one admin exists.
+// Call it on a tx-bound repo, inside the transaction that removes an admin.
+func requireAnotherAdmin(ur *store.UserRepo) error {
+	n, err := ur.CountByRole(domain.RoleAdmin)
+	if err != nil {
+		return err
+	}
+	if n <= 1 {
+		return errLastAdmin
+	}
+	return nil
 }
 
 func deleteUser(users *store.UserRepo, db *sql.DB, audit *store.AuthEventRepo) http.HandlerFunc {
@@ -109,14 +146,17 @@ func deleteUser(users *store.UserRepo, db *sql.DB, audit *store.AuthEventRepo) h
 		if !ok {
 			return
 		}
-		// Capture the target's name before deletion so the audit event can name
-		// the user whose access was revoked.
-		target, _ := users.Get(id)
-		// Guard against locking everyone out: never delete the last account.
-		// The count-check-and-delete runs inside a transaction so two
-		// concurrent deletes can't both observe count > 1 and both proceed.
+		// Guard against locking everyone out: never delete the last account or
+		// the last admin. The checks and the delete run inside one transaction
+		// so two concurrent deletes can't both pass them.
+		var target domain.User
 		err := store.WithTx(db, func(tx *sql.Tx) error {
 			ur := users.WithTx(tx)
+			var err error
+			// Read the target first: the audit event names the deleted user.
+			if target, err = ur.Get(id); err != nil {
+				return err
+			}
 			n, err := ur.Count()
 			if err != nil {
 				return err
@@ -124,14 +164,19 @@ func deleteUser(users *store.UserRepo, db *sql.DB, audit *store.AuthEventRepo) h
 			if n <= 1 {
 				return errLastUser
 			}
+			if target.Role == domain.RoleAdmin {
+				if err := requireAnotherAdmin(ur); err != nil {
+					return err
+				}
+			}
 			return ur.Delete(id)
 		})
-		if errors.Is(err, errLastUser) {
-			renderUsers(w, r, users, "cannot delete the last remaining user")
+		if errors.Is(err, errLastUser) || errors.Is(err, errLastAdmin) {
+			renderUsers(w, r, users, err.Error())
 			return
 		}
 		if err != nil {
-			serverError(w, r, err)
+			notFoundOrServerError(w, r, "user", err)
 			return
 		}
 		recordAuth(audit, r, domain.AuthSessionRevoked, target.Username, id, "user deleted by "+actor(r))
@@ -139,7 +184,32 @@ func deleteUser(users *store.UserRepo, db *sql.DB, audit *store.AuthEventRepo) h
 	}
 }
 
-func resetUserPassword(users *store.UserRepo) http.HandlerFunc {
+// revokeSessions ends every session userID holds; call it on a tx-bound repo
+// in the same transaction as the credential change that warrants it. When the
+// request is itself one of that user's sessions, that session is kept, so
+// acting on your own account does not sign you out of the page you are using.
+func revokeSessions(sessions *store.SessionRepo, r *http.Request, userID int64) error {
+	if u, ok := userFrom(r.Context()); ok && u.ID == userID {
+		if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
+			return sessions.DeleteOtherSessions(userID, hashToken(c.Value))
+		}
+	}
+	return sessions.DeleteByUser(userID)
+}
+
+// setPasswordAndRevoke stores a new password hash for userID and ends their
+// other sessions in one transaction: a session stolen before the change must
+// not outlive it.
+func setPasswordAndRevoke(db *sql.DB, users *store.UserRepo, sessions *store.SessionRepo, r *http.Request, userID int64, hash string) error {
+	return store.WithTx(db, func(tx *sql.Tx) error {
+		if err := users.WithTx(tx).UpdatePassword(userID, hash, nowRFC3339()); err != nil {
+			return err
+		}
+		return revokeSessions(sessions.WithTx(tx), r, userID)
+	})
+}
+
+func resetUserPassword(users *store.UserRepo, sessions *store.SessionRepo, db *sql.DB, audit *store.AuthEventRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := userIDParam(w, r)
 		if !ok {
@@ -155,9 +225,12 @@ func resetUserPassword(users *store.UserRepo) http.HandlerFunc {
 			serverError(w, r, err)
 			return
 		}
-		if err := users.UpdatePassword(id, hash, nowRFC3339()); err != nil {
+		if err := setPasswordAndRevoke(db, users, sessions, r, id, hash); err != nil {
 			notFoundOrServerError(w, r, "user", err)
 			return
+		}
+		if target, err := users.Get(id); err == nil {
+			recordAuth(audit, r, domain.AuthSessionRevoked, target.Username, id, "password reset by "+actor(r))
 		}
 		http.Redirect(w, r, "/users", http.StatusSeeOther)
 	}
@@ -167,7 +240,7 @@ func changePasswordForm(w http.ResponseWriter, r *http.Request) {
 	render(w, r, "password.html", passwordPageData{Title: "Change password"})
 }
 
-func changePassword(users *store.UserRepo) http.HandlerFunc {
+func changePassword(users *store.UserRepo, sessions *store.SessionRepo, db *sql.DB, audit *store.AuthEventRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, ok := userFrom(r.Context())
 		if !ok {
@@ -189,11 +262,12 @@ func changePassword(users *store.UserRepo) http.HandlerFunc {
 			serverError(w, r, err)
 			return
 		}
-		if err := users.UpdatePassword(u.ID, hash, nowRFC3339()); err != nil {
+		if err := setPasswordAndRevoke(db, users, sessions, r, u.ID, hash); err != nil {
 			serverError(w, r, err)
 			return
 		}
-		render(w, r, "password.html", passwordPageData{Title: "Change password", Success: "password updated"})
+		recordAuth(audit, r, domain.AuthSessionRevoked, u.Username, u.ID, "password changed")
+		render(w, r, "password.html", passwordPageData{Title: "Change password", Success: "password updated; your other sessions were signed out"})
 	}
 }
 

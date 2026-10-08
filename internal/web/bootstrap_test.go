@@ -99,3 +99,41 @@ func TestBootstrapResetChangesPassword(t *testing.T) {
 		t.Fatal("reset password does not verify")
 	}
 }
+
+// TestBootstrapResetRestoresAdminRole: lockout recovery must work even when
+// the last admin was demoted, so the reset also restores the admin role.
+func TestBootstrapResetRestoresAdminRole(t *testing.T) {
+	users := bootstrapRepo(t)
+	_ = BootstrapAdmin(users, testLogger(), "admin", "password123", false)
+	u, _ := users.GetByUsername("admin")
+	if err := users.UpdateRole(u.ID, domain.RoleViewer, "t"); err != nil {
+		t.Fatalf("demote: %v", err)
+	}
+	if err := BootstrapAdmin(users, testLogger(), "admin", "newpassword", true); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+	if after, _ := users.GetByUsername("admin"); after.Role != domain.RoleAdmin {
+		t.Fatalf("role after reset = %q, want admin", after.Role)
+	}
+}
+
+// TestBootstrapResetFallsBackToOldestAdmin: when the named user does not
+// exist, the reset targets the oldest admin, not whoever sorts first by name.
+func TestBootstrapResetFallsBackToOldestAdmin(t *testing.T) {
+	users := bootstrapRepo(t)
+	_ = BootstrapAdmin(users, testLogger(), "zed", "password123", false) // oldest, admin
+	if _, err := users.Create(domain.User{Username: "amy", Role: domain.RoleViewer, PasswordHash: "x", CreatedAt: "t", UpdatedAt: "t"}); err != nil {
+		t.Fatalf("create amy: %v", err)
+	}
+	if err := BootstrapAdmin(users, testLogger(), "nobody", "newpassword", true); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+	zed, _ := users.GetByUsername("zed")
+	amy, _ := users.GetByUsername("amy")
+	if !verifyPassword(zed.PasswordHash, "newpassword") {
+		t.Error("reset did not target the oldest admin")
+	}
+	if amy.Role != domain.RoleViewer || verifyPassword(amy.PasswordHash, "newpassword") {
+		t.Error("reset touched a non-admin that only sorts first by name")
+	}
+}

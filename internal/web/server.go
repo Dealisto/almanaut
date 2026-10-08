@@ -626,14 +626,14 @@ func New(cfg Config) http.Handler {
 		if cfg.AuthEnabled {
 			r.Post("/logout", logout(sessions, authEvents, cfg.SecureCookies))
 			r.Get("/account/password", changePasswordForm)
-			r.Post("/account/password", changePassword(users))
+			r.Post("/account/password", changePassword(users, sessions, db, authEvents))
 			r.Get("/account/tokens", listTokens(tokens))
 			r.Post("/account/tokens", createToken(tokens))
 			r.Post("/account/tokens/{id}/delete", deleteToken(tokens))
 			r.Get("/account/2fa", account2FA(totp))
 			r.Post("/account/2fa/setup", setup2FA(totp))
 			r.Post("/account/2fa/confirm", confirm2FA(totp, db))
-			r.Post("/account/2fa/disable", disable2FA(totp))
+			r.Post("/account/2fa/disable", disable2FA(totp, db))
 		}
 		r.Post("/theme", setTheme(cfg.SecureCookies)) // UI preference, any role
 
@@ -645,9 +645,9 @@ func New(cfg Config) http.Handler {
 				r.Post("/users", createUser(users))
 				r.Post("/users/{id}/delete", deleteUser(users, db, authEvents))
 				r.Get("/audit", auditLogPage(authEvents, users))
-				r.Post("/users/{id}/password", resetUserPassword(users))
-				r.Post("/users/{id}/role", updateUserRole(users))
-				r.Post("/users/{id}/2fa/reset", resetUser2FA(totp, authEvents, users))
+				r.Post("/users/{id}/password", resetUserPassword(users, sessions, db, authEvents))
+				r.Post("/users/{id}/role", updateUserRole(users, db))
+				r.Post("/users/{id}/2fa/reset", resetUser2FA(totp, sessions, authEvents, users, db))
 
 				r.Get("/webhooks", listWebhooks(webhooks))
 				r.Post("/webhooks", createWebhook(webhooks))

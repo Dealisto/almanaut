@@ -17,8 +17,16 @@ Every user has one of three built-in roles (there are no custom roles):
 
 Admins manage accounts at **Users** (`/users`): create users (viewer by
 default), change roles, reset passwords, and delete accounts. The last
-remaining user cannot be deleted, so you can't lock yourself out entirely.
+remaining user cannot be deleted, and the last admin cannot be demoted or
+deleted, so you can't lock yourself out of user management.
 Each user changes their own password at `/account/password`.
+
+A password change ends the user's other sessions, so a session stolen before
+the change does not survive it; the session you changed it from stays signed
+in. An admin resetting someone's password signs that user out everywhere.
+[API tokens](api.md#api-tokens) are separate credentials and are not revoked
+by a password change — delete them at `/account/tokens` if they may be
+compromised too.
 
 ## Sessions & login throttling
 
@@ -39,7 +47,10 @@ reads or writes inventory is: every other route requires a session or a token.
 
 Locked out? Set `ALMANAUT_RESET_ADMIN=true` and restart — almanaut resets the
 admin's password (using `ALMANAUT_AUTH_PASS` if set, otherwise a fresh random
-one) and logs the new value the same way as the first-run banner. **Unset
+one) and logs the new value the same way as the first-run banner. The account
+reset is `ALMANAUT_AUTH_USER` (default `admin`) or, if no such user exists, the
+oldest admin (the oldest account when no admin is left); it is given the admin
+role back if it had lost it. **Unset
 `ALMANAUT_RESET_ADMIN` afterwards**, or every restart will reset the password
 again.
 
@@ -58,6 +69,11 @@ mis-scanned secret cannot lock you out of your own account.
 Confirming enrollment shows **10 single-use recovery codes, once**. Copy them
 then; only their hashes are stored. Each one works exactly once, and the page
 shows how many you have left.
+
+Each TOTP code is accepted once. A code stays valid for about 90 seconds to
+tolerate clock skew, but once it has been used — to log in, confirm enrollment
+or turn 2FA off — it is refused for the rest of that window, so a code seen
+over someone's shoulder cannot be replayed.
 
 Turning 2FA off requires a current TOTP code or a recovery code, not just your
 session. That is deliberate: a hijacked session should not be able to quietly
@@ -115,7 +131,7 @@ Admins get an append-only trail of authentication events at **Audit**
 | `2fa_success` / `2fa_failure` | A second factor was accepted or rejected |
 | `sso_login` | A proxy-asserted identity was accepted |
 | `token_used` | An [API token](api.md#api-tokens) authenticated a request |
-| `session_revoked` | Sessions were invalidated (a user deleted, or their 2FA reset) |
+| `session_revoked` | Sessions were invalidated (a user deleted, their password changed or reset, or their 2FA reset) |
 
 Two details make this trail trustworthy rather than decorative:
 

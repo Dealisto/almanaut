@@ -155,3 +155,87 @@ func TestSelfChangePassword(t *testing.T) {
 		t.Fatalf("correct current password reported incorrect: %s", rec.Body)
 	}
 }
+
+// TestChangePasswordRevokesOtherSessions: a session stolen before a password
+// change must not survive it, while the session that made the change stays.
+func TestChangePasswordRevokesOtherSessions(t *testing.T) {
+	h, db := totpTestHandler(t)
+	current := loginAs(t, h, "admin", "password123")
+	other := loginAs(t, h, "admin", "password123")
+
+	rec := postCSRF(t, h, current, "/account/password", "current_password=password123&new_password=newpassword1")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "password updated") {
+		t.Fatalf("change password = %d (body %s)", rec.Code, rec.Body)
+	}
+	if sessionAlive(t, h, other) {
+		t.Error("another session survived the password change")
+	}
+	if !sessionAlive(t, h, current) {
+		t.Error("the session that changed the password was ended")
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM auth_events WHERE event_type=? AND user_id=1`, domain.AuthSessionRevoked).Scan(&n); err != nil {
+		t.Fatalf("count auth events: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("session_revoked events = %d, want 1", n)
+	}
+}
+
+func TestResetUserPasswordRevokesSessions(t *testing.T) {
+	h, db := totpTestHandler(t)
+	admin := loginAs(t, h, "admin", "password123")
+	bob := seedUserAndLogin(t, h, db, "bob", domain.RoleEditor) // user id 2
+
+	if rec := postCSRF(t, h, admin, "/users/2/password", "password=newpassword1"); rec.Code != http.StatusSeeOther {
+		t.Fatalf("reset password = %d (body %s)", rec.Code, rec.Body)
+	}
+	if sessionAlive(t, h, bob) {
+		t.Error("bob's session survived an admin password reset")
+	}
+	if rec := postCSRF(t, h, admin, "/users/999/password", "password=newpassword1"); rec.Code != http.StatusNotFound {
+		t.Errorf("reset unknown user = %d, want 404", rec.Code)
+	}
+}
+
+// TestCannotRemoveLastAdmin: demoting or deleting the only admin would leave
+// nobody able to manage users, even when other accounts exist.
+func TestCannotRemoveLastAdmin(t *testing.T) {
+	h, db := totpTestHandler(t)
+	admin := loginAs(t, h, "admin", "password123")
+	seedUserAndLogin(t, h, db, "vic", domain.RoleViewer) // user id 2
+	users := store.NewUserRepo(db)
+
+	rec := postCSRF(t, h, admin, "/users/1/role", "role=viewer")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), errLastAdmin.Error()) {
+		t.Fatalf("demote last admin = %d, want the form re-rendered with an error", rec.Code)
+	}
+	rec = postCSRF(t, h, admin, "/users/1/delete", "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), errLastAdmin.Error()) {
+		t.Fatalf("delete last admin = %d, want the form re-rendered with an error", rec.Code)
+	}
+	if u, err := users.Get(1); err != nil || u.Role != domain.RoleAdmin {
+		t.Fatalf("admin after refused changes = %+v, %v", u, err)
+	}
+
+	// With a second admin, demoting the first is allowed.
+	if rec := postCSRF(t, h, admin, "/users/2/role", "role=admin"); rec.Code != http.StatusSeeOther {
+		t.Fatalf("promote vic = %d", rec.Code)
+	}
+	if rec := postCSRF(t, h, admin, "/users/1/role", "role=editor"); rec.Code != http.StatusSeeOther {
+		t.Fatalf("demote with another admin = %d (body %s)", rec.Code, rec.Body)
+	}
+}
+
+func TestUserMutationsOnUnknownUserAre404(t *testing.T) {
+	h, _ := totpTestHandler(t)
+	admin := loginAs(t, h, "admin", "password123")
+	for path, body := range map[string]string{
+		"/users/999/role":   "role=viewer",
+		"/users/999/delete": "",
+	} {
+		if rec := postCSRF(t, h, admin, path, body); rec.Code != http.StatusNotFound {
+			t.Errorf("POST %s = %d, want 404", path, rec.Code)
+		}
+	}
+}

@@ -5,12 +5,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
-	"github.com/go-chi/chi/v5"
 	"rsc.io/qr"
 )
 
@@ -134,7 +132,8 @@ func confirm2FA(totp *store.TOTPRepo, db *sql.DB) http.HandlerFunc {
 			notFoundOrServerError(w, r, "enrollment", err)
 			return
 		}
-		if !domain.VerifyTOTP(t.Secret, r.FormValue("code"), time.Now().UTC()) {
+		step, ok := domain.MatchTOTP(t.Secret, r.FormValue("code"), time.Now().UTC())
+		if !ok {
 			// Re-show the enrollment page with an error.
 			uri := domain.TOTPURI(totpIssuer, u.Username, t.Secret)
 			qrImg, qerr := totpQRDataURI(uri)
@@ -158,10 +157,14 @@ func confirm2FA(totp *store.TOTPRepo, db *sql.DB) http.HandlerFunc {
 		for i, c := range codes {
 			hashes[i] = hashToken(domain.NormalizeRecoveryCode(c))
 		}
-		// Enable + store recovery codes atomically.
+		// Enable + store recovery codes atomically. The confirming code's step
+		// is recorded too, so it cannot be replayed to complete a login.
 		err = store.WithTx(db, func(tx *sql.Tx) error {
 			tr := totp.WithTx(tx)
 			if err := tr.Enable(u.ID); err != nil {
+				return err
+			}
+			if _, err := tr.UseStep(u.ID, step); err != nil {
 				return err
 			}
 			return tr.ReplaceRecoveryCodes(u.ID, hashes)
@@ -176,7 +179,7 @@ func confirm2FA(totp *store.TOTPRepo, db *sql.DB) http.HandlerFunc {
 
 // disable2FA turns 2FA off after re-verifying a current code or recovery code,
 // so a hijacked session cannot silently remove the second factor.
-func disable2FA(totp *store.TOTPRepo) http.HandlerFunc {
+func disable2FA(totp *store.TOTPRepo, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, _ := userFrom(r.Context())
 		t, err := totp.Get(u.ID)
@@ -188,7 +191,7 @@ func disable2FA(totp *store.TOTPRepo) http.HandlerFunc {
 			http.Error(w, "invalid code", http.StatusBadRequest)
 			return
 		}
-		if err := totp.Disable(u.ID); err != nil {
+		if err := store.WithTx(db, func(tx *sql.Tx) error { return totp.WithTx(tx).Disable(u.ID) }); err != nil {
 			serverError(w, r, err)
 			return
 		}
@@ -197,10 +200,15 @@ func disable2FA(totp *store.TOTPRepo) http.HandlerFunc {
 }
 
 // verifySecondFactor checks a TOTP code or, failing that, redeems a single-use
-// recovery code. Returns true on either.
+// recovery code. Returns true on either. A TOTP code is accepted once per time
+// step, so a code observed in use cannot be replayed while it is still valid.
 func verifySecondFactor(totp *store.TOTPRepo, userID int64, secret, code, recovery string) bool {
-	if code != "" && domain.VerifyTOTP(secret, code, time.Now().UTC()) {
-		return true
+	if code != "" {
+		if step, ok := domain.MatchTOTP(secret, code, time.Now().UTC()); ok {
+			if fresh, err := totp.UseStep(userID, step); err == nil && fresh {
+				return true
+			}
+		}
 	}
 	if recovery != "" {
 		ok, err := totp.UseRecoveryCode(userID, hashToken(domain.NormalizeRecoveryCode(recovery)))
@@ -305,18 +313,29 @@ func verify2FA(users *store.UserRepo, sessions *store.SessionRepo, totp *store.T
 }
 
 // resetUser2FA lets an admin remove a user's second factor (e.g. lost device).
-func resetUser2FA(totp *store.TOTPRepo, audit *store.AuthEventRepo, users *store.UserRepo) http.HandlerFunc {
+// It also ends that user's sessions, in the same transaction: a reset must not
+// leave a session that was opened with the old factor alive.
+func resetUser2FA(totp *store.TOTPRepo, sessions *store.SessionRepo, audit *store.AuthEventRepo, users *store.UserRepo, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+		id, ok := userIDParam(w, r)
+		if !ok {
+			return
+		}
+		var target domain.User
+		err := store.WithTx(db, func(tx *sql.Tx) error {
+			var err error
+			if target, err = users.WithTx(tx).Get(id); err != nil {
+				return err
+			}
+			if err := totp.WithTx(tx).Disable(id); err != nil {
+				return err
+			}
+			return revokeSessions(sessions.WithTx(tx), r, id)
+		})
 		if err != nil {
-			http.Error(w, "invalid id", http.StatusBadRequest)
+			notFoundOrServerError(w, r, "user", err)
 			return
 		}
-		if err := totp.Disable(id); err != nil {
-			serverError(w, r, err)
-			return
-		}
-		target, _ := users.Get(id)
 		recordAuth(audit, r, domain.AuthSessionRevoked, target.Username, id, "2fa reset by "+actor(r))
 		http.Redirect(w, r, "/users", http.StatusSeeOther)
 	}

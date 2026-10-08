@@ -135,8 +135,15 @@ func TestTOTPEnrollAndLogin(t *testing.T) {
 		t.Fatalf("wrong code = %d, want 401", rec.Code)
 	}
 
-	// Correct code completes login.
-	code, _ := domain.TOTPCode(secret, time.Now().UTC())
+	// The code that confirmed enrollment was consumed there and cannot be
+	// replayed to log in.
+	step := lastUsedStep(t, db, 1)
+	if rec := submit2FA(t, h, pending, "code="+codeAtStep(t, secret, step)); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("enrollment code replayed at login = %d, want 401", rec.Code)
+	}
+
+	// A code for the next step (within the ±1 skew window) completes login.
+	code := codeAtStep(t, secret, step+1)
 	rec = submit2FA(t, h, pending, "code="+code)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("valid code = %d, want 303 (body %s)", rec.Code, rec.Body)
@@ -216,5 +223,103 @@ func TestTOTPViewerCannotReset(t *testing.T) {
 	viewer := seedUserAndLogin(t, h, db, "vic", domain.RoleViewer)
 	if rec := postCSRF(t, h, viewer, "/users/1/2fa/reset", ""); rec.Code != http.StatusForbidden {
 		t.Errorf("viewer 2fa reset = %d, want 403", rec.Code)
+	}
+}
+
+// lastUsedStep reads the replay marker of userID's TOTP factor.
+func lastUsedStep(t *testing.T, db *sql.DB, userID int64) int64 {
+	t.Helper()
+	var step int64
+	if err := db.QueryRow(`SELECT last_used_step FROM user_totp WHERE user_id=?`, userID).Scan(&step); err != nil {
+		t.Fatalf("read last_used_step: %v", err)
+	}
+	return step
+}
+
+// codeAtStep returns secret's code for one exact time step, so a test can name
+// the step it means instead of racing the 30s clock boundary.
+func codeAtStep(t *testing.T, secret string, step int64) string {
+	t.Helper()
+	code, err := domain.TOTPCode(secret, time.Unix(step*30, 0))
+	if err != nil {
+		t.Fatalf("TOTPCode: %v", err)
+	}
+	return code
+}
+
+// sessionAlive reports whether cookie still authenticates a page request.
+func sessionAlive(t *testing.T, h http.Handler, cookie *http.Cookie) bool {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, withCookie(httptest.NewRequest(http.MethodGet, "/", nil), cookie))
+	return rec.Code == http.StatusOK
+}
+
+// TestTOTPCodeCannotBeReplayed: a code that completed one login is refused for
+// a second login while it is still inside its validity window (RFC 6238 §5.2).
+func TestTOTPCodeCannotBeReplayed(t *testing.T) {
+	h, db := totpTestHandler(t)
+	session := loginAs(t, h, "admin", "password123")
+	secret, _ := enroll2FA(t, h, db, session, 1)
+	code := codeAtStep(t, secret, lastUsedStep(t, db, 1)+1)
+
+	pending := cookieNamed(passwordLogin(t, h, "admin", "password123").Result().Cookies(), pending2FACookieName)
+	if rec := submit2FA(t, h, pending, "code="+code); rec.Code != http.StatusSeeOther {
+		t.Fatalf("first use = %d, want 303 (body %s)", rec.Code, rec.Body)
+	}
+	pending2 := cookieNamed(passwordLogin(t, h, "admin", "password123").Result().Cookies(), pending2FACookieName)
+	if rec := submit2FA(t, h, pending2, "code="+code); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("replayed code = %d, want 401", rec.Code)
+	}
+}
+
+// TestTOTPReplayedCodeCannotDisable: a code already used to log in cannot be
+// reused to turn the second factor off.
+func TestTOTPReplayedCodeCannotDisable(t *testing.T) {
+	h, db := totpTestHandler(t)
+	session := loginAs(t, h, "admin", "password123")
+	secret, _ := enroll2FA(t, h, db, session, 1)
+	used := codeAtStep(t, secret, lastUsedStep(t, db, 1))
+
+	if rec := postCSRF(t, h, session, "/account/2fa/disable", "code="+used); rec.Code != http.StatusBadRequest {
+		t.Fatalf("disable with consumed code = %d, want 400", rec.Code)
+	}
+	var n int
+	db.QueryRow(`SELECT COUNT(*) FROM user_totp WHERE user_id=1`).Scan(&n)
+	if n != 1 {
+		t.Fatal("2FA was disabled with a replayed code")
+	}
+}
+
+// TestTOTPAdminResetRevokesSessions: the docs promise a 2FA reset ends the
+// user's sessions; an admin resetting their own factor keeps the current one.
+func TestTOTPAdminResetRevokesSessions(t *testing.T) {
+	h, db := totpTestHandler(t)
+	admin := loginAs(t, h, "admin", "password123")
+	bob := seedUserAndLogin(t, h, db, "bob", domain.RoleEditor) // user id 2
+	if !sessionAlive(t, h, bob) {
+		t.Fatal("bob's session should work before the reset")
+	}
+
+	if rec := postCSRF(t, h, admin, "/users/2/2fa/reset", ""); rec.Code != http.StatusSeeOther {
+		t.Fatalf("2fa reset = %d", rec.Code)
+	}
+	if sessionAlive(t, h, bob) {
+		t.Error("bob's session survived an admin 2FA reset")
+	}
+
+	if rec := postCSRF(t, h, admin, "/users/1/2fa/reset", ""); rec.Code != http.StatusSeeOther {
+		t.Fatalf("self 2fa reset = %d", rec.Code)
+	}
+	if !sessionAlive(t, h, admin) {
+		t.Error("resetting your own 2FA must not end the session you did it from")
+	}
+}
+
+func TestTOTPAdminResetUnknownUserIs404(t *testing.T) {
+	h, _ := totpTestHandler(t)
+	admin := loginAs(t, h, "admin", "password123")
+	if rec := postCSRF(t, h, admin, "/users/999/2fa/reset", ""); rec.Code != http.StatusNotFound {
+		t.Fatalf("reset unknown user = %d, want 404", rec.Code)
 	}
 }

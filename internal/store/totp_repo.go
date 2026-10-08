@@ -20,11 +20,12 @@ func NewTOTPRepo(db *sql.DB) *TOTPRepo { return &TOTPRepo{db: db} }
 func (r *TOTPRepo) WithTx(tx *sql.Tx) *TOTPRepo { return &TOTPRepo{db: tx} }
 
 // SetSecret starts (or restarts) enrollment: it stores a new secret for userID
-// with enabled=0, replacing any prior pending or active secret.
+// with enabled=0, replacing any prior pending or active secret. The replay
+// marker resets too: steps accepted for the old secret say nothing about it.
 func (r *TOTPRepo) SetSecret(userID int64, secret, createdAt string) error {
 	if _, err := r.db.Exec(
 		`INSERT INTO user_totp (user_id, secret, enabled, created_at) VALUES (?, ?, 0, ?)
-		 ON CONFLICT(user_id) DO UPDATE SET secret = excluded.secret, enabled = 0, created_at = excluded.created_at`,
+		 ON CONFLICT(user_id) DO UPDATE SET secret = excluded.secret, enabled = 0, created_at = excluded.created_at, last_used_step = 0`,
 		userID, secret, createdAt,
 	); err != nil {
 		return fmt.Errorf("set totp secret: %w", err)
@@ -55,7 +56,27 @@ func (r *TOTPRepo) Enable(userID int64) error {
 	return rowsAffectedOrNotFound(res)
 }
 
-// Disable removes userID's TOTP secret and all their recovery codes.
+// UseStep records that a TOTP code for step was accepted for userID, returning
+// false when that step (or a later one) was already used — a replayed code.
+// The check and the write are one statement, so two concurrent logins with the
+// same code cannot both succeed.
+func (r *TOTPRepo) UseStep(userID, step int64) (bool, error) {
+	res, err := r.db.Exec(
+		`UPDATE user_totp SET last_used_step = ? WHERE user_id = ? AND last_used_step < ?`,
+		step, userID, step,
+	)
+	if err != nil {
+		return false, fmt.Errorf("use totp step: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// Disable removes userID's TOTP secret and all their recovery codes. Run it
+// inside a transaction (WithTx) so the two deletes land together.
 func (r *TOTPRepo) Disable(userID int64) error {
 	if _, err := r.db.Exec(`DELETE FROM user_totp WHERE user_id = ?`, userID); err != nil {
 		return fmt.Errorf("disable totp: %w", err)

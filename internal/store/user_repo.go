@@ -107,6 +107,16 @@ func (r *UserRepo) Count() (int, error) {
 	return n, nil
 }
 
+// CountByRole returns the number of users with role. User management counts
+// admins inside its write transaction to refuse removing the last one.
+func (r *UserRepo) CountByRole(role domain.Role) (int, error) {
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM users WHERE role = ?`, string(role)).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count users by role: %w", err)
+	}
+	return n, nil
+}
+
 func scanUser(s scanner) (domain.User, error) {
 	var u domain.User
 	if err := s.Scan(&u.ID, &u.Username, &u.Role, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt); err != nil {

@@ -10,6 +10,22 @@ details are listed there.
 
 ## [Unreleased]
 
+### Security
+- Changing a password now ends the user's other sessions, and an admin
+  password reset or 2FA reset ends all of that user's sessions. Previously a
+  stolen session cookie stayed valid for its full 30 days, and the 2FA reset
+  only claimed to revoke sessions.
+- A TOTP code is now accepted only once. It could previously be replayed for
+  about 90 seconds, to log in again or to turn 2FA off.
+- The last admin can no longer be demoted or deleted, and
+  `ALMANAUT_RESET_ADMIN` now gives the reset account the admin role back, so
+  user management can no longer be lost without a way back.
+
+### Fixed
+- Deleting, or resetting the 2FA of, a user that does not exist now returns
+  404 instead of silently redirecting (and, for the 2FA reset, writing an audit
+  event with no username).
+
 ## [1.0.1]
 
 ### Added
