@@ -46,6 +46,10 @@ Data outside the file is reconciled with the imported inventory:
 A relationship, tag, journal entry or custom-field value that points at an
 entity (or field definition) missing from the file is skipped rather than
 failing the import; the import's history event records how many were skipped.
+The same goes for a port's connection to, or NIC attribution to, something the
+file does not contain: it is cleared and counted. A connection written on one
+port only is completed on the other. Two ports connected to the same port, or
+a port on another host's NIC, fail the import.
 Tag names are normalised the way the UI stores them (`#Prod` → `prod`). A
 file written by a newer almanaut, with a higher `version`, is refused.
 
