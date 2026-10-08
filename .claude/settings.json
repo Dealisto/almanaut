@@ -10,7 +10,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/guard-migrations.py"
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-migrations.py\""
           }
         ]
       }
