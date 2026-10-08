@@ -1,12 +1,14 @@
 package web
 
 import (
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 
 	"github.com/Dealisto/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -70,8 +72,15 @@ func (rs resource[T]) addAttachment(d handlerDeps) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if _, err := d.attachments.Create(att); err != nil {
-			serverError(w, req, err)
+		err = store.WithTx(d.db, func(tx *sql.Tx) error {
+			if err := rs.existsTx(tx, id); err != nil {
+				return err
+			}
+			_, err := d.attachments.WithTx(tx).Create(att)
+			return err
+		})
+		if err != nil {
+			notFoundOrServerError(w, req, rs.sing, err)
 			return
 		}
 		http.Redirect(w, req, fmt.Sprintf("%s/%d", rs.basePath(), id), http.StatusSeeOther)

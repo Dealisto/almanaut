@@ -25,6 +25,20 @@ details are listed there.
 - Deleting, or resetting the 2FA of, a user that does not exist now returns
   404 instead of silently redirecting (and, for the 2FA reset, writing an audit
   event with no username).
+- A YAML import no longer leaves per-entity state describing whatever entity
+  used to have an id. Liveness status, certificate probe results and
+  notification state are cleared and rebuilt by the background jobs, and
+  attachments of entities the file no longer contains are deleted.
+  Attachments of entities still present follow their id, and history is kept.
+- Adding a tag, relationship, journal entry or attachment now checks, in the
+  same transaction, that the entity exists. Before, one posted for a deleted
+  entity (or an id not used yet) was stored as an invisible orphan, or
+  inherited by the entity that later got that id.
+- Import skips relationships, tags, journal entries and custom-field values
+  that point at entities missing from the file, normalises tag names, and
+  refuses a file from a newer snapshot format.
+- `docs/export-import.md` no longer calls the YAML export a complete backup,
+  and lists what it leaves out.
 
 ## [1.0.1]
 

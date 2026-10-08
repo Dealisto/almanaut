@@ -3,6 +3,7 @@ package web
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -682,7 +683,7 @@ func New(cfg Config) http.Handler {
 			for _, rs := range resources {
 				rs.mount(r, deps)
 			}
-			r.Post("/tags", addTag(tags, cat))
+			r.Post("/tags", addTag(tags, cat, db))
 			r.Post("/tags/delete", removeTag(tags, cat))
 			r.Get("/tags", tagsOverview(tags, cat))
 
@@ -692,7 +693,7 @@ func New(cfg Config) http.Handler {
 			r.Post("/custom-fields/{id}/delete", deleteCustomField(customFields))
 
 			r.Get("/relationships", listRelationships(relationships, cat))
-			r.Post("/relationships", createRelationship(relationships, cat))
+			r.Post("/relationships", createRelationship(relationships, cat, db))
 			r.Post("/relationships/{id}/delete", deleteRelationship(relationships))
 			r.Post("/journal/{id}/delete", deleteJournal(cat, deps))
 			r.Get("/attachments/{id}", downloadAttachment(deps))
@@ -904,7 +905,7 @@ func listRelationships(rels *store.RelationshipRepo, cat entityCatalog) http.Han
 	}
 }
 
-func createRelationship(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFunc {
+func createRelationship(rels *store.RelationshipRepo, cat entityCatalog, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		fromType, fromID, errFrom := parseRef(req.FormValue("from"))
 		toType, toID, errTo := parseRef(req.FormValue("to"))
@@ -924,7 +925,23 @@ func createRelationship(rels *store.RelationshipRepo, cat entityCatalog) http.Ha
 			renderRelationships(w, req, rels, cat, err.Error())
 			return
 		}
-		if _, err := rels.Create(rel); err != nil {
+		// Both endpoints are checked in the insert's transaction, so a
+		// concurrent delete cannot leave the edge pointing at nothing.
+		err := store.WithTx(db, func(tx *sql.Tx) error {
+			if err := cat.existsTx(tx, rel.FromType, rel.FromID); err != nil {
+				return err
+			}
+			if err := cat.existsTx(tx, rel.ToType, rel.ToID); err != nil {
+				return err
+			}
+			_, err := rels.WithTx(tx).Create(rel)
+			return err
+		})
+		if errors.Is(err, store.ErrNotFound) {
+			renderRelationships(w, req, rels, cat, "that entity no longer exists")
+			return
+		}
+		if err != nil {
 			serverError(w, req, err)
 			return
 		}
@@ -1006,7 +1023,7 @@ func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 	}
 }
 
-func addTag(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
+func addTag(tags *store.TagRepo, cat entityCatalog, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		entityType := req.FormValue("entity_type")
 		entityID, err := strconv.ParseInt(req.FormValue("entity_id"), 10, 64)
@@ -1019,8 +1036,14 @@ func addTag(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err := tags.Add(tag); err != nil {
-			serverError(w, req, err)
+		err = store.WithTx(db, func(tx *sql.Tx) error {
+			if err := cat.existsTx(tx, entityType, entityID); err != nil {
+				return err
+			}
+			return tags.WithTx(tx).Add(tag)
+		})
+		if err != nil {
+			notFoundOrServerError(w, req, entityType, err)
 			return
 		}
 		http.Redirect(w, req, cat.path(entityType, entityID), http.StatusSeeOther)

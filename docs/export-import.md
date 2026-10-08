@@ -4,13 +4,50 @@
 
 The whole inventory round-trips through a single YAML file. **Data → Export**
 (or `GET /export`) downloads `almanaut-export.yaml`; **Data → Import** uploads
-one back. This is your backup/restore and migration path
-([attachments](inventory-model.md#attachments) excepted — they live only in
-the database file).
+one back. Use it to move an inventory between instances, or as a portable copy
+of your data.
 
 > ⚠️ Import **replaces the entire inventory** — every existing record is
 > deleted and re-created from the file. It is not a merge. The import form
 > makes you tick a confirmation checkbox first.
+
+## What the file contains
+
+Every entity type, with its relationships, tags, journal entries and custom
+fields (definitions and values). Records keep their ids, so references between
+them survive the round trip.
+
+It does **not** contain anything specific to one instance: users, sessions,
+API tokens and 2FA, webhooks, saved views, the authentication audit log, the
+history (changelog), [attachments](inventory-model.md#attachments), agent
+bindings and reports, Uptime Kuma monitor mappings, and discovery runs. For a
+complete backup, copy the SQLite database file instead.
+
+## What import does to the rest
+
+Data outside the file is reconciled with the imported inventory:
+
+- **Attachments** follow their entity's id: an entity present in the file
+  keeps its attachments, and attachments of entities the file does not contain
+  are deleted. Restoring this instance's own export therefore keeps them.
+  Importing a file from *another* instance, where the same id may be a
+  different entity, can leave an attachment on the wrong record.
+- **History** is kept, including the record of deleted entities; the import
+  itself is logged as one event.
+- **Derived state** — liveness status, certificate probe results, and which
+  expiry notifications were already sent — is cleared and rebuilt by the
+  [background jobs](background-jobs.md) on their next pass. An item already
+  notified as expiring may be notified once more.
+- **Agent bindings** are removed with the hosts they belonged to; an agent
+  re-binds on its next report.
+- **Uptime Kuma monitors** are reconciled by the next sync, which removes the
+  monitor of a service the file no longer contains.
+
+A relationship, tag, journal entry or custom-field value that points at an
+entity (or field definition) missing from the file is skipped rather than
+failing the import; the import's history event records how many were skipped.
+Tag names are normalised the way the UI stores them (`#Prod` → `prod`). A
+file written by a newer almanaut, with a higher `version`, is refused.
 
 ## Additive CSV import
 

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"database/sql"
 	"fmt"
 	"strconv"
 	"strings"
@@ -109,6 +110,16 @@ func labelOrFallback(labels map[string]string, typ string, id int64) string {
 		return l
 	}
 	return key + " (deleted)"
+}
+
+// existsTx returns store.ErrNotFound unless the (typ, id) entity exists,
+// reading on tx; see resource.existsTx. An unregistered type is not found.
+func (c entityCatalog) existsTx(tx *sql.Tx, typ string, id int64) error {
+	rs, ok := c.resource(typ)
+	if !ok {
+		return fmt.Errorf("%s %d: %w", typ, id, store.ErrNotFound)
+	}
+	return rs.existsTx(tx, id)
 }
 
 // resource returns the registered resource for a singular type key.
