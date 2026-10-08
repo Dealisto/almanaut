@@ -549,3 +549,36 @@ func TestExportImportRoundTripsCustomFields(t *testing.T) {
 		t.Fatalf("values not restored: %+v", vals)
 	}
 }
+
+func TestPairPortLinks(t *testing.T) {
+	ports := []domain.Port{
+		{ID: 1, Name: "a", PeerPortID: 2}, // one-sided: completed on 2
+		{ID: 2, Name: "b"},
+		{ID: 3, Name: "c", PeerPortID: 99}, // peer not in the file: cleared
+		{ID: 4, Name: "d", PeerPortID: 5},  // already paired
+		{ID: 5, Name: "e", PeerPortID: 4},
+	}
+	got, cleared, err := pairPortLinks(ports)
+	if err != nil {
+		t.Fatalf("pairPortLinks: %v", err)
+	}
+	if cleared != 1 {
+		t.Errorf("cleared = %d, want 1", cleared)
+	}
+	want := map[int64]int64{1: 2, 2: 1, 3: 0, 4: 5, 5: 4}
+	for _, p := range got {
+		if p.PeerPortID != want[p.ID] {
+			t.Errorf("port %d peer = %d, want %d", p.ID, p.PeerPortID, want[p.ID])
+		}
+	}
+	if ports[1].PeerPortID != 0 || ports[2].PeerPortID != 99 {
+		t.Error("pairPortLinks must not modify the caller's slice")
+	}
+
+	// Two ports claiming the same peer cannot both be right.
+	if _, _, err := pairPortLinks([]domain.Port{
+		{ID: 1, PeerPortID: 3}, {ID: 2, PeerPortID: 3}, {ID: 3},
+	}); err == nil {
+		t.Fatal("two ports naming one peer should fail")
+	}
+}

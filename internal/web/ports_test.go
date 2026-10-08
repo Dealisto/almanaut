@@ -20,8 +20,8 @@ func getPage(t *testing.T, srv http.Handler, path string) string {
 	return rec.Body.String()
 }
 
-// A one-sided port link must show up on both port details and on both owners'
-// detail pages.
+// A port link made from one end must show up on both port details and on both
+// owners' detail pages.
 func TestPortConnectionShowsOnBothSides(t *testing.T) {
 	srv, _ := newTestServerDB(t)
 
@@ -45,7 +45,7 @@ func TestPortConnectionShowsOnBothSides(t *testing.T) {
 		t.Fatalf("create host port = %d, body=%s", rec.Code, rec.Body.String())
 	}
 
-	// Both port detail pages show the link (stored only on the host port).
+	// Both port detail pages show the link, though only the host port's form set it.
 	if body := getPage(t, srv, "/ports/2"); !strings.Contains(body, "switch01 / Port 12") {
 		t.Error("host port detail should name the switch peer")
 	}
@@ -130,5 +130,80 @@ func TestPortRejectsInvalidOwnerType(t *testing.T) {
 	rec := postForm(t, srv, "/ports", url.Values{"name": {"eth0"}, "owner": {"service:1"}})
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "owner") {
 		t.Fatalf("invalid owner type should re-render form with error; got %d", rec.Code)
+	}
+}
+
+// Connecting to a port that is already cabled to another one is a user error:
+// the form re-renders with the reason, and the API answers 400, not 500.
+func TestPortConnectToTakenPeerIsUserError(t *testing.T) {
+	srv, _ := newTestServerDB(t)
+	for _, f := range []url.Values{
+		{"name": {"Port 1"}, "owner": {"hardware:1"}},
+		{"name": {"eth0"}, "owner": {"host:1"}, "peer_port_id": {"1"}},
+	} {
+		if rec := postForm(t, srv, "/ports", f); rec.Code != http.StatusSeeOther {
+			t.Fatalf("create port = %d, body=%s", rec.Code, rec.Body.String())
+		}
+	}
+	rec := postForm(t, srv, "/ports", url.Values{"name": {"eth1"}, "owner": {"host:2"}, "peer_port_id": {"1"}})
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "already connected") {
+		t.Fatalf("taken peer should re-render the form with the reason; got %d", rec.Code)
+	}
+}
+
+func TestPortAPIConnectToTakenPeerIs400(t *testing.T) {
+	h, _, raw := apiAuthServer(t)
+	send := func(method, path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+raw)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	for _, body := range []string{
+		`{"name":"Port 1","owner_type":"hardware","owner_id":1}`,
+		`{"name":"eth0","owner_type":"host","owner_id":1,"peer_port_id":1}`,
+		`{"name":"eth1","owner_type":"host","owner_id":2}`,
+	} {
+		if rec := send(http.MethodPost, "/api/ports", body); rec.Code != http.StatusCreated {
+			t.Fatalf("POST %s = %d (body %s)", body, rec.Code, rec.Body)
+		}
+	}
+	rec := send(http.MethodPut, "/api/ports/3", `{"name":"eth1","owner_type":"host","owner_id":2,"peer_port_id":1}`)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "already connected") {
+		t.Fatalf("PUT to a taken peer = %d (body %s), want 400", rec.Code, rec.Body)
+	}
+	// The switch end reads back its link and can be saved unchanged.
+	get := send(http.MethodGet, "/api/ports/1", "")
+	if !strings.Contains(get.Body.String(), `"peer_port_id":2`) {
+		t.Fatalf("switch port should report its peer, got %s", get.Body)
+	}
+	if rec := send(http.MethodPut, "/api/ports/1", get.Body.String()); rec.Code != http.StatusOK {
+		t.Fatalf("PUT unchanged = %d (body %s)", rec.Code, rec.Body)
+	}
+	if again := send(http.MethodGet, "/api/ports/2", ""); !strings.Contains(again.Body.String(), `"peer_port_id":1`) {
+		t.Fatalf("an unchanged save of one end must keep the other, got %s", again.Body)
+	}
+}
+
+// A CSV row that contradicts an earlier row of the same file is reported as a
+// row error, and the whole import is rolled back.
+func TestPortCSVConflictIsRowError(t *testing.T) {
+	srv, db := newTestServerDB(t)
+	doc := "name,owner_type,owner_id,peer_port_id\n" +
+		"Port 1,hardware,1,0\n" +
+		"eth0,host,1,1\n" +
+		"eth0,host,2,1\n"
+	rec := uploadCSV(t, srv, "port", doc)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "row 4") || !strings.Contains(rec.Body.String(), "already connected") {
+		t.Fatalf("import-csv = %d, want the form with a row 4 error; body=%s", rec.Code, rec.Body.String())
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM ports`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("a failed import must write nothing, found %d ports", n)
 	}
 }

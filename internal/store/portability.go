@@ -150,6 +150,12 @@ func Import(db *sql.DB, snap Snapshot) error {
 	}
 
 	snap, skipped := dropDanglingRefs(snap)
+	ports, unlinked, err := pairPortLinks(snap.Ports)
+	if err != nil {
+		return err
+	}
+	snap.Ports = ports
+	skipped += unlinked
 
 	return WithTx(db, func(tx *sql.Tx) error {
 		if err := replaceInventory(tx, snap); err != nil {
@@ -516,6 +522,41 @@ func dropDanglingRefs(snap Snapshot) (Snapshot, int) {
 		return ok && defType == v.EntityType && has(v.EntityType, v.EntityID)
 	})
 	return snap, skipped
+}
+
+// pairPortLinks returns a copy of ports in which every link is stored on both
+// ends, as PortRepo keeps it. A link to a port the snapshot does not contain is
+// cleared and counted, like other dangling references. A link recorded on one
+// end only (a hand-written file) is completed on the other. Two ports naming
+// the same peer contradict each other and fail the import.
+func pairPortLinks(ports []domain.Port) ([]domain.Port, int, error) {
+	out := append([]domain.Port(nil), ports...)
+	index := make(map[int64]int, len(out))
+	for i, p := range out {
+		index[p.ID] = i
+	}
+	cleared := 0
+	for i := range out {
+		p := &out[i]
+		if p.PeerPortID == 0 {
+			continue
+		}
+		j, ok := index[p.PeerPortID]
+		if !ok {
+			p.PeerPortID = 0
+			cleared++
+			continue
+		}
+		peer := &out[j]
+		switch peer.PeerPortID {
+		case p.ID:
+		case 0:
+			peer.PeerPortID = p.ID
+		default:
+			return nil, 0, fmt.Errorf("port %d: its peer, port %d, is connected to port %d", p.ID, peer.ID, peer.PeerPortID)
+		}
+	}
+	return out, cleared, nil
 }
 
 // keep returns a new slice of the items ok accepts, adding the number it

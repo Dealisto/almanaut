@@ -23,7 +23,7 @@
   <label>Connected to
     <select name="peer_port_id">
       <option value="0">— not connected —</option>
-      {{range .Extras.Ports}}{{if ne .ID $.Item.ID}}<option value="{{.ID}}"{{if eq .ID $.Item.PeerPortID}} selected{{end}}>{{.OwnerName}} / {{.Name}}</option>{{end}}{{end}}
+      {{range .Extras.Ports}}{{if and (ne .ID $.Item.ID) (or (eq .PeerPortID 0) (eq .PeerPortID $.Item.ID))}}<option value="{{.ID}}"{{if eq .ID $.Item.PeerPortID}} selected{{end}}>{{.OwnerName}} / {{.Name}}</option>{{end}}{{end}}
     </select>
   </label>
   <label>MAC<input name="mac" value="{{.Item.MAC}}" placeholder="aa:bb:cc:dd:ee:ff"></label>

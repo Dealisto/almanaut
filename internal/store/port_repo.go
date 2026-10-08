@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/Dealisto/almanaut/internal/domain"
@@ -35,15 +36,25 @@ func (r *PortRepo) Count() (int, error) {
 
 const portColumns = `id, owner_type, owner_id, nic_id, name, mac, mgmt_only, peer_port_id, notes`
 
+// Create inserts v and, when v.PeerPortID is set, connects it to that port.
+// The connection reads and writes other rows, so callers outside tests use the
+// tx-bound CreateTx.
 func (r *PortRepo) Create(v domain.Port) (int64, error) {
 	res, err := r.db.Exec(
-		`INSERT INTO ports (owner_type, owner_id, nic_id, name, mac, mgmt_only, peer_port_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		v.OwnerType, v.OwnerID, v.NICID, v.Name, v.MAC, v.MgmtOnly, v.PeerPortID, v.Notes,
+		`INSERT INTO ports (owner_type, owner_id, nic_id, name, mac, mgmt_only, peer_port_id, notes) VALUES (?, ?, ?, ?, ?, ?, 0, ?)`,
+		v.OwnerType, v.OwnerID, v.NICID, v.Name, v.MAC, v.MgmtOnly, v.Notes,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert port: %w", err)
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("port id: %w", err)
+	}
+	if err := r.connect(id, v.PeerPortID); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func (r *PortRepo) Get(id int64) (domain.Port, error) {
@@ -86,19 +97,64 @@ func (r *PortRepo) listRaw() ([]domain.Port, error) {
 	return items, rows.Err()
 }
 
+// Update overwrites the port and connects it to v.PeerPortID (0 disconnects
+// it). Like Create, it touches other rows; callers use the tx-bound UpdateTx.
 func (r *PortRepo) Update(v domain.Port) error {
 	res, err := r.db.Exec(
-		`UPDATE ports SET owner_type=?, owner_id=?, nic_id=?, name=?, mac=?, mgmt_only=?, peer_port_id=?, notes=? WHERE id=?`,
-		v.OwnerType, v.OwnerID, v.NICID, v.Name, v.MAC, v.MgmtOnly, v.PeerPortID, v.Notes, v.ID,
+		`UPDATE ports SET owner_type=?, owner_id=?, nic_id=?, name=?, mac=?, mgmt_only=?, notes=? WHERE id=?`,
+		v.OwnerType, v.OwnerID, v.NICID, v.Name, v.MAC, v.MgmtOnly, v.Notes, v.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update port: %w", err)
 	}
-	return rowsAffectedOrNotFound(res)
+	if err := rowsAffectedOrNotFound(res); err != nil {
+		return err
+	}
+	return r.connect(v.ID, v.PeerPortID)
 }
 
-// Delete removes the port and clears any peer pointer on other ports that
-// referenced it, so no dangling links survive.
+// connect makes ports id and peer name each other in peer_port_id, after
+// disconnecting id from its current peer; peer 0 only disconnects. Storing the
+// link on both sides keeps peer_port_id true for every port, so an API client
+// that reads a port and writes it back unchanged keeps its connection. A peer
+// already connected to a third port is refused rather than silently re-cabled.
+func (r *PortRepo) connect(id, peer int64) error {
+	if peer == id {
+		return &ConstraintError{Reason: "a port cannot be connected to itself"}
+	}
+	if peer != 0 {
+		var name string
+		var current int64
+		err := r.db.QueryRow(`SELECT name, peer_port_id FROM ports WHERE id = ?`, peer).Scan(&name, &current)
+		if errors.Is(err, sql.ErrNoRows) {
+			return &ConstraintError{Reason: fmt.Sprintf("connected port %d does not exist", peer)}
+		}
+		if err != nil {
+			return fmt.Errorf("read peer port: %w", err)
+		}
+		if current != 0 && current != id {
+			return &ConstraintError{Reason: fmt.Sprintf("port %q is already connected to another port; disconnect it first", name)}
+		}
+	}
+	// Disconnect id from its old peer (on both sides) before cabling the new one,
+	// so the unique index on peer_port_id never sees two ports naming one peer.
+	if _, err := r.db.Exec(`UPDATE ports SET peer_port_id = 0 WHERE id = ? OR peer_port_id = ?`, id, id); err != nil {
+		return fmt.Errorf("disconnect port: %w", err)
+	}
+	if peer == 0 {
+		return nil
+	}
+	if _, err := r.db.Exec(
+		`UPDATE ports SET peer_port_id = CASE id WHEN ? THEN ? ELSE ? END WHERE id IN (?, ?)`,
+		id, peer, id, id, peer,
+	); err != nil {
+		return fmt.Errorf("connect port: %w", err)
+	}
+	return nil
+}
+
+// Delete removes the port and clears its peer's pointer back to it, so no
+// dangling link survives.
 func (r *PortRepo) Delete(id int64) error {
 	if _, err := r.db.Exec(`UPDATE ports SET peer_port_id = 0 WHERE peer_port_id = ?`, id); err != nil {
 		return fmt.Errorf("clear peer refs: %w", err)
@@ -110,9 +166,7 @@ func (r *PortRepo) Delete(id int64) error {
 }
 
 // decorate fills the derived fields on each port: the owner and NIC display
-// names, and the effective peer. The peer link is stored on one side only, so
-// each port first uses its own pointer and otherwise the first port pointing
-// back at it; the label is "<peer owner> / <peer name>".
+// names, and the peer label "<peer owner> / <peer name>".
 func (r *PortRepo) decorate(items []domain.Port) ([]domain.Port, error) {
 	if len(items) == 0 {
 		return items, nil
@@ -140,20 +194,15 @@ func (r *PortRepo) decorate(items []domain.Port) ([]domain.Port, error) {
 		return fmt.Sprintf("%s:%d (deleted)", ownerType, ownerID)
 	}
 
-	// The peer index needs every port, not just the slice being decorated.
+	// A peer can belong to any owner, so the label needs every port, not just
+	// the slice being decorated.
 	all, err := r.listRaw()
 	if err != nil {
 		return nil, err
 	}
-	byID := map[int64]domain.Port{}
-	reverse := map[int64]int64{} // pointed-at port id → first port pointing at it
+	byID := make(map[int64]domain.Port, len(all))
 	for _, p := range all {
 		byID[p.ID] = p
-		if p.PeerPortID != 0 {
-			if _, ok := reverse[p.PeerPortID]; !ok {
-				reverse[p.PeerPortID] = p.ID
-			}
-		}
 	}
 
 	for i := range items {
@@ -166,16 +215,11 @@ func (r *PortRepo) decorate(items []domain.Port) ([]domain.Port, error) {
 			}
 			p.NICName = name
 		}
-		peerID := p.PeerPortID
-		if peerID == 0 {
-			peerID = reverse[p.ID]
-		}
-		if peerID != 0 {
-			p.PeerID = peerID
-			if peer, ok := byID[peerID]; ok {
+		if p.PeerPortID != 0 {
+			if peer, ok := byID[p.PeerPortID]; ok {
 				p.PeerLabel = ownerName(peer.OwnerType, peer.OwnerID) + " / " + peer.Name
 			} else {
-				p.PeerLabel = fmt.Sprintf("port:%d (deleted)", peerID)
+				p.PeerLabel = fmt.Sprintf("port:%d (deleted)", p.PeerPortID)
 			}
 		}
 	}

@@ -234,8 +234,8 @@ func New(cfg Config) http.Handler {
 			if p.NICID != 0 {
 				items = append(items, childRef{Label: "NIC: " + p.NICName, Path: cat.path("nic", p.NICID)})
 			}
-			if p.PeerID != 0 {
-				items = append(items, childRef{Label: "Connected to: " + p.PeerLabel, Path: cat.path("port", p.PeerID)})
+			if p.PeerPortID != 0 {
+				items = append(items, childRef{Label: "Connected to: " + p.PeerLabel, Path: cat.path("port", p.PeerPortID)})
 			}
 			return &childrenSection{Title: "Connections", Items: items}, nil
 		},

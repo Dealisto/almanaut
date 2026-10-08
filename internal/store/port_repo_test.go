@@ -55,8 +55,8 @@ func TestPortRepoUpdateMissingIsNotFound(t *testing.T) {
 	}
 }
 
-// The peer link is stored on one side only; both sides must still see it.
-func TestPortRepoResolvesPeerBothWays(t *testing.T) {
+// Connecting one port to another records the link on both of them.
+func TestPortRepoConnectsBothWays(t *testing.T) {
 	db := newTestDB(t)
 	hostID, err := NewHostRepo(db).Create(domain.Host{Name: "server1"})
 	if err != nil {
@@ -84,8 +84,8 @@ func TestPortRepoResolvesPeerBothWays(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get host port: %v", err)
 	}
-	if hp.PeerID != swPort || hp.PeerLabel != "switch01 / Port 12" {
-		t.Fatalf("forward peer not resolved: PeerID=%d PeerLabel=%q", hp.PeerID, hp.PeerLabel)
+	if hp.PeerPortID != swPort || hp.PeerLabel != "switch01 / Port 12" {
+		t.Fatalf("forward peer not resolved: PeerPortID=%d PeerLabel=%q", hp.PeerPortID, hp.PeerLabel)
 	}
 	if hp.NICName != "onboard" {
 		t.Fatalf("NICName not derived: %q", hp.NICName)
@@ -95,8 +95,8 @@ func TestPortRepoResolvesPeerBothWays(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get switch port: %v", err)
 	}
-	if sp.PeerID != hostPort || sp.PeerLabel != "server1 / eth0" {
-		t.Fatalf("reverse peer not resolved: PeerID=%d PeerLabel=%q", sp.PeerID, sp.PeerLabel)
+	if sp.PeerPortID != hostPort || sp.PeerLabel != "server1 / eth0" {
+		t.Fatalf("reverse peer not stored: PeerPortID=%d PeerLabel=%q", sp.PeerPortID, sp.PeerLabel)
 	}
 }
 
@@ -119,8 +119,8 @@ func TestPortRepoDeleteClearsPeerPointers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get b: %v", err)
 	}
-	if got.PeerPortID != 0 || got.PeerID != 0 {
-		t.Fatalf("peer pointer should be cleared, got PeerPortID=%d PeerID=%d", got.PeerPortID, got.PeerID)
+	if got.PeerPortID != 0 || got.PeerLabel != "" {
+		t.Fatalf("peer pointer should be cleared, got PeerPortID=%d PeerLabel=%q", got.PeerPortID, got.PeerLabel)
 	}
 }
 
@@ -160,5 +160,106 @@ func TestPortRepoMarksDeletedOwner(t *testing.T) {
 	}
 	if got.OwnerName != "host:42 (deleted)" {
 		t.Fatalf("dangling owner should be marked, got %q", got.OwnerName)
+	}
+}
+
+// peers returns each port's stored peer_port_id, keyed by port id.
+func peers(t *testing.T, repo *PortRepo) map[int64]int64 {
+	t.Helper()
+	items, err := repo.List()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	out := map[int64]int64{}
+	for _, p := range items {
+		out[p.ID] = p.PeerPortID
+	}
+	return out
+}
+
+// A port already cabled to a third port cannot be taken over silently.
+func TestPortRepoRefusesAlreadyConnectedPeer(t *testing.T) {
+	db := newTestDB(t)
+	repo := NewPortRepo(db)
+	a, _ := repo.Create(domain.Port{OwnerType: "hardware", OwnerID: 1, Name: "Port 1"})
+	b, err := repo.Create(domain.Port{OwnerType: "host", OwnerID: 1, Name: "eth0", PeerPortID: a})
+	if err != nil {
+		t.Fatalf("create b: %v", err)
+	}
+	_, err = repo.Create(domain.Port{OwnerType: "host", OwnerID: 2, Name: "eth0", PeerPortID: a})
+	var ce *ConstraintError
+	if !errors.As(err, &ce) {
+		t.Fatalf("connecting to a taken port: got %v, want a ConstraintError", err)
+	}
+	// Nor can a third port claim b, the other end of the same cable.
+	c, _ := repo.Create(domain.Port{OwnerType: "host", OwnerID: 3, Name: "eth0"})
+	if err := repo.Update(domain.Port{ID: c, OwnerType: "host", OwnerID: 3, Name: "eth0", PeerPortID: b}); !errors.As(err, &ce) {
+		t.Fatalf("connecting to b, which is cabled to a: got %v, want a ConstraintError", err)
+	}
+	if got := peers(t, repo); got[a] != b || got[b] != a || got[c] != 0 {
+		t.Fatalf("a refused connection must change nothing, got %v", got)
+	}
+}
+
+// Re-cabling a port releases its old peer; clearing its peer disconnects both.
+func TestPortRepoRecableAndDisconnect(t *testing.T) {
+	db := newTestDB(t)
+	repo := NewPortRepo(db)
+	a, _ := repo.Create(domain.Port{OwnerType: "hardware", OwnerID: 1, Name: "Port 1"})
+	b, _ := repo.Create(domain.Port{OwnerType: "hardware", OwnerID: 1, Name: "Port 2"})
+	host, err := repo.Create(domain.Port{OwnerType: "host", OwnerID: 1, Name: "eth0", PeerPortID: a})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	// Moving host's cable from a to b frees a.
+	if err := repo.Update(domain.Port{ID: host, OwnerType: "host", OwnerID: 1, Name: "eth0", PeerPortID: b}); err != nil {
+		t.Fatalf("re-cable: %v", err)
+	}
+	if got := peers(t, repo); got[host] != b || got[b] != host || got[a] != 0 {
+		t.Fatalf("after re-cable got %v", got)
+	}
+	// Disconnect from the other end: b's edit with no peer frees host too.
+	if err := repo.Update(domain.Port{ID: b, OwnerType: "hardware", OwnerID: 1, Name: "Port 2"}); err != nil {
+		t.Fatalf("disconnect: %v", err)
+	}
+	if got := peers(t, repo); got[host] != 0 || got[b] != 0 {
+		t.Fatalf("after disconnect got %v", got)
+	}
+}
+
+// Saving a port unchanged (as an API client does after a GET) keeps its link.
+func TestPortRepoUpdateUnchangedKeepsLink(t *testing.T) {
+	db := newTestDB(t)
+	repo := NewPortRepo(db)
+	a, _ := repo.Create(domain.Port{OwnerType: "hardware", OwnerID: 1, Name: "Port 1"})
+	b, _ := repo.Create(domain.Port{OwnerType: "host", OwnerID: 1, Name: "eth0", PeerPortID: a})
+	for _, id := range []int64{a, b} {
+		p, err := repo.Get(id)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		if err := repo.Update(p); err != nil {
+			t.Fatalf("update %d unchanged: %v", id, err)
+		}
+	}
+	if got := peers(t, repo); got[a] != b || got[b] != a {
+		t.Fatalf("unchanged saves must keep the link, got %v", got)
+	}
+}
+
+func TestPortRepoRefusesMissingPeer(t *testing.T) {
+	db := newTestDB(t)
+	_, err := NewPortRepo(db).Create(domain.Port{OwnerType: "host", OwnerID: 1, Name: "eth0", PeerPortID: 42})
+	var ce *ConstraintError
+	if !errors.As(err, &ce) {
+		t.Fatalf("got %v, want a ConstraintError", err)
+	}
+}
+
+// The schema itself refuses two ports naming the same peer.
+func TestPortsPeerIsUniqueInSchema(t *testing.T) {
+	db := newTestDB(t)
+	if _, err := db.Exec(`INSERT INTO ports (owner_type, owner_id, name, peer_port_id) VALUES ('host', 1, 'a', 9), ('host', 2, 'b', 9)`); err == nil {
+		t.Fatal("two ports with the same peer_port_id were accepted")
 	}
 }

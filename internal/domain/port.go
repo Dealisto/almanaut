@@ -11,8 +11,9 @@ var PortOwnerTypes = []string{"host", "hardware"}
 
 // Port is a physical network port on a host (a NIC port) or on a hardware
 // item (a switch/router port). The owner is polymorphic (OwnerType + OwnerID).
-// NICID optionally attributes a host port to a NIC, and PeerPortID records a
-// port-to-port link on one side only — all soft references (0 = none).
+// NICID optionally attributes a host port to a NIC, and PeerPortID names the
+// port at the other end of the cable — both soft references (0 = none). The
+// link is stored on both ports: each one's PeerPortID names the other.
 type Port struct {
 	ID         int64  `yaml:"id" json:"id"`
 	OwnerType  string `yaml:"owner_type" json:"owner_type"`
@@ -25,11 +26,9 @@ type Port struct {
 	Notes      string `yaml:"notes" json:"notes"`
 
 	// Derived display fields, populated by the repo; never persisted, diffed,
-	// or imported (both tags "-"). PeerID is the effective peer: this port's
-	// own pointer if set, otherwise the port pointing back at it.
+	// or imported (both tags "-").
 	OwnerName string `yaml:"-" json:"-"`
 	NICName   string `yaml:"-" json:"-"`
-	PeerID    int64  `yaml:"-" json:"-"`
 	PeerLabel string `yaml:"-" json:"-"`
 }
 

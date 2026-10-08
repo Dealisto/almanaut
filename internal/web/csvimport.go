@@ -60,6 +60,7 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 	type pending struct {
 		item   T
 		create bool
+		line   int
 	}
 	var (
 		plan    []pending
@@ -99,7 +100,7 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 			rowErrs = append(rowErrs, fmt.Sprintf("row %d: %v", line, verr))
 			continue
 		}
-		plan = append(plan, pending{item: item, create: create})
+		plan = append(plan, pending{item: item, create: create, line: line})
 	}
 	if len(rowErrs) > 0 {
 		return 0, 0, rowErrs, nil // all-or-nothing: write nothing
@@ -107,8 +108,10 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 
 	var created, updated int
 	var events []webhook.Event
+	failedLine := 0
 	err = store.WithTx(d.db, func(tx *sql.Tx) error {
 		for _, p := range plan {
+			failedLine = p.line
 			if p.create {
 				if _, e := rs.createEntityTx(tx, d, p.item, nil, actor, &events); e != nil {
 					return e
@@ -123,6 +126,11 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 		}
 		return nil
 	})
+	if c := constraintError(err); c != nil {
+		// A row that contradicts the rows before it is a row error too; the
+		// rollback has already undone the earlier rows.
+		return 0, 0, []string{fmt.Sprintf("row %d: %v", failedLine, c)}, nil
+	}
 	if err != nil {
 		return 0, 0, nil, err
 	}

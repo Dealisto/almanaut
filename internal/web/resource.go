@@ -182,6 +182,17 @@ func notFoundOrServerError(w http.ResponseWriter, req *http.Request, sing string
 	serverError(w, req, err)
 }
 
+// constraintError returns the store.ConstraintError in err's chain, or nil. A
+// repository raises one for a write that contradicts other rows; its Reason is
+// shown to the user like a Validate error instead of becoming a 500.
+func constraintError(err error) *store.ConstraintError {
+	var c *store.ConstraintError
+	if errors.As(err, &c) {
+		return c
+	}
+	return nil
+}
+
 func (rs resource[T]) list(d handlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		items, err := rs.repo.List()
@@ -419,6 +430,10 @@ func (rs resource[T]) create(d handlerDeps) http.HandlerFunc {
 			return
 		}
 		if _, err := rs.createEntity(d, item, cf, actor(req)); err != nil {
+			if c := constraintError(err); c != nil {
+				rs.renderCreateError(w, req, d, item, c)
+				return
+			}
 			serverError(w, req, err)
 			return
 		}
@@ -458,6 +473,10 @@ func (rs resource[T]) update(d handlerDeps) http.HandlerFunc {
 			return
 		}
 		if err := rs.updateEntity(d, item, cf, actor(req)); err != nil {
+			if c := constraintError(err); c != nil {
+				rs.renderUpdateError(w, req, d, id, item, c)
+				return
+			}
 			notFoundOrServerError(w, req, rs.sing, err)
 			return
 		}
@@ -658,6 +677,10 @@ func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
 		}
 		id, err := rs.createEntity(d, item, cf, actor(req))
 		if err != nil {
+			if c := constraintError(err); c != nil {
+				writeJSONError(w, http.StatusBadRequest, c.Error())
+				return
+			}
 			apiServerError(w, req, err)
 			return
 		}
@@ -708,6 +731,10 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 		if err := rs.updateEntity(d, item, cf, actor(req)); err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
+				return
+			}
+			if c := constraintError(err); c != nil {
+				writeJSONError(w, http.StatusBadRequest, c.Error())
 				return
 			}
 			apiServerError(w, req, err)
