@@ -65,6 +65,27 @@ func (r *SessionRepo) DeleteByToken(tokenHash string) error {
 	return nil
 }
 
+// DeleteByUser removes every session of userID, signing them out everywhere
+// (after a password reset or a 2FA reset).
+func (r *SessionRepo) DeleteByUser(userID int64) error {
+	if _, err := r.db.Exec(`DELETE FROM sessions WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("delete user sessions: %w", err)
+	}
+	return nil
+}
+
+// DeleteOtherSessions removes every session of userID except the one with
+// keepTokenHash, so a user who changes their own password stays signed in
+// here while every other session (possibly a stolen one) ends.
+func (r *SessionRepo) DeleteOtherSessions(userID int64, keepTokenHash string) error {
+	if _, err := r.db.Exec(
+		`DELETE FROM sessions WHERE user_id = ? AND token_hash != ?`, userID, keepTokenHash,
+	); err != nil {
+		return fmt.Errorf("delete other sessions: %w", err)
+	}
+	return nil
+}
+
 // DeleteExpired prunes every session whose expires_at is at or before now.
 func (r *SessionRepo) DeleteExpired(now string) error {
 	if _, err := r.db.Exec(`DELETE FROM sessions WHERE expires_at <= ?`, now); err != nil {

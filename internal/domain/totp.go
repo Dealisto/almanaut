@@ -70,22 +70,33 @@ func pow10(n int) uint32 {
 }
 
 // VerifyTOTP reports whether code is valid for secret at now, allowing ±1 step
-// of clock skew. The comparison is constant-time.
+// of clock skew. The comparison is constant-time. It does not prevent replay:
+// callers that authenticate with the code use MatchTOTP and record the step.
 func VerifyTOTP(secret, code string, now time.Time) bool {
+	_, ok := MatchTOTP(secret, code, now)
+	return ok
+}
+
+// MatchTOTP is VerifyTOTP that also returns the time step (unix time / 30) the
+// code matched. A code stays valid for about 90 seconds, so callers must
+// accept it only once per step (RFC 6238 §5.2): store the step and reject any
+// later code whose step is not strictly greater.
+func MatchTOTP(secret, code string, now time.Time) (step int64, ok bool) {
 	code = strings.TrimSpace(code)
 	if len(code) != totpDigits {
-		return false
+		return 0, false
 	}
+	counter := now.Unix() / totpPeriod
 	for _, skew := range []int64{0, -1, 1} {
-		want, err := TOTPCode(secret, now.Add(time.Duration(skew*totpPeriod)*time.Second))
+		want, err := TOTPCode(secret, time.Unix((counter+skew)*totpPeriod, 0))
 		if err != nil {
-			return false
+			return 0, false
 		}
 		if subtle.ConstantTimeCompare([]byte(want), []byte(code)) == 1 {
-			return true
+			return counter + skew, true
 		}
 	}
-	return false
+	return 0, false
 }
 
 // TOTPURI builds the otpauth:// provisioning URI encoded into the enrollment QR.
