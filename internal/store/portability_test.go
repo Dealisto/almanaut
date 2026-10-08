@@ -123,6 +123,14 @@ func TestImportRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Side data on a NIC and a port must survive import like any other
+	// entity's, not be dropped as dangling.
+	if err := NewTagRepo(db).Add(domain.Tag{EntityType: "nic", EntityID: nicID, Name: "10g"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewTagRepo(db).Add(domain.Tag{EntityType: "port", EntityID: swPortID, Name: "uplink"}); err != nil {
+		t.Fatal(err)
+	}
 	first, err := Export(db)
 	if err != nil {
 		t.Fatal(err)
@@ -136,6 +144,9 @@ func TestImportRoundTrip(t *testing.T) {
 	second, err := Export(db2)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(second.Tags) != len(first.Tags) {
+		t.Errorf("import dropped tags: exported %d, re-exported %d", len(first.Tags), len(second.Tags))
 	}
 	if !reflect.DeepEqual(first, second) {
 		t.Errorf("round-trip mismatch:\n first=%+v\nsecond=%+v", first, second)

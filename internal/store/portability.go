@@ -491,6 +491,12 @@ func dropDanglingRefs(snap Snapshot) (Snapshot, int) {
 	for _, x := range snap.Racks {
 		collect("rack", x.ID)
 	}
+	for _, x := range snap.NICs {
+		collect("nic", x.ID)
+	}
+	for _, x := range snap.Ports {
+		collect("port", x.ID)
+	}
 	has := func(typ string, id int64) bool { return ids[typ][id] }
 	defs := map[int64]string{} // custom field definition id -> its entity type
 	for _, d := range snap.CustomFieldDefs {
