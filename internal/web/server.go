@@ -42,7 +42,7 @@ type Config struct {
 	// POST /api/agent/report. Nil defaults to store.NewAgentRepo(DB) in New,
 	// so every existing Config literal (which already sets DB) keeps working
 	// unchanged.
-	Agents        *store.AgentRepo
+	Agents *store.AgentRepo
 	// NICs and Ports back the NIC / port inventory. Nil defaults to
 	// store.NewNICRepo(DB) / store.NewPortRepo(DB) in New, so every existing
 	// Config literal (which already sets DB) keeps working unchanged.
