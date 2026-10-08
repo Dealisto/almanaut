@@ -207,3 +207,11 @@ func TestPortCSVConflictIsRowError(t *testing.T) {
 		t.Fatalf("a failed import must write nothing, found %d ports", n)
 	}
 }
+
+func TestGeneratePortsRejectsNonNumericCount(t *testing.T) {
+	srv, _ := newTestServerDB(t)
+	rec := postForm(t, srv, "/ports/generate", url.Values{"owner": {"hardware:1"}, "count": {"eight"}})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("non-numeric count = %d, want 400", rec.Code)
+	}
+}

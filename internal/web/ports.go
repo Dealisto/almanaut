@@ -23,7 +23,11 @@ func generatePorts(rs resource[domain.Port], ports *store.PortRepo, d handlerDep
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		count, _ := strconv.Atoi(req.FormValue("count"))
+		count, err := strconv.Atoi(strings.TrimSpace(req.FormValue("count")))
+		if err != nil {
+			http.Error(w, "count must be a whole number", http.StatusBadRequest)
+			return
+		}
 		count = min(max(count, 1), 256)
 		prefix := req.FormValue("prefix")
 		if strings.TrimSpace(prefix) == "" {
