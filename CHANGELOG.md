@@ -22,6 +22,9 @@ details are listed there.
   Contributed by @tagawa0525 in #127.
 
 ### Security
+- Build with Go 1.26.10 or newer, including the container image, to pick up
+  the standard-library security fixes missing from Go 1.26.8 and clear the
+  vulnerability check in CI.
 - Changing a password now ends the user's other sessions, and an admin
   password reset or 2FA reset ends all of that user's sessions. Previously a
   stolen session cookie stayed valid for its full 30 days, and the 2FA reset
