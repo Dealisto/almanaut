@@ -34,9 +34,9 @@ server-rendered UI. Back it up by copying one file (or one YAML export).
 
 **Inventory**
 
-- **15 entity types** — hosts, services, networks, domains, certificates,
+- **17 entity types** — hosts, services, networks, domains, certificates,
   backups, hardware, subscriptions, accounts, sites, locations, racks,
-  contacts, VLANs, and IP reservations
+  contacts, VLANs, IP reservations, NICs, and ports
 - **Relationships & a neighbourhood graph** on every detail page (a service
   *runs on* a host, *is backed up by* a backup, *administered by* a contact…)
 - **Global search** across every entity type, tags, and custom-field values
@@ -54,6 +54,7 @@ server-rendered UI. Back it up by copying one file (or one YAML export).
   reservations (DHCP pools, reserved blocks)
 - **Sites → locations → racks** hierarchy, with a rendered **U elevation** for
   each rack showing its occupants at their positions
+- **NICs & ports** — record which switch port each machine is cabled to
 
 **Automation & integrations**
 
@@ -115,7 +116,7 @@ The full documentation lives in [`docs/`](docs/README.md):
 | [Installation](docs/installation.md) | Docker, Compose, prebuilt binaries, from source, first login, sample data |
 | [Configuration](docs/configuration.md) | Every environment variable, secrets from files, reverse proxy & TLS, the security model |
 | [Authentication & access control](docs/authentication.md) | Roles, sessions, login throttling, lockout recovery, TOTP 2FA, reverse-proxy SSO, the audit log |
-| [The inventory model](docs/inventory-model.md) | The 15 entity types, sites/locations/racks, IPAM, custom fields, attachments, history |
+| [The inventory model](docs/inventory-model.md) | The 17 entity types, sites/locations/racks, NICs & ports, IPAM, custom fields, attachments, history |
 | [Lists, saved views & bulk editing](docs/lists-and-views.md) | Filtering and sorting, saved views, bulk actions on list pages |
 | [Inventory health](docs/inventory-health.md) | The health report and its audit rules, stale entities, the checks page, impact analysis |
 | [Auto-discovery](docs/discovery.md) | Docker containers, network scan, Proxmox VE |

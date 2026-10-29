@@ -10,6 +10,17 @@ details are listed there.
 
 ## [Unreleased]
 
+### Added
+- NIC and port entities, for recording which switch port each machine is
+  cabled to. A port belongs to a host or a hardware item (a switch, a
+  router). A host's port can belong to one of that host's NICs (onboard or
+  expansion card). Connecting two ports shows the link on both ports and on
+  both owners' detail pages. A port has at most one link, so connecting to a
+  port that is already cabled elsewhere is refused. The new-port page can
+  generate "Port 1" to "Port N" for an owner in one step, skipping names that
+  already exist. Deleting a NIC keeps its ports and only clears their NIC.
+  Contributed by @tagawa0525 in #127.
+
 ### Security
 - Changing a password now ends the user's other sessions, and an admin
   password reset or 2FA reset ends all of that user's sessions. Previously a

@@ -17,6 +17,14 @@ var ErrNotFound = errors.New("not found")
 // claiming one identity.
 var ErrAgentIDConflict = errors.New("agent id already bound to another host")
 
+// ConstraintError reports a write a repository refused because it would
+// contradict other rows — a rule Validate cannot check from one entity alone,
+// such as connecting a port that is already connected. Its message is meant
+// for the user: handlers answer 400 with it, as for a Validate error.
+type ConstraintError struct{ Reason string }
+
+func (e *ConstraintError) Error() string { return e.Reason }
+
 // notFound maps a wrapped sql.ErrNoRows to ErrNotFound, leaving any other error
 // (including nil) unchanged. Used by the scanX helpers so a missing row reads as
 // ErrNotFound while a genuine scan failure keeps its context.

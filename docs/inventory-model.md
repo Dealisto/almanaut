@@ -2,7 +2,7 @@
 
 # The inventory model
 
-Fifteen entity types, all sharing the same machinery — search, tags,
+Seventeen entity types, all sharing the same machinery — search, tags,
 relationships, change history, journal, custom fields, attachments, the
 [JSON API](api.md), and [CSV import](export-import.md#additive-csv-import).
 Every list page can also be [filtered, sorted, saved as a view, and edited in
@@ -24,6 +24,8 @@ bulk](lists-and-views.md), and the inventory as a whole is audited on the
 | **Contacts** | People and vendors responsible for infrastructure |
 | **VLANs** | 802.1Q VLANs referenced by networks |
 | **IP reservations** | Named reserved ranges within a network |
+| **NICs** | Network cards on a host (onboard or expansion) |
+| **Ports** | Physical network ports on hosts and hardware, and the cables between them |
 
 ## Sites, locations & racks
 
@@ -38,6 +40,22 @@ height in U) from their edit form. The rack's detail page then renders a
 position, linking to its detail page. Occupants that extend past the rack or
 overlap another are highlighted; placement is advisory, not enforced at save
 time.
+
+## NICs & ports
+
+A **port** is a physical network port on a host (a NIC port) or on a hardware
+item (a switch or router port). Set a port's **Connected to** field to record
+the cable at its other end. The link is stored on both ports, so it shows on
+both ports' detail pages and on both owners', and either end can change or
+clear it. A port has one cable: the form only offers free ports, and a port
+that is already connected elsewhere is refused (by the API and CSV import
+too).
+
+A host's port can also belong to a **NIC**, an onboard or expansion card of
+that same host. Deleting a NIC, or moving it to another host, keeps the ports
+and only clears their NIC. The new-port page can generate "Port 1" to
+"Port N" for an owner in one step, skipping names that already exist, which
+is the quick way to fill in a 24-port switch.
 
 ## IPAM: VLANs & IP reservations
 

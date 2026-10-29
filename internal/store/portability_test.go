@@ -107,6 +107,30 @@ func TestImportRoundTrip(t *testing.T) {
 	if err := NewTagRepo(db).Add(domain.Tag{EntityType: "host", EntityID: hostID, Name: "critical"}); err != nil {
 		t.Fatal(err)
 	}
+	hwID, err := NewHardwareRepo(db).Create(domain.Hardware{Name: "switch01", Kind: "switch"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nicID, err := NewNICRepo(db).Create(domain.NIC{HostID: hostID, Name: "onboard", Kind: "onboard"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	swPortID, err := NewPortRepo(db).Create(domain.Port{OwnerType: "hardware", OwnerID: hwID, Name: "Port 1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostPortID, err := NewPortRepo(db).Create(domain.Port{OwnerType: "host", OwnerID: hostID, NICID: nicID, Name: "eth0", PeerPortID: swPortID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Side data on a NIC and a port must survive import like any other
+	// entity's, not be dropped as dangling.
+	if err := NewTagRepo(db).Add(domain.Tag{EntityType: "nic", EntityID: nicID, Name: "10g"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewTagRepo(db).Add(domain.Tag{EntityType: "port", EntityID: swPortID, Name: "uplink"}); err != nil {
+		t.Fatal(err)
+	}
 	first, err := Export(db)
 	if err != nil {
 		t.Fatal(err)
@@ -120,6 +144,9 @@ func TestImportRoundTrip(t *testing.T) {
 	second, err := Export(db2)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(second.Tags) != len(first.Tags) {
+		t.Errorf("import dropped tags: exported %d, re-exported %d", len(first.Tags), len(second.Tags))
 	}
 	if !reflect.DeepEqual(first, second) {
 		t.Errorf("round-trip mismatch:\n first=%+v\nsecond=%+v", first, second)
@@ -138,6 +165,20 @@ func TestImportRoundTrip(t *testing.T) {
 	}
 	if svc.CheckAddress != "jellyfin.lan:8096" {
 		t.Errorf("service CheckAddress = %q, want %q", svc.CheckAddress, "jellyfin.lan:8096")
+	}
+	nic, err := NewNICRepo(db2).Get(nicID)
+	if err != nil || nic.HostID != hostID {
+		t.Errorf("nic id %d not preserved: %+v err=%v", nicID, nic, err)
+	}
+	hp, err := NewPortRepo(db2).Get(hostPortID)
+	if err != nil {
+		t.Fatalf("get host port: %v", err)
+	}
+	if hp.NICID != nicID || hp.PeerPortID != swPortID {
+		t.Errorf("port references not restored: %+v", hp)
+	}
+	if hp.PeerLabel != "switch01 / Port 1" {
+		t.Errorf("peer not resolved after import: %q", hp.PeerLabel)
 	}
 }
 
@@ -506,5 +547,55 @@ func TestExportImportRoundTripsCustomFields(t *testing.T) {
 	vals, _ := NewCustomFieldRepo(dst).ListForEntity("host", 1)
 	if len(vals) != 1 || vals[0].Value != "ABC-1" {
 		t.Fatalf("values not restored: %+v", vals)
+	}
+}
+
+func TestPairPortLinks(t *testing.T) {
+	ports := []domain.Port{
+		{ID: 1, Name: "a", PeerPortID: 2}, // one-sided: completed on 2
+		{ID: 2, Name: "b"},
+		{ID: 3, Name: "c", PeerPortID: 99}, // peer not in the file: cleared
+		{ID: 4, Name: "d", PeerPortID: 5},  // already paired
+		{ID: 5, Name: "e", PeerPortID: 4},
+	}
+	got, cleared, err := pairPortLinks(ports)
+	if err != nil {
+		t.Fatalf("pairPortLinks: %v", err)
+	}
+	if cleared != 1 {
+		t.Errorf("cleared = %d, want 1", cleared)
+	}
+	want := map[int64]int64{1: 2, 2: 1, 3: 0, 4: 5, 5: 4}
+	for _, p := range got {
+		if p.PeerPortID != want[p.ID] {
+			t.Errorf("port %d peer = %d, want %d", p.ID, p.PeerPortID, want[p.ID])
+		}
+	}
+	if ports[1].PeerPortID != 0 || ports[2].PeerPortID != 99 {
+		t.Error("pairPortLinks must not modify the caller's slice")
+	}
+
+	// Two ports claiming the same peer cannot both be right.
+	if _, _, err := pairPortLinks([]domain.Port{
+		{ID: 1, PeerPortID: 3}, {ID: 2, PeerPortID: 3}, {ID: 3},
+	}); err == nil {
+		t.Fatal("two ports naming one peer should fail")
+	}
+}
+
+func TestCheckPortNICs(t *testing.T) {
+	nics := []domain.NIC{{ID: 1, HostID: 10, Name: "onboard", Kind: "onboard"}}
+	got, cleared, err := checkPortNICs([]domain.Port{
+		{ID: 1, OwnerType: "host", OwnerID: 10, NICID: 1},
+		{ID: 2, OwnerType: "host", OwnerID: 10, NICID: 7}, // NIC not in the file
+	}, nics)
+	if err != nil {
+		t.Fatalf("checkPortNICs: %v", err)
+	}
+	if cleared != 1 || got[0].NICID != 1 || got[1].NICID != 0 {
+		t.Fatalf("got %+v, cleared %d", got, cleared)
+	}
+	if _, _, err := checkPortNICs([]domain.Port{{ID: 3, OwnerType: "host", OwnerID: 11, NICID: 1}}, nics); err == nil {
+		t.Fatal("a port on another host's NIC should fail the import")
 	}
 }
