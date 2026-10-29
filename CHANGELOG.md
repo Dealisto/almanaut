@@ -10,6 +10,8 @@ details are listed there.
 
 ## [Unreleased]
 
+## [1.0.2]
+
 ### Added
 - NIC and port entities, for recording which switch port each machine is
   cabled to. A port belongs to a host or a hardware item (a switch, a
@@ -20,6 +22,19 @@ details are listed there.
   generate "Port 1" to "Port N" for an owner in one step, skipping names that
   already exist. Deleting a NIC keeps its ports and only clears their NIC.
   Contributed by @tagawa0525 in #127.
+- Free-text search within each inventory list, combined with existing tag
+  filters, sorting, and saved views.
+
+### Changed
+- Refresh the light and dark interfaces with grouped navigation, a responsive
+  dashboard, actual liveness results, service cards, and port connections.
+- Organize record details into Overview, Connections, and Activity & files
+  tabs, while keeping every section available without JavaScript.
+- Make settings and account pages easier to scan, with clearer import/export,
+  user management, API token, two-factor authentication, and webhook forms.
+- Improve contrast, keyboard navigation, mobile menu focus, scrolling tables,
+  form labels, validation feedback, and clipboard fallbacks. Refresh the
+  README screenshots to match the implemented interface.
 
 ### Security
 - Build with Go 1.26.10 or newer, including the container image, to pick up
@@ -40,6 +55,10 @@ details are listed there.
   every DNS failure or timeout. Logs now show only the scheme and host.
 
 ### Fixed
+- Failed YAML restores retain the CSV record-type choices and the restore
+  form. Invalid two-factor codes retain an accessible form for retrying.
+- Theme changes preserve the current page and record tab; journal and
+  attachment actions return to Activity & files.
 - Deleting, or resetting the 2FA of, a user that does not exist now returns
   404 instead of silently redirecting (and, for the 2FA reset, writing an audit
   event with no username).
@@ -174,6 +193,7 @@ capabilities that make up v1.0.
 - Versioned releases: pushing a `v*` tag publishes prebuilt binaries with
   checksums (goreleaser) and container tags `:X.Y.Z`, `:X.Y`, and `:latest`.
 
-[Unreleased]: https://github.com/Dealisto/almanaut/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/Dealisto/almanaut/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/Dealisto/almanaut/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/Dealisto/almanaut/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Dealisto/almanaut/releases/tag/v1.0.0
