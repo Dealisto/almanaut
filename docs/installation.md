@@ -65,7 +65,7 @@ platform, verify it, and run it:
 
 ```bash
 sha256sum -c checksums.txt --ignore-missing
-tar xzf almanaut_1.0.1_linux_amd64.tar.gz
+tar xzf almanaut_1.0.2_linux_amd64.tar.gz
 ALMANAUT_DATA_DIR=./data ./almanaut
 ```
 
