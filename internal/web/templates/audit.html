@@ -1,52 +1,23 @@
 {{define "content"}}
-<div class="page-header">
-  <div class="ph-titles">
-    <span class="ph-eyebrow">Admin</span>
-    <h1>Audit log</h1>
-  </div>
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Administration</span><h1>Audit log</h1><p class="page-description">Trace sign-ins, authentication failures, and changes to account access.</p></div><div class="ph-actions"><a class="btn" href="/history">Inventory activity {{icon "arrow"}}</a></div></div>
+{{template "settingsnav" .}}
+<div class="list-toolbar">
+  <form class="list-controls" method="get" action="/audit" aria-label="Filter authentication events">
+    <label class="lc-field">User<select name="user"><option value="">All users</option>{{range .Users}}<option value="{{.}}"{{if eq . $.FilterUser}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+    <label class="lc-field">Event type<select name="type"><option value="">All events</option>{{range .Types}}<option value="{{.}}"{{if eq . $.FilterType}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+    <label class="lc-field">From (UTC)<input type="date" name="since" value="{{.Since}}"></label>
+    <label class="lc-field">Through (UTC)<input type="date" name="until" value="{{.Until}}"></label>
+    <button class="btn btn-primary" type="submit">Apply filters</button>
+    {{if or .FilterUser .FilterType .Since .Until}}<a class="btn" href="/audit">Clear filters</a>{{end}}
+  </form>
 </div>
-
-<form class="list-controls" method="get" action="/audit">
-  <label class="lc-field">User
-    <select name="user">
-      <option value="">—</option>
-      {{range .Users}}<option value="{{.}}"{{if eq . $.FilterUser}} selected{{end}}>{{.}}</option>{{end}}
-    </select>
-  </label>
-  <label class="lc-field">Type
-    <select name="type">
-      <option value="">—</option>
-      {{range .Types}}<option value="{{.}}"{{if eq . $.FilterType}} selected{{end}}>{{.}}</option>{{end}}
-    </select>
-  </label>
-  <label class="lc-field">Since
-    <input type="date" name="since" value="{{.Since}}">
-  </label>
-  <label class="lc-field">Until
-    <input type="date" name="until" value="{{.Until}}">
-  </label>
-  <button class="btn" type="submit">Filter</button>
-  <a class="btn btn-link" href="/audit">Clear</a>
-</form>
-
-{{if .Events}}
-<div class="table-wrap">
-<table>
-  <thead><tr><th>Time</th><th>Event</th><th>User</th><th>Source IP</th><th>Detail</th></tr></thead>
-  <tbody>
-  {{range .Events}}
-    <tr>
-      <td><time>{{.CreatedAt}}</time></td>
-      <td><code>{{.Type}}</code></td>
-      <td>{{if .Username}}{{.Username}}{{else}}—{{end}}</td>
-      <td><code>{{if .SourceIP}}{{.SourceIP}}{{else}}—{{end}}</code></td>
-      <td>{{.Detail}}</td>
-    </tr>
-  {{end}}
-  </tbody>
-</table>
-</div>
-{{else}}
-<div class="table-wrap"><div class="empty">No matching events.</div></div>
-{{end}}
+<section class="panel" aria-labelledby="audit-results">
+  <div class="panel-head"><h2 id="audit-results">Authentication events</h2><span class="badge">{{len .Events}} shown</span></div>
+  <p class="form-help">Newest events first. Times are shown in UTC.</p>
+  {{if .Events}}
+  <div class="table-wrap"><table class="audit-table"><caption class="sr-only">Authentication events matching the selected filters</caption><thead><tr><th scope="col">Time</th><th scope="col">Event</th><th scope="col">User</th><th scope="col">Source IP</th><th scope="col">Detail</th></tr></thead><tbody>
+    {{range .Events}}<tr><td><time datetime="{{.CreatedAt}}" title="{{.CreatedAt}}">{{displayTime .CreatedAt}}</time></td><td><code>{{.Type}}</code></td><td>{{if .Username}}{{.Username}}{{else}}<span class="muted">Not recorded</span>{{end}}</td><td><code>{{if .SourceIP}}{{.SourceIP}}{{else}}—{{end}}</code></td><td class="wrap-cell">{{if .Detail}}{{.Detail}}{{else}}<span class="muted">—</span>{{end}}</td></tr>{{end}}
+  </tbody></table></div>
+  {{else}}<div class="empty">{{icon "history"}}<strong>No matching events.</strong><p>{{if or .FilterUser .FilterType .Since .Until}}Try a wider date range or clear your filters.{{else}}Authentication activity will appear here as people use the workspace.{{end}}</p>{{if or .FilterUser .FilterType .Since .Until}}<a class="btn" href="/audit">Clear filters</a>{{end}}</div>{{end}}
+</section>
 {{end}}

@@ -17,7 +17,7 @@
 {{range .Sections}}
 <h3>{{.Name}}</h3>
 <table class="list">
-  <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+  <thead><tr><th scope="col">Method</th><th scope="col">Path</th><th scope="col">Description</th></tr></thead>
   <tbody>
   {{range .Endpoints}}
     <tr>
@@ -38,7 +38,7 @@
 {{range .Schemas}}
 <h3>{{.Name}}</h3>
 <table class="list">
-  <thead><tr><th>Field</th><th>Type</th></tr></thead>
+  <thead><tr><th scope="col">Field</th><th scope="col">Type</th></tr></thead>
   <tbody>
   {{range .Fields}}
     <tr>

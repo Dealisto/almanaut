@@ -95,7 +95,7 @@ func TestDetailPageShowsGraphWhenRelated(t *testing.T) {
 	}
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/hosts/"+itoaGraph(uid), nil))
-	if strings.Contains(rec.Body.String(), "<svg") {
+	if strings.Contains(rec.Body.String(), `class="depgraph"`) {
 		t.Errorf("entity with no relationships should not render a graph")
 	}
 }

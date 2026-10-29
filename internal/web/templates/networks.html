@@ -2,7 +2,7 @@
 <div class="page-header">
   <div class="ph-titles">
     <span class="ph-eyebrow">Inventory</span>
-    <h1>Networks</h1>
+    <h1>Networks</h1><p class="page-description">Your subnets, gateways and IP allocations in one place.</p>
   </div>
   <div class="ph-actions">
     {{if canWrite}}<a class="btn btn-primary" href="/networks/new">+ New network</a>{{end}}
@@ -13,21 +13,23 @@
 {{template "bulkactions" .Controls}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th class="bulk-col"></th><th>Name</th><th>CIDR</th><th>Gateway</th><th></th></tr></thead>
+  <thead><tr><th scope="col" class="bulk-col"><span class="sr-only">Selection</span>{{if canWrite}}<input type="checkbox" class="js-only" data-select-all aria-label="Select all rows">{{end}}</th><th scope="col">Name</th><th scope="col">CIDR</th><th scope="col">Gateway</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
   <tbody>
   {{range .Items}}
-    <tr><td class="bulk-col"><input type="checkbox" name="ids" value="{{.ID}}" form="bulkform"></td>
-      <td><a href="/networks/{{.ID}}">{{.Name}}</a></td>
-      <td>{{.CIDR}}</td>
+    <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select row {{.ID}}">{{end}}</td>
+      <td><div class="entity-cell"><span class="entity-icon">{{icon "network"}}</span><a href="/networks/{{.ID}}">{{.Name}}</a></div></td>
+      <td><code>{{.CIDR}}</code></td>
       <td>{{.Gateway}}</td>
       <td>
         {{if canWrite}}
+        <details class="row-menu"><summary>Actions</summary>
         <a class="btn" href="/networks/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/networks/{{.ID}}/delete"
               onsubmit="return confirm('Delete this network?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        </details>
         {{end}}
       </td>
     </tr>
@@ -36,6 +38,6 @@
 </table>
 </div>
 {{else}}
-<div class="table-wrap"><div class="empty">No networks yet.</div></div>
+<div class="table-wrap"><div class="empty">{{if .Controls.Active}}{{icon "search"}}<strong>No matching records.</strong><p>Try a different search or clear your filters.</p><a class="btn" href="{{.Controls.BasePath}}">Clear filters</a>{{else}}{{icon "box"}}<strong>No networks yet.</strong><p>Add your first record to start documenting your inventory.</p>{{if canWrite}}<a class="btn" href="{{.Controls.BasePath}}/new">Add a record</a>{{end}}{{end}}</div></div>
 {{end}}
 {{end}}

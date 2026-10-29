@@ -27,6 +27,20 @@ bulk](lists-and-views.md), and the inventory as a whole is audited on the
 | **NICs** | Network cards on a host (onboard or expansion) |
 | **Ports** | Physical network ports on hosts and hardware, and the cables between them |
 
+## Navigating a record
+
+Record pages have three sections:
+
+- **Overview** contains the fields, tags, notes, custom fields, and any agent or
+  certificate probe information.
+- **Connections** contains relationships and diagrams, child records, port
+  connections, IP allocations, and rack elevations when applicable.
+- **Activity & files** contains attachments, journal entries, and change history.
+
+Section links can be bookmarked. With JavaScript enabled, use the arrow keys to
+move between tabs; without it, all three sections remain visible on one page.
+Journal and attachment actions return to **Activity & files**.
+
 ## Sites, locations & racks
 
 Physical placement is a **Site → Location → Rack** hierarchy: a site is a

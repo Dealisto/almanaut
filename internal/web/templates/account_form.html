@@ -5,7 +5,7 @@
     <h1>{{.Heading}}</h1>
   </div>
 </div>
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
 <p style="color:var(--muted)">Never store passwords or keys here — record where the secret lives (your password manager) and point to it.</p>
 <form class="stack" method="post" action="{{.Action}}">
 {{ csrfField }}

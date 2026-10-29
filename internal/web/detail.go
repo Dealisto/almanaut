@@ -16,8 +16,9 @@ type fieldRow struct {
 
 // childRef is one child entity link shown in a detail page's children section.
 type childRef struct {
-	Label string
-	Path  string
+	Label     string
+	Path      string
+	Connected bool
 }
 
 // childrenSection lists an entity's child entities (e.g. a Site's Locations).
@@ -48,6 +49,7 @@ type attachmentView struct {
 
 type relatedItem struct {
 	Text string
+	URL  string
 }
 
 type detailData struct {
@@ -190,11 +192,19 @@ func renderDetailExtra(
 	for _, e := range edges {
 		if e.FromType == entityType && e.FromID == entityID {
 			other := labelOrFallback(labels, e.ToType, e.ToID)
-			related = append(related, relatedItem{Text: fmt.Sprintf("%s → %s", e.Kind, other)})
+			item := relatedItem{Text: fmt.Sprintf("%s → %s", e.Kind, other)}
+			if _, exists := labels[fmt.Sprintf("%s:%d", e.ToType, e.ToID)]; exists {
+				item.URL = cat.path(e.ToType, e.ToID)
+			}
+			related = append(related, item)
 			neighbors = append(neighbors, graphNeighbor{Label: other, Kind: e.Kind, Outgoing: true})
 		} else {
 			other := labelOrFallback(labels, e.FromType, e.FromID)
-			related = append(related, relatedItem{Text: fmt.Sprintf("%s → %s", other, e.Kind)})
+			item := relatedItem{Text: fmt.Sprintf("%s → %s", other, e.Kind)}
+			if _, exists := labels[fmt.Sprintf("%s:%d", e.FromType, e.FromID)]; exists {
+				item.URL = cat.path(e.FromType, e.FromID)
+			}
+			related = append(related, item)
 			neighbors = append(neighbors, graphNeighbor{Label: other, Kind: e.Kind, Outgoing: false})
 		}
 	}

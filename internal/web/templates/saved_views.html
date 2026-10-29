@@ -1,46 +1,15 @@
 {{define "content"}}
-<div class="page-header">
-  <div class="ph-titles">
-    <span class="ph-eyebrow">Preferences</span>
-    <h1>Saved views</h1>
-  </div>
-</div>
-
-{{if .Groups}}
-{{range .Groups}}
-<section class="panel">
-<h2>{{.TypeTitle}}</h2>
-<div class="table-wrap">
-<table>
-  <thead><tr><th>Name</th><th>View</th><th></th></tr></thead>
-  <tbody>
-  {{range .Views}}
-    <tr>
-      <td>
-        <form class="form-inline" method="post" action="/views/{{.ID}}/rename">
-          {{ csrfField }}
-          <input name="name" value="{{.Name}}" aria-label="View name">
-          <button class="btn" type="submit">Rename</button>
-        </form>
-      </td>
-      <td><a href="{{.URL}}"><code>{{if .Query}}?{{.Query}}{{else}}(all){{end}}</code></a></td>
-      <td>
-        <form class="form-inline" method="post" action="/views/{{.ID}}/delete"
-              onsubmit="return confirm('Delete this saved view?');">
-          {{ csrfField }}
-          <button class="btn btn-danger" type="submit">Delete</button>
-        </form>
-      </td>
-    </tr>
-  {{end}}
-  </tbody>
-</table>
-</div>
-</section>
-{{end}}
-{{else}}
-<section class="panel">
-  <div class="empty">No saved views yet. Filter or sort a list page, then use “Save current view”.</div>
-</section>
-{{end}}
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Your preferences</span><h1>Saved views</h1><p class="page-description">Keep useful searches and filters close at hand. These views belong to your account.</p></div><a class="btn" href="/hosts">Browse inventory {{icon "arrow"}}</a></div>
+{{template "settingsnav" .}}
+{{if .Groups}}<div class="settings-grid"><div>
+{{range .Groups}}<section class="panel"><div class="panel-head"><h2>{{.TypeTitle}}</h2><span class="badge">{{len .Views}} views</span></div><ul class="record-list">{{range .Views}}<li>
+  <div class="record-heading"><span class="entity-icon">{{icon "search"}}</span><div class="record-identity"><h3><a href="{{.URL}}">{{.Name}}</a></h3><p>{{if .Query}}Saved filters and sorting{{else}}All records{{end}}</p></div><a class="btn" href="{{.URL}}">Open<span class="sr-only"> {{.Name}}</span></a></div>
+  <details class="disclosure"><summary>Manage view<span class="sr-only"> {{.Name}}</span></summary>
+    <form class="inline-editor" method="post" action="/views/{{.ID}}/rename">{{ csrfField }}<label>View name<input name="name" value="{{.Name}}" required></label><button class="btn" type="submit">Rename</button></form>
+    {{if .Query}}<p class="query-preview"><span class="muted">Saved query:</span> <code>{{.Query}}</code></p>{{end}}
+    <form class="destructive-action" method="post" action="/views/{{.ID}}/delete" onsubmit="return confirm('Delete this saved view? Inventory records will be kept.');">{{ csrfField }}<button class="btn btn-danger" type="submit">Delete view<span class="sr-only"> {{.Name}}</span></button></form>
+  </details>
+</li>{{end}}</ul></section>{{end}}</div>
+<aside class="help-card"><h2>Save another view</h2><ol class="steps"><li>Open an inventory list.</li><li>Choose a search, filters, or sorting and select <strong>Apply</strong>.</li><li>Open <strong>Save view</strong> and give it a name.</li></ol><p>Your saved views also appear in the sidebar.</p></aside></div>
+{{else}}<section class="panel"><div class="empty">{{icon "search"}}<strong>Your useful searches, one click away.</strong><p>Filter or sort an inventory list, select Apply, then use Save view.</p><a class="btn btn-primary" href="/hosts">Find a view to save</a></div></section>{{end}}
 {{end}}

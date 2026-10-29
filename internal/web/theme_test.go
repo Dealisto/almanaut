@@ -3,8 +3,23 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 )
+
+func TestThemeReturnsToCurrentPageWithoutReferer(t *testing.T) {
+	srv := newTestServer(t)
+	for _, next := range []string{"/hosts?q=nas&sort=Name", "https://example.org/", "//example.org/", `/\example.org/`} {
+		want := "/"
+		if next == "/hosts?q=nas&sort=Name" {
+			want = next
+		}
+		rec := postForm(t, srv, "/theme", url.Values{"theme": {"dark"}, "return_to": {next}})
+		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != want {
+			t.Errorf("return_to %q: status=%d location=%q, want %q", next, rec.Code, rec.Header().Get("Location"), want)
+		}
+	}
+}
 
 func TestThemeFromCookie(t *testing.T) {
 	cases := []struct {

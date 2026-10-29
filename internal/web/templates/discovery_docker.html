@@ -5,7 +5,7 @@
     <h1>Docker discovery</h1>
   </div>
 </div>
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
 {{if .Proposals}}
 <section class="panel">
   <form method="post" action="/discovery/docker/import">
@@ -18,7 +18,7 @@
     </label>
     <div class="table-wrap">
     <table>
-      <thead><tr><th></th><th>Name</th><th>Ports</th><th>Category</th><th>Status</th></tr></thead>
+      <thead><tr><th scope="col"><span class="sr-only">Actions</span></th><th scope="col">Name</th><th scope="col">Ports</th><th scope="col">Category</th><th scope="col">Status</th></tr></thead>
       <tbody>
       {{range .Proposals}}
         <tr>

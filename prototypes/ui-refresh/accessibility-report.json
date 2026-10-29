@@ -1,0 +1,1412 @@
+{
+  "generated_at": "2026-10-29T14:38:02.993120+00:00",
+  "scope": "Second UI pass: settings, account screens, validation states, mobile navigation and accessibility.",
+  "environment": {
+    "application": "Almanaut",
+    "branch": "feature/ui-refresh",
+    "base_commit": "a1eab97",
+    "browser": "Chromium (headless, Chrome DevTools Protocol)",
+    "data": "Isolated temporary demo database; no production data or external integrations used."
+  },
+  "automated_accessibility": {
+    "engine": "axe-core 4.10.3",
+    "rule_tags": [
+      "wcag2a",
+      "wcag2aa",
+      "wcag21aa",
+      "wcag22aa",
+      "best-practice"
+    ],
+    "routes": [
+      "/",
+      "/data",
+      "/audit",
+      "/users",
+      "/account/tokens",
+      "/account/password",
+      "/account/2fa",
+      "/custom-fields",
+      "/views",
+      "/webhooks",
+      "/tasks",
+      "/history",
+      "/health-report",
+      "/hosts",
+      "/hosts/new",
+      "/hosts/1#connections",
+      "/hosts/1#activity",
+      "/ports/new",
+      "/discovery/runs",
+      "/relationships",
+      "/api/docs"
+    ],
+    "scenarios": [
+      {
+        "name": "Light desktop",
+        "width": 1440
+      },
+      {
+        "name": "Dark desktop",
+        "width": 1440
+      },
+      {
+        "name": "Light mobile",
+        "width": 390
+      },
+      {
+        "name": "Dark narrow reflow",
+        "width": 320
+      }
+    ],
+    "page_scenario_combinations": 84,
+    "violations": 0,
+    "horizontal_page_overflow_cases": 0,
+    "javascript_exceptions": 0,
+    "additional_state_audits": [
+      {
+        "label": "Users: expanded account actions",
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": [
+              [
+                ".brand-mark"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Custom fields: populated and expanded",
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": [
+              [
+                ".brand-mark"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Password: validation error",
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": [
+              [
+                ".brand-mark"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Tokens: newly created token",
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": [
+              [
+                ".brand-mark"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Webhooks: populated and secret revealed",
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": [
+              [
+                ".brand-mark"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "label": "CSV import: invalid rows",
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": [
+              [
+                ".brand-mark"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "label": "YAML restore: invalid file",
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": [
+              [
+                ".brand-mark"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Two-factor: enrollment",
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": [
+              [
+                ".brand-mark"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Two-factor: enrollment error",
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": [
+              [
+                ".brand-mark"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Two-factor: recovery codes",
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": [
+              [
+                ".brand-mark"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Two-factor: enabled and disable form expanded",
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": [
+              [
+                ".brand-mark"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Two-factor: disable validation error",
+        "violations": [],
+        "incomplete": [
+          {
+            "id": "color-contrast",
+            "nodes": [
+              [
+                ".brand-mark"
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Mobile navigation open",
+        "violations": []
+      },
+      {
+        "label": "Sign-in error",
+        "violations": []
+      },
+      {
+        "label": "Viewer import and export page",
+        "violations": []
+      },
+      {
+        "label": "Viewer inventory list",
+        "violations": []
+      }
+    ],
+    "matrix": [
+      {
+        "scenario": "Light desktop",
+        "path": "/",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/data",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/audit",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/users",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/account/tokens",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/account/password",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/account/2fa",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/custom-fields",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/views",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/webhooks",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/tasks",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/history",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/health-report",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/hosts",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/hosts/new",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/hosts/1#connections",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/hosts/1#activity",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/ports/new",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/discovery/runs",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/relationships",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light desktop",
+        "path": "/api/docs",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/data",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/audit",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/users",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/account/tokens",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/account/password",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/account/2fa",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/custom-fields",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/views",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/webhooks",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/tasks",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/history",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/health-report",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/hosts",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/hosts/new",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/hosts/1#connections",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/hosts/1#activity",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/ports/new",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/discovery/runs",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/relationships",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark desktop",
+        "path": "/api/docs",
+        "width": 1440,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/data",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/audit",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/users",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/account/tokens",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/account/password",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/account/2fa",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/custom-fields",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/views",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/webhooks",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/tasks",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/history",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/health-report",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/hosts",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/hosts/new",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/hosts/1#connections",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/hosts/1#activity",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/ports/new",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/discovery/runs",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/relationships",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Light mobile",
+        "path": "/api/docs",
+        "width": 390,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/data",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/audit",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/users",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/account/tokens",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/account/password",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/account/2fa",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/custom-fields",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/views",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/webhooks",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/tasks",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/history",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/health-report",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/hosts",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/hosts/new",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/hosts/1#connections",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/hosts/1#activity",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/ports/new",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/discovery/runs",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/relationships",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": []
+      },
+      {
+        "scenario": "Dark narrow reflow",
+        "path": "/api/docs",
+        "width": 320,
+        "violations": [],
+        "horizontal_overflow": false,
+        "incomplete_rule_ids": [
+          "color-contrast"
+        ]
+      }
+    ]
+  },
+  "scripted_keyboard_and_behavior_checks": [
+    {
+      "label": "Mobile drawer contains focus",
+      "passed": true
+    },
+    {
+      "label": "Tab wraps within the open drawer",
+      "passed": true
+    },
+    {
+      "label": "Shift Tab wraps backward within the drawer",
+      "passed": true
+    },
+    {
+      "label": "Escape restores the menu control",
+      "passed": true
+    },
+    {
+      "label": "Visible close button dismisses the drawer",
+      "passed": true
+    },
+    {
+      "label": "Opening a detail tab makes its wide table keyboard scrollable",
+      "passed": true
+    },
+    {
+      "label": "Arrow keys scroll the focused audit table",
+      "passed": true
+    },
+    {
+      "label": "Detail tabs work with the keyboard",
+      "passed": true
+    },
+    {
+      "label": "Home returns to the first tab",
+      "passed": true
+    },
+    {
+      "label": "Reduced motion removes drawer transitions",
+      "passed": true
+    },
+    {
+      "label": "High contrast mode retains controls and layout",
+      "passed": true
+    },
+    {
+      "label": "Increased text spacing: /data",
+      "passed": true
+    },
+    {
+      "label": "Increased text spacing: /users",
+      "passed": true
+    },
+    {
+      "label": "Increased text spacing: /audit",
+      "passed": true
+    },
+    {
+      "label": "Increased text spacing: /webhooks",
+      "passed": true
+    },
+    {
+      "label": "Increased text spacing: /account/tokens",
+      "passed": true
+    },
+    {
+      "label": "Import form remains usable without JavaScript",
+      "passed": true
+    },
+    {
+      "label": "Restore section and mobile navigation work without JavaScript",
+      "passed": true
+    },
+    {
+      "label": "Sign-in error is announced through keyboard focus",
+      "passed": true
+    },
+    {
+      "label": "Viewer sees export but no import controls",
+      "passed": true
+    },
+    {
+      "label": "Viewer cannot see acknowledgment actions",
+      "passed": true
+    },
+    {
+      "label": "Viewer has no editing controls",
+      "passed": true
+    }
+  ],
+  "functional_checks": [
+    {
+      "label": "New user defaults to viewer",
+      "passed": true
+    },
+    {
+      "label": "Field label edits persist",
+      "passed": true
+    },
+    {
+      "label": "Password error receives keyboard focus",
+      "passed": true
+    },
+    {
+      "label": "Token is shown once in a readable field",
+      "passed": true
+    },
+    {
+      "label": "Copy action copies the complete value",
+      "passed": true
+    },
+    {
+      "label": "Copy failure provides a usable text selection",
+      "passed": true
+    },
+    {
+      "label": "Raw token is absent on subsequent page loads",
+      "passed": true
+    },
+    {
+      "label": "Webhook creation returns its secret",
+      "passed": true
+    },
+    {
+      "label": "Webhook can be paused",
+      "passed": true
+    },
+    {
+      "label": "CSV errors retain the form and move focus",
+      "passed": true
+    },
+    {
+      "label": "YAML error leaves restore open and CSV types available",
+      "passed": true
+    },
+    {
+      "label": "Incorrect enrollment code is explained and focused",
+      "passed": true
+    },
+    {
+      "label": "Incorrect disable code preserves the retry form",
+      "passed": true
+    },
+    {
+      "label": "Recovery code disables two-factor successfully",
+      "passed": true
+    }
+  ],
+  "contrast_follow_up": {
+    "reason": "The automated scan could not determine contrast for SVG text, empty textareas, some offscreen API table cells, and the brand mark.",
+    "correction": "Removed reduced opacity from diagram relationship labels. Their computed contrast is now 5.86:1 in light mode and 7.40:1 in dark mode.",
+    "method": "Computed rendered foreground/background colors and SVG fill opacity; calculated WCAG relative luminance contrast ratios in both themes. No screenshots were edited.",
+    "samples": [
+      {
+        "theme": "light",
+        "path": "/hosts/1#connections",
+        "selector": ".depgraph text",
+        "elements": 5,
+        "minimumRatio": 5.863836247824997,
+        "colors": [
+          {
+            "foreground": [
+              36,
+              107,
+              89
+            ],
+            "background": [
+              244,
+              247,
+              246
+            ],
+            "opacity": 1,
+            "ratio": 5.863836247824997
+          }
+        ]
+      },
+      {
+        "theme": "light",
+        "path": "/hosts/new",
+        "selector": "textarea",
+        "elements": 1,
+        "minimumRatio": 12.967395782290728,
+        "colors": [
+          {
+            "foreground": [
+              37,
+              52,
+              52
+            ],
+            "background": [
+              255,
+              255,
+              255
+            ],
+            "opacity": 1,
+            "ratio": 12.967395782290728
+          }
+        ]
+      },
+      {
+        "theme": "light",
+        "path": "/ports/new",
+        "selector": "textarea",
+        "elements": 1,
+        "minimumRatio": 12.967395782290728,
+        "colors": [
+          {
+            "foreground": [
+              37,
+              52,
+              52
+            ],
+            "background": [
+              255,
+              255,
+              255
+            ],
+            "opacity": 1,
+            "ratio": 12.967395782290728
+          }
+        ]
+      },
+      {
+        "theme": "light",
+        "path": "/api/docs",
+        "selector": "td:nth-child(3)",
+        "elements": 90,
+        "minimumRatio": 12.203071263308614,
+        "colors": [
+          {
+            "foreground": [
+              37,
+              52,
+              52
+            ],
+            "background": [
+              247,
+              248,
+              250
+            ],
+            "opacity": 1,
+            "ratio": 12.203071263308614
+          }
+        ]
+      },
+      {
+        "theme": "dark",
+        "path": "/hosts/1#connections",
+        "selector": ".depgraph text",
+        "elements": 5,
+        "minimumRatio": 7.395953952082842,
+        "colors": [
+          {
+            "foreground": [
+              144,
+              197,
+              168
+            ],
+            "background": [
+              30,
+              44,
+              44
+            ],
+            "opacity": 1,
+            "ratio": 7.395953952082842
+          }
+        ]
+      },
+      {
+        "theme": "dark",
+        "path": "/hosts/new",
+        "selector": "textarea",
+        "elements": 1,
+        "minimumRatio": 11.436523864581611,
+        "colors": [
+          {
+            "foreground": [
+              211,
+              222,
+              219
+            ],
+            "background": [
+              25,
+              37,
+              37
+            ],
+            "opacity": 1,
+            "ratio": 11.436523864581611
+          }
+        ]
+      },
+      {
+        "theme": "dark",
+        "path": "/ports/new",
+        "selector": "textarea",
+        "elements": 1,
+        "minimumRatio": 11.436523864581611,
+        "colors": [
+          {
+            "foreground": [
+              211,
+              222,
+              219
+            ],
+            "background": [
+              25,
+              37,
+              37
+            ],
+            "opacity": 1,
+            "ratio": 11.436523864581611
+          }
+        ]
+      },
+      {
+        "theme": "dark",
+        "path": "/api/docs",
+        "selector": "td:nth-child(3)",
+        "elements": 90,
+        "minimumRatio": 12.73884378729954,
+        "colors": [
+          {
+            "foreground": [
+              211,
+              222,
+              219
+            ],
+            "background": [
+              17,
+              27,
+              27
+            ],
+            "opacity": 1,
+            "ratio": 12.73884378729954
+          }
+        ]
+      }
+    ],
+    "brand_mark": "Decorative logo lettering; excluded from the minimum text-contrast requirement."
+  },
+  "regressions_fixed": [
+    "Invalid YAML restore keeps all 17 CSV record types and the existing inventory.",
+    "Invalid two-factor enrollment and disable codes keep an accessible HTML retry form without changing the authentication state.",
+    "The mobile focus loop excludes descendants of closed details elements.",
+    "Visible wide tables become keyboard-scrollable when switching detail tabs.",
+    "Paragraph links remain identifiable without relying on their color."
+  ],
+  "repository_checks": [
+    {
+      "command": "go vet ./...",
+      "result": "passed"
+    },
+    {
+      "command": "go test ./...",
+      "result": "passed"
+    },
+    {
+      "command": "go test -race ./...",
+      "result": "passed",
+      "note": "Passed before the final SVG text-opacity adjustment; focused graph tests and the normal full suite were rerun afterward."
+    },
+    {
+      "command": "node --check internal/web/static/app.js",
+      "result": "passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "cleanup": {
+    "testFixturesRemoved": true,
+    "previewTwoFactorDisabled": true,
+    "errors": []
+  },
+  "limitations": [
+    "This is a scoped automated and scripted-browser audit, not a WCAG conformance certification.",
+    "No end-to-end trial with a human screen-reader user or physical touch device was performed.",
+    "Browsers other than Chromium were not exercised.",
+    "The compact diagram duplicates its relationship information in the accessible connections list below."
+  ],
+  "references": [
+    "https://github.com/dequelabs/axe-core",
+    "https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html",
+    "https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html"
+  ]
+}

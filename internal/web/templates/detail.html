@@ -2,7 +2,7 @@
 <div class="page-header">
   <div class="ph-titles">
     <span class="ph-eyebrow">{{.EntityType}}</span>
-    <h1>{{.Heading}}</h1>
+    <h1>{{.Heading}}</h1><p class="page-description">Details, connections and the history behind this record.</p>
   </div>
   <div class="ph-actions">
     {{if canWrite}}<a class="btn btn-primary" href="{{.EditURL}}">Edit</a>{{end}}
@@ -10,15 +10,17 @@
   </div>
 </div>
 
+<nav class="detail-tabs" aria-label="Record sections"><a href="#overview" class="active">Overview</a><a href="#connections">Connections</a><a href="#activity">Activity & files</a></nav>
+<div id="overview" data-detail-panel>
 <div class="detail-top">
   <section class="panel">
-    <h2>Details</h2>
+    <h2>At a glance</h2>
     <dl class="def-grid">
-      {{range .Fields}}<dt>{{.Label}}</dt><dd>{{.Value}}</dd>{{end}}
+      {{range .Fields}}<div class="field-pair"><dt>{{.Label}}</dt><dd>{{if .Value}}{{.Value}}{{else}}<span class="muted">Not set</span>{{end}}</dd></div>{{end}}
     </dl>
   </section>
 
-  <section class="panel">
+  <div class="detail-sidebar"><section class="panel">
     <h2>Tags</h2>
     <div class="tags">
       {{range .Tags}}
@@ -29,81 +31,40 @@
             <input type="hidden" name="id" value="{{.ID}}">
             <input type="hidden" name="entity_type" value="{{.EntityType}}">
             <input type="hidden" name="entity_id" value="{{.EntityID}}">
-            <button class="tag-x" type="submit" title="remove">&times;</button>
+            <button class="tag-x" type="submit" aria-label="Remove tag {{.Name}}">&times;</button>
           </form>
           {{end}}
         </span>
       {{else}}<em>No tags.</em>{{end}}
     </div>
     {{if canWrite}}
-    <form class="form-inline" method="post" action="/tags">
+    <form class="tag-form" method="post" action="/tags">
       {{ csrfField }}
       <input type="hidden" name="entity_type" value="{{.EntityType}}">
       <input type="hidden" name="entity_id" value="{{.EntityID}}">
-      <input name="tag" placeholder="add a tag" required>
+      <input name="tag" placeholder="Add a tag" aria-label="Tag name" required>
       <button class="btn btn-primary" type="submit">Add tag</button>
     </form>
     {{end}}
   </section>
+  <section class="panel"><div class="panel-head"><h2>Connected to</h2><a class="text-link" href="#connections">View all {{icon "arrow"}}</a></div>
+    {{if or .Related (and .Children .Children.Items)}}<ul class="related">
+      {{with .Children}}{{range $i, $item := .Items}}{{if lt $i 3}}<li><a class="related-link" href="{{.Path}}"><span>{{.Label}}</span>{{icon "chevron"}}</a></li>{{end}}{{end}}{{end}}
+      {{range $i, $item := .Related}}{{if lt $i 3}}<li>{{if .URL}}<a class="related-link" href="{{.URL}}"><span>{{.Text}}</span>{{icon "chevron"}}</a>{{else}}{{.Text}}{{end}}</li>{{end}}{{end}}
+    </ul>{{else}}<p class="muted">No connections documented yet.</p>{{end}}
+  </section></div>
 </div>
 
-{{with .IPAM}}
 <section class="panel">
-  <h2>IP allocations</h2>
-  {{if .Overlaps}}
-  <p class="ipam-stats"><span class="badge badge-warn">overlap</span> This network shares its CIDR block with:</p>
-  <ul class="related">{{range .Overlaps}}<li><a href="{{.URL}}">{{.Name}}</a> <code>{{.CIDR}}</code></li>{{end}}</ul>
-  {{end}}
-  <p class="ipam-stats">
-    {{.UsedCount}} used{{if not .Unbounded}} / {{.TotalUsable}} usable ({{.FreeCount}} free){{end}}.
-    {{if .NextFree}}Next free: <code>{{.NextFree}}</code>.{{end}}
-  </p>
-  {{if .Reserved}}
-  <p class="ipam-stats">{{.ReservedCount}} reserved.</p>
-  <ul class="related">{{range .Reserved}}<li>{{.Name}}: <code>{{.Range}}</code></li>{{end}}</ul>
-  {{end}}
-  {{if .Rows}}
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>IP</th><th>Host</th><th></th></tr></thead>
-    <tbody>
-      {{range .Rows}}
-      <tr>
-        <td><code>{{.IP}}</code></td>
-        <td><a href="/hosts/{{.HostID}}">{{.HostName}}</a></td>
-        <td>
-          {{if .IsGateway}}<span class="badge">gateway</span>{{end}}
-          {{if .Conflict}}<span class="badge badge-warn">conflict</span>{{end}}
-        </td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
-  </div>
-  {{else}}<p class="muted"><em>No IPs allocated in this subnet.</em></p>{{end}}
+  <h2>Notes</h2>
+  <div class="notes">{{if .NotesHTML}}{{.NotesHTML}}{{else}}<em>No notes.</em>{{end}}</div>
 </section>
-{{end}}
-
-{{with .Children}}
+{{with .CustomFields}}
 <section class="panel">
-  <h2>{{.Title}}</h2>
-  {{if .Items}}
-  <ul class="related">{{range .Items}}<li><a href="{{.Path}}">{{.Label}}</a></li>{{end}}</ul>
-  {{else}}<p class="muted"><em>None yet.</em></p>{{end}}
-</section>
-{{end}}
-
-{{with .Elevation}}
-<section class="panel">
-  <h2>Rack elevation</h2>
-  <div class="rack-elev" style="grid-template-rows: repeat({{.UHeight}}, 1.4rem);">
-    {{range .Units}}<div class="rack-elev-u" style="grid-row: {{.Row}};">{{.U}}</div>{{end}}
-    {{range .Occupants}}
-    <div class="rack-elev-occ{{if .OutOfBounds}} oob{{end}}{{if .Overlap}} overlap{{end}}" style="grid-row: {{.GridRowStart}} / span {{.Span}};">
-      <a href="{{.Path}}">{{.Label}}</a>&nbsp;<span class="rack-elev-meta">U{{.Position}}·{{.UHeight}}U{{if .OutOfBounds}} ⚠{{end}}{{if .Overlap}} ⚠{{end}}</span>
-    </div>
-    {{end}}
-  </div>
+  <h2>Custom fields</h2>
+  <dl class="def-grid">
+    {{range .}}<dt>{{.Label}}</dt><dd>{{.Value}}</dd>{{end}}
+  </dl>
 </section>
 {{end}}
 
@@ -144,14 +105,14 @@
 <section class="panel">
   <h2>Agent</h2>
   {{if .ConflictAt}}
-  <div class="error">
+  <div class="error" role="alert" tabindex="-1">
     <strong>Conflict:</strong> a report from <code>{{.ConflictHostname}}</code> was rejected at {{.ConflictAt}} —
     it used this host's agent id (<code>{{.AgentID}}</code>) but is a different machine. Verify this isn't two
     machines sharing one agent identity.
   </div>
   {{end}}
   {{if .Duplicates}}
-  <div class="error">
+  <div class="error" role="alert" tabindex="-1">
     <strong>Possible duplicate host record(s):</strong>
     <ul>{{range .Duplicates}}<li><a href="{{.URL}}">{{.Name}}</a> — {{.Reason}}</li>{{end}}</ul>
   </div>
@@ -169,7 +130,7 @@
   {{if .Disks}}
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Device</th><th>Model</th><th>Mount</th><th>Size</th><th>Used</th></tr></thead>
+    <thead><tr><th scope="col">Device</th><th scope="col">Model</th><th scope="col">Mount</th><th scope="col">Size</th><th scope="col">Used</th></tr></thead>
     <tbody>
       {{range .Disks}}
       <tr>
@@ -187,7 +148,7 @@
   {{if .Interfaces}}
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Interface</th><th>MAC</th><th>Addresses</th></tr></thead>
+    <thead><tr><th scope="col">Interface</th><th scope="col">MAC</th><th scope="col">Addresses</th></tr></thead>
     <tbody>
       {{range .Interfaces}}
       <tr>
@@ -211,21 +172,87 @@
 </section>
 {{end}}
 
-{{with .CustomFields}}
+</div>
+<div id="connections" data-detail-panel>
+{{with .IPAM}}
 <section class="panel">
-  <h2>Custom fields</h2>
-  <dl class="def-grid">
-    {{range .}}<dt>{{.Label}}</dt><dd>{{.Value}}</dd>{{end}}
-  </dl>
+  <h2>IP allocations</h2>
+  {{if .Overlaps}}
+  <p class="ipam-stats"><span class="badge badge-warn">overlap</span> This network shares its CIDR block with:</p>
+  <ul class="related">{{range .Overlaps}}<li><a href="{{.URL}}">{{.Name}}</a> <code>{{.CIDR}}</code></li>{{end}}</ul>
+  {{end}}
+  <p class="ipam-stats">
+    {{.UsedCount}} used{{if not .Unbounded}} / {{.TotalUsable}} usable ({{.FreeCount}} free){{end}}.
+    {{if .NextFree}}Next free: <code>{{.NextFree}}</code>.{{end}}
+  </p>
+  {{if .Reserved}}
+  <p class="ipam-stats">{{.ReservedCount}} reserved.</p>
+  <ul class="related">{{range .Reserved}}<li>{{.Name}}: <code>{{.Range}}</code></li>{{end}}</ul>
+  {{end}}
+  {{if .Rows}}
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th scope="col">IP</th><th scope="col">Host</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td><code>{{.IP}}</code></td>
+        <td><a href="/hosts/{{.HostID}}">{{.HostName}}</a></td>
+        <td>
+          {{if .IsGateway}}<span class="badge">gateway</span>{{end}}
+          {{if .Conflict}}<span class="badge badge-warn">conflict</span>{{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{else}}<p class="muted"><em>No IPs allocated in this subnet.</em></p>{{end}}
 </section>
 {{end}}
 
+{{with .Children}}
+<section class="panel">
+  <h2>{{.Title}}</h2>
+  {{if .Items}}
+  {{if eq .Title "Ports"}}
+  <div class="port-tiles">{{range .Items}}<a class="port-tile{{if .Connected}} connected{{end}}" href="{{.Path}}"><span class="port-socket" aria-hidden="true"></span><strong>{{.Label}}</strong><small>{{if .Connected}}Connected{{else}}Available{{end}}</small></a>{{end}}</div>
+  {{else}}<ul class="related">{{range .Items}}<li><a class="related-link" href="{{.Path}}"><span>{{.Label}}</span>{{icon "chevron"}}</a></li>{{end}}</ul>{{end}}
+  {{else}}<p class="muted"><em>None yet.</em></p>{{end}}
+</section>
+{{end}}
+
+{{with .Elevation}}
+<section class="panel">
+  <h2>Rack elevation</h2>
+  <div class="rack-elev" style="grid-template-rows: repeat({{.UHeight}}, 1.4rem);">
+    {{range .Units}}<div class="rack-elev-u" style="grid-row: {{.Row}};">{{.U}}</div>{{end}}
+    {{range .Occupants}}
+    <div class="rack-elev-occ{{if .OutOfBounds}} oob{{end}}{{if .Overlap}} overlap{{end}}" style="grid-row: {{.GridRowStart}} / span {{.Span}};">
+      <a href="{{.Path}}">{{.Label}}</a>&nbsp;<span class="rack-elev-meta">U{{.Position}}·{{.UHeight}}U{{if .OutOfBounds}} ⚠{{end}}{{if .Overlap}} ⚠{{end}}</span>
+    </div>
+    {{end}}
+  </div>
+</section>
+{{end}}
+
+<section class="panel">
+  <div class="panel-head"><h2>Relationships</h2>{{if canWrite}}<a class="text-link" href="/relationships">Manage relationships {{icon "arrow"}}</a>{{end}}</div>
+  {{if .Related}}
+  {{with .GraphSVG}}<div class="depgraph-wrap">{{.}}</div>{{end}}
+  <ul class="related">{{range .Related}}<li>{{if .URL}}<a class="related-link" href="{{.URL}}"><span>{{.Text}}</span>{{icon "chevron"}}</a>{{else}}{{.Text}}{{end}}</li>{{end}}</ul>
+  {{else}}<p class="muted"><em>No relationships.</em></p>{{end}}
+</section>
+
+</div>
+<div id="activity" data-detail-panel>
 <section class="panel">
   <h2>Attachments</h2>
   {{if canWrite}}
   <form class="journal-add" method="post" action="{{.ListURL}}/{{.EntityID}}/attachments" enctype="multipart/form-data">
     {{ csrfField }}
-    <input type="file" name="file" required>
+    <input type="hidden" name="return_section" value="activity">
+    <input type="file" name="file" aria-label="Attachment file" required>
     <button class="btn btn-primary" type="submit">Upload</button>
   </form>
   {{end}}
@@ -239,7 +266,8 @@
       <form class="form-inline" method="post" action="/attachments/{{.ID}}/delete"
             onsubmit="return confirm('Delete this attachment?');">
         {{ csrfField }}
-        <button class="tag-x" type="submit" title="delete">&times;</button>
+        <input type="hidden" name="return_section" value="activity">
+        <button class="tag-x" type="submit" aria-label="Delete attachment {{.Filename}}">&times;</button>
       </form>
       {{end}}
     </li>
@@ -249,22 +277,15 @@
 </section>
 
 <section class="panel">
-  <h2>Relationships</h2>
-  {{if .Related}}
-  {{with .GraphSVG}}<div class="depgraph-wrap">{{.}}</div>{{end}}
-  <ul class="related">{{range .Related}}<li>{{.Text}}</li>{{end}}</ul>
-  {{else}}<p class="muted"><em>No relationships.</em></p>{{end}}
-</section>
-
-<section class="panel">
   <h2>Journal</h2>
   {{if canWrite}}
   <form class="journal-add" method="post" action="{{.ListURL}}/{{.EntityID}}/journal">
     {{ csrfField }}
+    <input type="hidden" name="return_section" value="activity">
     <select name="kind" aria-label="kind">
       {{range .JournalKinds}}<option value="{{.}}">{{.}}</option>{{end}}
     </select>
-    <input name="body" placeholder="add a journal entry…" required>
+    <input name="body" placeholder="Add a journal entry…" aria-label="Journal entry" required>
     <button class="btn btn-primary" type="submit">Add</button>
   </form>
   {{end}}
@@ -274,11 +295,12 @@
     <li class="journal-entry">
       <span class="jk jk-{{.Kind}}" title="{{.Kind}}"></span>
       <div class="journal-body">{{.BodyHTML}}</div>
-      <time>{{.CreatedAt}}</time>
+      <time datetime="{{.CreatedAt}}" title="{{.CreatedAt}}">{{displayTime .CreatedAt}}</time>
       {{if canWrite}}
       <form class="form-inline" method="post" action="/journal/{{.ID}}/delete">
         {{ csrfField }}
-        <button class="tag-x" type="submit" title="delete">&times;</button>
+        <input type="hidden" name="return_section" value="activity">
+        <button class="tag-x" type="submit" aria-label="Delete journal entry">&times;</button>
       </form>
       {{end}}
     </li>
@@ -296,7 +318,7 @@
       {{range .Changelog}}
       <li>
         <span class="cl-action cl-{{.Action}}">{{.Action}}</span>
-        <time>{{.CreatedAt}}</time>{{if .Actor}} <span class="cl-actor">by {{.Actor}}</span>{{end}}
+        <time datetime="{{.CreatedAt}}" title="{{.CreatedAt}}">{{displayTime .CreatedAt}}</time>{{if .Actor}} <span class="cl-actor">by {{.Actor}}</span>{{end}}
         {{if .Changes}}<ul class="cl-fields">{{range .Changes}}<li><b>{{.Field}}</b>: {{.Old}} → {{.New}}</li>{{end}}</ul>{{end}}
       </li>
       {{end}}
@@ -305,8 +327,5 @@
   {{else}}<p class="muted"><em>No changes recorded.</em></p>{{end}}
 </section>
 
-<section class="panel">
-  <h2>Notes</h2>
-  <div class="notes">{{if .NotesHTML}}{{.NotesHTML}}{{else}}<em>No notes.</em>{{end}}</div>
-</section>
+</div>
 {{end}}

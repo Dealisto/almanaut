@@ -40,7 +40,7 @@ func buildNeighborhoodSVG(center string, neighbors []graphNeighbor) template.HTM
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, `<svg viewBox="0 0 %d %d" class="depgraph" role="img" xmlns="http://www.w3.org/2000/svg">`, w, h)
+	fmt.Fprintf(&b, `<svg viewBox="0 0 %d %d" class="depgraph" role="img" aria-label="Relationship diagram; the same connections are listed below" xmlns="http://www.w3.org/2000/svg">`, w, h)
 
 	// Edges first, so nodes and labels draw on top of the lines.
 	for i, nb := range neighbors {
@@ -51,7 +51,7 @@ func buildNeighborhoodSVG(center string, neighbors []graphNeighbor) template.HTM
 		if !nb.Outgoing {
 			arrow = "←"
 		}
-		fmt.Fprintf(&b, `<text x="%.1f" y="%.1f" text-anchor="middle" font-size="10" fill="currentColor" fill-opacity="0.7">%s %s</text>`,
+		fmt.Fprintf(&b, `<text x="%.1f" y="%.1f" text-anchor="middle" font-size="10" fill="currentColor">%s %s</text>`,
 			mx, my, html.EscapeString(nb.Kind), arrow)
 	}
 

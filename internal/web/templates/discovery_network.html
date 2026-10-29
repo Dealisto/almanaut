@@ -18,7 +18,7 @@
     <div class="actions"><button class="btn btn-primary" type="submit">Scan</button></div>
   </form>
 </section>
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
 {{if .Scanned}}
 {{if .Rows}}
 <section class="panel">
@@ -31,7 +31,7 @@
     </label>
     <div class="table-wrap">
     <table>
-      <thead><tr><th></th><th>Name</th><th>IP</th><th>Open ports</th><th>Status</th></tr></thead>
+      <thead><tr><th scope="col"><span class="sr-only">Actions</span></th><th scope="col">Name</th><th scope="col">IP</th><th scope="col">Open ports</th><th scope="col">Status</th></tr></thead>
       <tbody>
       {{range .Rows}}
         <tr>

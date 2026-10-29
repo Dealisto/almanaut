@@ -1,69 +1,23 @@
 {{define "content"}}
-<div class="page-header">
-  <div class="ph-titles">
-    <span class="ph-eyebrow">Configuration</span>
-    <h1>Custom fields</h1>
-  </div>
-</div>
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
-
-{{if canWrite}}
-<section class="panel">
-  <h2>Add a field</h2>
-  <form class="stack" method="post" action="/custom-fields">
-    {{ csrfField }}
-    <label>Label<input name="label" required></label>
-    <label>Name (slug, optional)<input name="name" placeholder="auto from label"></label>
-    <label>Entity type
-      <select name="entity_type">
-        {{range .EntityTypes}}<option value="{{.}}">{{.}}</option>{{end}}
-      </select>
-    </label>
-    <label>Kind
-      <select name="kind">
-        {{range .Kinds}}<option value="{{.}}">{{.}}</option>{{end}}
-      </select>
-    </label>
-    <div class="actions"><button class="btn btn-primary" type="submit">Add field</button></div>
-  </form>
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Settings &amp; data</span><h1>Custom fields</h1><p class="page-description">Capture the details that matter to your homelab, from asset tags to purchase dates.</p></div>{{if canWrite}}<a class="btn btn-primary" href="#add-field">{{icon "plus"}}New field</a>{{end}}</div>
+{{template "settingsnav" .}}
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
+<div class="settings-grid">
+<section class="panel" aria-labelledby="fields-heading"><div class="panel-head"><h2 id="fields-heading">Defined fields</h2><span class="badge">{{len .Defs}} fields</span></div>
+{{if .Defs}}<ul class="record-list">{{range .Defs}}<li><div class="record-heading"><span class="entity-icon">{{icon "settings"}}</span><div class="record-identity"><h3>{{.Label}}</h3><p>{{.EntityType}} · {{.Kind}} · <code>{{.Name}}</code></p></div></div>
+{{if canWrite}}<details class="disclosure"><summary>Edit field<span class="sr-only"> {{.Label}}</span></summary>
+  <form class="inline-editor" method="post" action="/custom-fields/{{.ID}}">{{ csrfField }}<label>Display label<input name="label" value="{{.Label}}" aria-label="Display label for {{.Name}}" required></label><button class="btn" type="submit">Save label</button></form>
+  <form class="destructive-action" method="post" action="/custom-fields/{{.ID}}/delete" onsubmit="return confirm('Delete this field and all its values?');">{{ csrfField }}<p class="muted">Deleting this field also removes its values from every record.</p><button class="btn btn-danger" type="submit">Delete field<span class="sr-only"> {{.Label}}</span></button></form>
+</details>{{end}}</li>{{end}}</ul>
+{{else}}<div class="empty">{{icon "settings"}}<strong>No custom fields defined yet.</strong><p>Add a field to make it available on records of the selected type.</p>{{if canWrite}}<a class="btn" href="#add-field">Add your first field</a>{{end}}</div>{{end}}
 </section>
-{{end}}
-
-<section class="panel">
-  <h2>Defined fields</h2>
-  {{if .Defs}}
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>Entity</th><th>Label</th><th>Name</th><th>Kind</th><th></th></tr></thead>
-    <tbody>
-      {{range .Defs}}
-      <tr>
-        <td>{{.EntityType}}</td>
-        <td>
-          {{if canWrite}}
-          <form class="form-inline" method="post" action="/custom-fields/{{.ID}}">
-            {{ csrfField }}
-            <input name="label" value="{{.Label}}" required>
-            <button class="btn" type="submit">Save</button>
-          </form>
-          {{else}}{{.Label}}{{end}}
-        </td>
-        <td><code>{{.Name}}</code></td>
-        <td>{{.Kind}}</td>
-        <td>
-          {{if canWrite}}
-          <form class="form-inline" method="post" action="/custom-fields/{{.ID}}/delete"
-                onsubmit="return confirm('Delete this field and all its values?');">
-            {{ csrfField }}
-            <button class="btn btn-danger" type="submit">Delete</button>
-          </form>
-          {{end}}
-        </td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
-  </div>
-  {{else}}<p class="muted"><em>No custom fields defined yet.</em></p>{{end}}
-</section>
+<aside class="settings-aside">
+{{if canWrite}}<section class="panel" id="add-field"><h2>Add a field</h2><form class="stack" method="post" action="/custom-fields">{{ csrfField }}
+<label>Label<input name="label" placeholder="e.g. Asset tag" required></label>
+<div class="form-grid"><label>Entity type<select name="entity_type">{{range .EntityTypes}}<option value="{{.}}">{{.}}</option>{{end}}</select></label><label>Value type<select name="kind">{{range .Kinds}}<option value="{{.}}">{{.}}</option>{{end}}</select></label></div>
+<details class="disclosure"><summary>Advanced: field name</summary><label>Name (optional)<input name="name" placeholder="Generated from the label" aria-describedby="field-name-help"></label><p id="field-name-help" class="form-help">A stable name used in exports and the API. Leave blank to generate it from the label.</p></details>
+<div class="actions"><button class="btn btn-primary" type="submit">Add field</button></div>
+</form></section>{{end}}
+<section class="help-card"><h2>Make every record easier to find</h2><p>Values appear on record forms and details. You can search and filter by them, and they are included in inventory exports.</p><p class="muted">Renaming a label keeps the field's stored name and values.</p></section>
+</aside></div>
 {{end}}

@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-//go:embed templates/*.html static/app.css
+//go:embed templates/*.html static/app.css static/app.js
 var templatesFS embed.FS
 
 // pages maps each content page to a template set that combines the shared
@@ -19,6 +19,10 @@ var pages = func() map[string]*template.Template {
 		m[page] = template.Must(
 			template.New("layout.html").
 				Funcs(template.FuncMap{
+					"icon":        uiIcon,
+					"initials":    initials,
+					"displayTime": displayTime,
+					"currentPath": func() string { return "/" },
 					"csrfField":   func() template.HTML { return "" },
 					"isActive":    func(string) bool { return false },
 					"theme":       func() string { return "system" },
@@ -28,7 +32,7 @@ var pages = func() map[string]*template.Template {
 					"kumaEnabled": func() bool { return false },
 					"savedViews":  func() []savedViewGroup { return nil },
 				}).
-				ParseFS(templatesFS, "templates/layout.html", "templates/custom_fields_form.html", "templates/webhook_form_fields.html", "templates/list_controls.html", "templates/bulk_actions.html", "templates/"+page),
+				ParseFS(templatesFS, "templates/layout.html", "templates/settings_nav.html", "templates/custom_fields_form.html", "templates/webhook_form_fields.html", "templates/list_controls.html", "templates/bulk_actions.html", "templates/"+page),
 		)
 	}
 	// login.html is standalone (no app shell): it defines its own "layout".
@@ -74,6 +78,7 @@ func render(w http.ResponseWriter, r *http.Request, page string, data any) {
 	}
 	token := csrfTokenFrom(r.Context())
 	clone.Funcs(template.FuncMap{
+		"currentPath": func() string { return r.URL.RequestURI() },
 		"csrfField": func() template.HTML {
 			return template.HTML(`<input type="hidden" name="` + csrfFieldName +
 				`" value="` + template.HTMLEscapeString(token) + `">`)

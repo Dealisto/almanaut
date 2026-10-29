@@ -14,6 +14,7 @@ type listControls struct {
 	BasePath     string // e.g. "/hosts"
 	Type         string // singular type key, e.g. "host" (for saving a view)
 	CurrentQuery string // the request's raw query string (for saving a view)
+	Query        string // case-insensitive search across this resource's fields
 
 	Columns     []string // filterable/sortable column labels ("Name" + fields + custom fields)
 	Tags        []string // tag names present on this entity type
@@ -28,7 +29,7 @@ type listControls struct {
 // Active reports whether any filter or sort is applied, so the template can show
 // a "clear" affordance only when it does something.
 func (c listControls) Active() bool {
-	return c.Sort != "" || c.Tag != "" || (c.FilterField != "" && c.FilterValue != "")
+	return c.Query != "" || c.Sort != "" || c.Tag != "" || (c.FilterField != "" && c.FilterValue != "")
 }
 
 // filterSort applies the request's query-param filters and sort to items and
@@ -43,6 +44,7 @@ func (rs resource[T]) filterSort(items []T, req *http.Request, d handlerDeps) ([
 		BasePath:     rs.basePath(),
 		Type:         rs.sing,
 		CurrentQuery: req.URL.RawQuery,
+		Query:        strings.TrimSpace(q.Get("q")),
 		SetFields:    rs.stringFields(),
 		Sort:         strings.TrimSpace(q.Get("sort")),
 		Dir:          strings.TrimSpace(q.Get("dir")),
@@ -124,6 +126,27 @@ func (rs resource[T]) filterSort(items []T, req *http.Request, d handlerDeps) ([
 	out := make([]T, 0, len(items))
 	for _, it := range items {
 		id := rs.id(it)
+		if ctrl.Query != "" {
+			needle := strings.ToLower(ctrl.Query)
+			matched := false
+			for _, value := range proj[id] {
+				if strings.Contains(strings.ToLower(value), needle) {
+					matched = true
+					break
+				}
+			}
+			if !matched && rs.search != nil {
+				for _, value := range rs.search(it) {
+					if strings.Contains(strings.ToLower(value), needle) {
+						matched = true
+						break
+					}
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
 		if ctrl.Tag != "" && !tagged[ctrl.Tag][id] {
 			continue
 		}

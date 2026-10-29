@@ -46,6 +46,7 @@ func totpQRDataURI(uri string) (string, error) {
 
 type account2FAData struct {
 	Title        string
+	Error        string
 	Enabled      bool
 	Enrolling    bool
 	Secret       string
@@ -141,9 +142,11 @@ func confirm2FA(totp *store.TOTPRepo, db *sql.DB) http.HandlerFunc {
 				serverError(w, r, qerr)
 				return
 			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusBadRequest)
 			render(w, r, "account_2fa.html", account2FAData{
 				Title: "Two-factor authentication", Enrolling: true,
+				Error:  "Invalid code. Enter the current 6-digit code from your authenticator and try again.",
 				Secret: t.Secret, URI: uri, QR: qrImg,
 			})
 			return
@@ -188,7 +191,17 @@ func disable2FA(totp *store.TOTPRepo, db *sql.DB) http.HandlerFunc {
 			return
 		}
 		if !verifySecondFactor(totp, u.ID, t.Secret, r.FormValue("code"), r.FormValue("recovery")) {
-			http.Error(w, "invalid code", http.StatusBadRequest)
+			left, err := totp.CountUnusedRecovery(u.ID)
+			if err != nil {
+				serverError(w, r, err)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusBadRequest)
+			render(w, r, "account_2fa.html", account2FAData{
+				Title: "Two-factor authentication", Enabled: t.Enabled, RecoveryLeft: left,
+				Error: "Invalid code. Try a current authenticator code or an unused recovery code.",
+			})
 			return
 		}
 		if err := store.WithTx(db, func(tx *sql.Tx) error { return totp.WithTx(tx).Disable(u.ID) }); err != nil {

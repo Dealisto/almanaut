@@ -2,10 +2,11 @@
 
 # Export & import
 
-The whole inventory round-trips through a single YAML file. **Data → Export**
-(or `GET /export`) downloads `almanaut-export.yaml`; **Data → Import** uploads
-one back. Use it to move an inventory between instances, or as a portable copy
-of your data.
+The whole inventory round-trips through a single YAML file. On **Import &
+export** (`/data`), **Download YAML** (or `GET /export`) downloads
+`almanaut-export.yaml`. Open **Restore from a YAML file** in the **Replace the
+inventory** section to upload one back. Use it to move an inventory between
+instances, or as a portable copy of your data.
 
 > ⚠️ Import **replaces the entire inventory** — every existing record is
 > deleted and re-created from the file. It is not a merge. The import form
@@ -55,8 +56,10 @@ file written by a newer almanaut, with a higher `version`, is refused.
 
 ## Additive CSV import
 
-The **Data** page also imports a CSV for a single entity type without touching
-any other data — the complement to the whole-inventory YAML import.
+The **Add or update records** section imports a CSV for a single entity type
+without touching other records. Select the record type, choose the file, and
+confirm the import. If validation fails, the error is shown next to the form;
+select the corrected file again before retrying.
 
 - The header row uses the entity's field names in `snake_case`, matching the
   YAML export (e.g. for hosts: `name,type,os,cpu,ram,disk,status,ips,notes`).

@@ -5,7 +5,7 @@
     <h1>Relationships</h1>
   </div>
 </div>
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
 {{if .Options}}
 {{if canWrite}}
 <section class="panel">
@@ -31,7 +31,7 @@
 {{if .Relationships}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th>From</th><th>Kind</th><th>To</th><th></th></tr></thead>
+  <thead><tr><th scope="col">From</th><th scope="col">Kind</th><th scope="col">To</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
   <tbody>
   {{range .Relationships}}
     <tr>

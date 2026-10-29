@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An interactive Almanaut interface concept using fictional homelab data.">
+  <meta name="color-scheme" content="light dark">
+  <title>Overview · Almanaut concept</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+      <a class="brand" href="#overview" aria-label="Almanaut home"><span class="brand-mark" aria-hidden="true">a<span>·</span></span>almanaut<span class="brand-period">.</span></a>
+      <div class="workspace"><span class="workspace-icon" data-icon="layers"></span><div><strong>My homelab</strong><span>Personal workspace</span></div><span class="workspace-dot" title="Sample workspace"></span></div>
+      <nav aria-label="Workspace">
+        <span class="nav-label">WORKSPACE</span>
+        <a href="#overview" data-nav="overview"><span data-icon="grid"></span>Overview</a>
+        <a href="#hosts" data-nav="hosts"><span data-icon="server"></span>Hosts<span class="nav-count" id="host-count">8</span></a>
+        <a href="#services" data-nav="services"><span data-icon="layers"></span>Services<span class="nav-count">6</span></a>
+        <a href="#network" data-nav="network"><span data-icon="network"></span>Network</a>
+        <a href="#health" data-nav="health"><span data-icon="pulse"></span>Needs attention<span class="nav-count alert-count">3</span></a>
+        <span class="nav-label second-label">MANAGE</span>
+        <a href="#discovery" data-nav="discovery"><span data-icon="radar"></span>Discover</a>
+        <a href="#activity" data-nav="activity"><span data-icon="history"></span>Activity</a>
+        <span class="nav-label second-label">SAVED VIEWS</span>
+        <a href="#hosts?tag=production" class="saved-link"><span class="saved-dot"></span>Production hosts</a>
+        <a href="#hosts?status=offline" class="saved-link"><span class="saved-dot orange"></span>Offline hosts</a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="concept-note"><span class="concept-dot"></span>INTERACTIVE CONCEPT<button class="icon-button" data-action="about" aria-label="About this prototype"><span data-icon="info"></span></button></div>
+        <div class="profile"><span class="avatar">D</span><div><strong>Dealisto</strong><span>Local demo</span></div><button class="icon-button" id="theme-toggle" data-action="theme" aria-label="Switch to dark theme"><span data-icon="moon"></span></button></div>
+      </div>
+    </aside>
+    <button class="sidebar-backdrop" data-action="close-menu" aria-label="Close navigation" tabindex="-1"></button>
+    <div class="content-shell">
+      <header class="topbar">
+        <button class="icon-button mobile-menu" data-action="menu" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar"><span data-icon="menu"></span></button>
+        <div class="breadcrumb"><span data-icon="home"></span><span class="breadcrumb-separator">/</span><span id="breadcrumb">Overview</span></div>
+        <button class="search-trigger" data-action="search"><span data-icon="search"></span><span>Find anything in your homelab…</span><kbd>Ctrl K</kbd></button>
+        <span class="sample-badge">Sample data</span>
+      </header>
+      <main id="main" tabindex="-1"></main>
+      <footer class="page-footer"><span>Everything in its right place.</span><span>Almanaut · Interface concept 01</span></footer>
+    </div>
+  </div>
+  <dialog id="modal" aria-labelledby="modal-title"><div id="modal-content"></div></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <noscript>This interactive concept needs JavaScript. The existing Almanaut application remains server-rendered.</noscript>
+</body>
+</html>

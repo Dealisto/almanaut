@@ -1,6 +1,6 @@
 module github.com/Dealisto/almanaut
 
-go 1.26.8
+go 1.26.10
 
 require (
 	github.com/coder/websocket v1.8.15

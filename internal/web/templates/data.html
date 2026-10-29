@@ -1,55 +1,49 @@
 {{define "content"}}
 <div class="page-header">
-  <div class="ph-titles">
-    <span class="ph-eyebrow">System</span>
-    <h1>Data</h1>
-  </div>
+  <div class="ph-titles"><span class="ph-eyebrow">Settings &amp; data</span><h1>Import &amp; export</h1><p class="page-description">Move your inventory, add records from a spreadsheet, or restore a previous export.</p></div>
+  <div class="ph-actions"><a class="btn" href="/export">{{icon "arrow"}}Export YAML</a></div>
 </div>
-{{if .Imported}}<p class="muted">Import complete — all data was replaced.</p>{{end}}
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
-
-<section class="panel">
-  <h2>Export</h2>
-  <p class="muted">Download the entire inventory as a single YAML file.</p>
-  <div class="toolbar"><a class="btn btn-primary" href="/export">Export YAML</a></div>
-</section>
-
-<section class="panel">
-  <h2>Import</h2>
-  <p class="muted">Replace <strong>all</strong> current data with the contents of a YAML export.</p>
-  {{if canWrite}}
-  <form class="stack" method="post" action="/import" enctype="multipart/form-data">
-  {{ csrfField }}
-    <label>YAML file<input type="file" name="file" accept=".yaml,.yml" required></label>
-    <label><input type="checkbox" name="confirm" required> This permanently replaces all current data.</label>
-    <div class="actions"><button class="btn btn-danger" type="submit">Import &amp; replace</button></div>
-  </form>
-  {{end}}
-</section>
-
-{{if .CSVImported}}<p class="muted">CSV import complete — {{.CSVCreated}} created, {{.CSVUpdated}} updated.</p>{{end}}
-{{if .CSVErrors}}
-<div class="error">
-  <p>Import aborted — no changes were made. Fix these rows and try again:</p>
-  <ul>{{range .CSVErrors}}<li>{{.}}</li>{{end}}</ul>
+{{template "settingsnav" .}}
+{{if .Imported}}<div class="notice" role="status">Import complete — the inventory was replaced.</div>{{end}}
+{{if .CSVImported}}<div class="notice" role="status">CSV import complete — {{.CSVCreated}} created, {{.CSVUpdated}} updated.</div>{{end}}
+<div class="settings-grid">
+  <section class="panel" aria-labelledby="csv-heading">
+    <div class="panel-heading"><span class="entity-icon">{{icon "plus"}}</span><div><h2 id="csv-heading">Add or update records</h2><p>Import a CSV file for one entity type.</p></div></div>
+    {{if .CSVErrors}}<div class="error" role="alert" tabindex="-1"><strong>Import aborted — no changes were made.</strong><p>Fix these rows, select your file again, and retry:</p><ul>{{range .CSVErrors}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
+    {{if canWrite}}
+    <form class="stack" method="post" action="/import-csv" enctype="multipart/form-data">
+      {{ csrfField }}
+      <label>Record type<select name="type" required>{{range .Types}}<option value="{{.Value}}"{{if eq .Value $.CSVType}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+      <label>CSV file<input type="file" name="file" accept=".csv,text/csv" aria-describedby="csv-help" required></label>
+      <p class="form-help" id="csv-help">Use export field names in the header, such as <code>name</code> and <code>status</code>. Include an <code>id</code> to update a record; leave it blank to create one. Other records are kept.</p>
+      <label class="check"><input type="checkbox" name="confirm" required><span>Add or update records from this file.</span></label>
+      <div class="actions"><button class="btn btn-primary" type="submit">Import CSV</button></div>
+    </form>
+    {{else}}<p class="muted">An editor or admin can import records. You can export the inventory below.</p>{{end}}
+  </section>
+  <aside class="settings-aside">
+    <section class="panel" aria-labelledby="export-heading">
+      <div class="panel-heading"><span class="entity-icon">{{icon "box"}}</span><div><h2 id="export-heading">Take your inventory with you</h2><p>A portable YAML snapshot.</p></div></div>
+      <p>Export your inventory, relationships, tags, journal entries, and custom fields in one file.</p>
+      <a class="btn btn-primary" href="/export">Download YAML</a>
+      <p class="form-help export-note">Attachments and change history are not included. Back up the database to preserve them.</p>
+    </section>
+    <section class="help-card"><h2>Choose the right import</h2><dl class="help-definitions"><dt>CSV</dt><dd>Add or update one type of record. Useful for a spreadsheet of hosts or services.</dd><dt>YAML</dt><dd>Replace the inventory with a previous export. Records missing from the file are removed.</dd></dl></section>
+  </aside>
 </div>
+{{if canWrite}}
+<section class="panel danger-panel" aria-labelledby="restore-heading">
+  <div class="panel-heading"><span class="entity-icon">{{icon "history"}}</span><div><h2 id="restore-heading">Replace the inventory</h2><p>Restore a YAML export. This replaces existing inventory records.</p></div></div>
+  <details class="disclosure"{{if .Error}} open{{end}}><summary>Restore from a YAML file</summary>
+    {{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}<p>Select your file again after correcting it.</p></div>{{end}}
+    <p id="restore-help">Download an export first if you may need the current records. Records absent from the imported file, and their attachments, are removed.</p>
+    <form class="stack" method="post" action="/import" enctype="multipart/form-data">
+      {{ csrfField }}
+      <label>YAML file<input type="file" name="file" accept=".yaml,.yml" required aria-describedby="restore-help"></label>
+      <label class="check"><input type="checkbox" name="confirm" required><span>I understand this permanently replaces the current inventory.</span></label>
+      <div class="actions"><button class="btn btn-danger" type="submit">Import &amp; replace</button></div>
+    </form>
+  </details>
+</section>
 {{end}}
-
-<section class="panel">
-  <h2>Import CSV (additive)</h2>
-  <p class="muted">Add or update rows of a <strong>single type</strong> without touching other data. The header row must use the export field names (snake_case). Include an <code>id</code> column to update existing rows; leave it blank or omit it to create.</p>
-  {{if canWrite}}
-  <form class="stack" method="post" action="/import-csv" enctype="multipart/form-data">
-  {{ csrfField }}
-    <label>Type
-      <select name="type" required>
-        {{range .Types}}<option value="{{.Value}}"{{if eq .Value $.CSVType}} selected{{end}}>{{.Label}}</option>{{end}}
-      </select>
-    </label>
-    <label>CSV file<input type="file" name="file" accept=".csv,text/csv" required></label>
-    <label><input type="checkbox" name="confirm" required> Add/update rows from this file.</label>
-    <div class="actions"><button class="btn btn-primary" type="submit">Import CSV</button></div>
-  </form>
-  {{end}}
-</section>
 {{end}}

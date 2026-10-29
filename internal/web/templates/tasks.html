@@ -1,53 +1,10 @@
-{{/* internal/web/templates/tasks.html */}}
 {{define "content"}}
-<div class="page-header">
-  <div class="ph-titles">
-    <p class="ph-eyebrow">Administration</p>
-    <h1>Scheduled tasks</h1>
-  </div>
-</div>
-
-<p><a href="/discovery/runs">View discovery run history →</a></p>
-
-{{if .Message}}<div class="notice">
-  {{if eq .Message "run-requested"}}Run requested — it runs in the background; reload to see the result.
-  {{else if eq .Message "unknown-job"}}That job is no longer registered.
-  {{else}}{{.Message}}{{end}}
-</div>{{end}}
-
-<div class="panel">
-  {{if .Jobs}}
-  <div class="table-wrap">
-  <table>
-    <thead>
-      <tr><th>Task</th><th>Interval</th><th>Last run</th><th>Next run</th><th>Status</th><th></th></tr>
-    </thead>
-    <tbody>
-      {{range .Jobs}}
-      <tr>
-        <td>{{.Title}}</td>
-        <td class="mono">{{.Interval}}</td>
-        <td>{{if .LastRun.IsZero}}<span class="muted">never</span>{{else}}{{.LastRun.Format "2006-01-02 15:04:05"}}{{end}}</td>
-        <td>{{if .NextRun.IsZero}}<span class="muted">—</span>{{else}}{{.NextRun.Format "2006-01-02 15:04:05"}}{{end}}</td>
-        <td>
-          {{if .Running}}running…
-          {{else if .LastErr}}<span class="badge badge-warn">failed</span> {{.LastErr}}
-          {{else if .LastRun.IsZero}}<span class="muted">—</span>
-          {{else}}ok{{end}}
-        </td>
-        <td>
-          <form method="post" action="/tasks/{{.Name}}/run" class="inline">
-            {{ csrfField }}
-            <button class="btn" type="submit">Run now</button>
-          </form>
-        </td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
-  </div>
-  {{else}}
-  <p class="muted">No scheduled tasks are registered. Background jobs appear here once configured (e.g. expiry notifications need a notification channel).</p>
-  {{end}}
-</div>
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Administration</span><h1>Scheduled tasks</h1><p class="page-description">See what runs in the background and check the outcome of each task.</p></div><a class="btn" href="/discovery/runs">Discovery run history {{icon "arrow"}}</a></div>
+{{template "settingsnav" .}}
+{{if .Message}}<div class="notice" role="status">{{if eq .Message "run-requested"}}Run requested — it runs in the background; reload to see the result.{{else if eq .Message "unknown-job"}}That job is no longer registered.{{else}}{{.Message}}{{end}}</div>{{end}}
+<section class="panel" aria-labelledby="tasks-heading"><div class="panel-head"><h2 id="tasks-heading">Background tasks</h2><a class="btn" href="/tasks">Refresh status</a></div>
+{{if .Jobs}}<div class="table-wrap"><table><caption class="sr-only">Scheduled tasks and their most recent results; all times in UTC</caption><thead><tr><th scope="col">Task</th><th scope="col">Interval</th><th scope="col">Last run (UTC)</th><th scope="col">Next run (UTC)</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead><tbody>
+{{range .Jobs}}<tr><th scope="row">{{.Title}}</th><td class="mono">{{.Interval}}</td><td>{{if .LastRun.IsZero}}<span class="muted">Not run yet</span>{{else}}{{.LastRun.UTC.Format "2006-01-02 15:04:05"}}{{end}}</td><td>{{if .NextRun.IsZero}}<span class="muted">Not scheduled</span>{{else}}{{.NextRun.UTC.Format "2006-01-02 15:04:05"}}{{end}}</td><td class="wrap-cell">{{if .Running}}<span class="badge badge-pending">Running</span>{{else if .LastErr}}<span class="badge badge-warn">Failed</span><p class="task-error">{{.LastErr}}</p>{{else if .LastRun.IsZero}}<span class="badge">Pending</span>{{else}}<span class="badge badge-ok">Completed</span>{{end}}</td><td><form method="post" action="/tasks/{{.Name}}/run">{{ csrfField }}<button class="btn" type="submit"{{if .Running}} disabled{{end}}>Run now<span class="sr-only">: {{.Title}}</span></button></form></td></tr>{{end}}
+</tbody></table></div>{{else}}<div class="empty">{{icon "history"}}<strong>No scheduled tasks are registered.</strong><p>Configured background jobs will appear here with their schedules and results.</p></div>{{end}}
+</section>
 {{end}}

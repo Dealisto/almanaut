@@ -58,7 +58,7 @@ func exportData(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-func importData(db *sql.DB) http.HandlerFunc {
+func importData(db *sql.DB, cat entityCatalog) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if err := req.ParseMultipartForm(10 << 20); err != nil {
 			http.Error(w, "could not parse upload", http.StatusBadRequest)
@@ -86,11 +86,11 @@ func importData(db *sql.DB) http.HandlerFunc {
 		}
 		var snap store.Snapshot
 		if err := yaml.Unmarshal(raw, &snap); err != nil {
-			render(w, req, "data.html", dataPageData{Title: "Data", Error: "invalid YAML: " + err.Error()})
+			render(w, req, "data.html", dataPageData{Title: "Data", Types: cat.importTypes(), Error: "invalid YAML: " + err.Error()})
 			return
 		}
 		if err := store.Import(db, snap); err != nil {
-			render(w, req, "data.html", dataPageData{Title: "Data", Error: err.Error()})
+			render(w, req, "data.html", dataPageData{Title: "Data", Types: cat.importTypes(), Error: err.Error()})
 			return
 		}
 		http.Redirect(w, req, "/data?imported=1", http.StatusSeeOther)

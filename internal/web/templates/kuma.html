@@ -12,8 +12,8 @@
 <div class="panel">
   <h2>Status</h2>
   <table>
-    <tr><th>Instance</th><td class="mono">{{.URL}}</td></tr>
-    <tr><th>Last sync</th><td>
+    <tr><th scope="row">Instance</th><td class="mono">{{.URL}}</td></tr>
+    <tr><th scope="row">Last sync</th><td>
       {{if .Last.Ran}}
         {{.Last.Time.Format "2006-01-02 15:04:05"}}
         {{if .Last.Summary.Err}}

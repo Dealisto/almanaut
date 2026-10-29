@@ -178,7 +178,7 @@ func New(cfg Config) http.Handler {
 			items := []childRef{}
 			for _, p := range list {
 				if p.NICID == n.ID {
-					items = append(items, childRef{Label: portChildLabel(p), Path: cat.path("port", p.ID)})
+					items = append(items, childRef{Label: portChildLabel(p), Path: cat.path("port", p.ID), Connected: p.PeerPortID != 0})
 				}
 			}
 			return &childrenSection{Title: "Ports", Items: items}, nil
@@ -691,6 +691,7 @@ func New(cfg Config) http.Handler {
 	r.Get("/version", versionInfo(cfg.Version))
 	// Static CSS is public so the unauthenticated login page can style itself.
 	r.Get("/static/app.css", staticCSS(cfg.Version))
+	r.Get("/static/app.js", staticAsset("static/app.js", "text/javascript; charset=utf-8", cfg.Version))
 
 	// Login routes: CSRF-protected but not session-gated (you cannot have a
 	// session yet). Only present when auth is enabled.
@@ -834,7 +835,7 @@ func New(cfg Config) http.Handler {
 			r.Get("/api/docs", apiDocsPage(resources, cfg.Version))
 			r.Get("/data", showData(cat))
 			r.Get("/export", exportData(db))
-			r.Post("/import", importData(db))
+			r.Post("/import", importData(db, cat))
 			r.Post("/import-csv", importCSV(cat, deps))
 			r.Get("/discovery", discoveryLanding(netOpts, pveOpts))
 			r.Get("/discovery/docker", scanDocker(docker, services, hosts))
@@ -1264,7 +1265,7 @@ func ownedPortsChildren(ports *store.PortRepo, ownerType string, ownerID int64, 
 		if p.OwnerType != ownerType || p.OwnerID != ownerID {
 			continue
 		}
-		items = append(items, childRef{Label: portChildLabel(p), Path: cat.path("port", p.ID)})
+		items = append(items, childRef{Label: portChildLabel(p), Path: cat.path("port", p.ID), Connected: p.PeerPortID != 0})
 	}
 	return &childrenSection{Title: "Ports", Items: items}, nil
 }

@@ -3,103 +3,113 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>{{.Title}} · Almanaut</title>
 <link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
 </head>
 <body>
-<input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
+<a class="skip-link" href="#main">Skip to content</a>
+<nav class="nav-control" aria-label="Mobile navigation"><input type="checkbox" id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation" aria-controls="sidebar"></nav>
 <div class="app-shell">
-  <aside class="sidebar">
-    <a class="brand" href="/">Almanaut</a>
-    <nav>
-      <a href="/" class="nav-top {{if isActive "/"}}active{{end}}">Dashboard</a>
-      <details class="nav-group" open>
-        <summary class="nav-label">Compute</summary>
-        <a href="/hosts" class="{{if isActive "/hosts"}}active{{end}}">Hosts</a>
-        <a href="/services" class="{{if isActive "/services"}}active{{end}}">Services</a>
-        <a href="/hardware" class="{{if isActive "/hardware"}}active{{end}}">Hardware</a>
-        <a href="/backups" class="{{if isActive "/backups"}}active{{end}}">Backups</a>
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <button class="btn nav-close js-only" type="button" aria-label="Close navigation">{{icon "close"}}</button>
+    <a class="brand" href="/" aria-label="Almanaut home"><span class="brand-mark" aria-hidden="true">a.</span>almanaut<span class="brand-dot">.</span></a>
+    <div class="workspace"><span class="workspace-icon">{{icon "layers"}}</span><div><strong>My homelab</strong><span>Inventory & documentation</span></div></div>
+    <nav aria-label="Workspace">
+      <span class="nav-label">Workspace</span>
+      <a href="/" class="nav-top {{if isActive "/"}}active{{end}}"{{if isActive "/"}} aria-current="page"{{end}}>{{icon "grid"}}Overview</a>
+      <a href="/hosts" class="{{if isActive "/hosts"}}active{{end}}"{{if isActive "/hosts"}} aria-current="page"{{end}}>{{icon "server"}}Hosts</a>
+      <a href="/services" class="{{if isActive "/services"}}active{{end}}"{{if isActive "/services"}} aria-current="page"{{end}}>{{icon "layers"}}Services</a>
+      <details class="nav-group"{{if or (isActive "/networks") (isActive "/vlans") (isActive "/reservations") (isActive "/nics") (isActive "/ports") (isActive "/domains") (isActive "/certificates")}} open{{end}}>
+        <summary>{{icon "network"}}Network{{icon "chevron"}}</summary>
+        <a href="/networks" class="{{if isActive "/networks"}}active{{end}}"{{if isActive "/networks"}} aria-current="page"{{end}}>Networks & IPs</a>
+        <a href="/vlans" class="{{if isActive "/vlans"}}active{{end}}"{{if isActive "/vlans"}} aria-current="page"{{end}}>VLANs</a>
+        <a href="/reservations" class="{{if isActive "/reservations"}}active{{end}}"{{if isActive "/reservations"}} aria-current="page"{{end}}>IP reservations</a>
+        <a href="/nics" class="{{if isActive "/nics"}}active{{end}}"{{if isActive "/nics"}} aria-current="page"{{end}}>Network cards</a>
+        <a href="/ports" class="{{if isActive "/ports"}}active{{end}}"{{if isActive "/ports"}} aria-current="page"{{end}}>Ports & cabling</a>
+        <a href="/domains" class="{{if isActive "/domains"}}active{{end}}"{{if isActive "/domains"}} aria-current="page"{{end}}>Domains</a>
+        <a href="/certificates" class="{{if isActive "/certificates"}}active{{end}}"{{if isActive "/certificates"}} aria-current="page"{{end}}>Certificates</a>
       </details>
-      <details class="nav-group" open>
-        <summary class="nav-label">Network</summary>
-        <a href="/networks" class="{{if isActive "/networks"}}active{{end}}">Networks</a>
-        <a href="/vlans" class="{{if isActive "/vlans"}}active{{end}}">VLANs</a>
-        <a href="/reservations" class="{{if isActive "/reservations"}}active{{end}}">Reservations</a>
-        <a href="/nics" class="{{if isActive "/nics"}}active{{end}}">NICs</a>
-        <a href="/ports" class="{{if isActive "/ports"}}active{{end}}">Ports</a>
-        <a href="/domains" class="{{if isActive "/domains"}}active{{end}}">Domains</a>
-        <a href="/certificates" class="{{if isActive "/certificates"}}active{{end}}">Certificates</a>
+      <details class="nav-group"{{if or (isActive "/hardware") (isActive "/backups") (isActive "/sites") (isActive "/locations") (isActive "/racks")}} open{{end}}>
+        <summary>{{icon "building"}}Infrastructure{{icon "chevron"}}</summary>
+        <a href="/hardware" class="{{if isActive "/hardware"}}active{{end}}"{{if isActive "/hardware"}} aria-current="page"{{end}}>Hardware</a>
+        <a href="/backups" class="{{if isActive "/backups"}}active{{end}}"{{if isActive "/backups"}} aria-current="page"{{end}}>Backups</a>
+        <a href="/sites" class="{{if isActive "/sites"}}active{{end}}"{{if isActive "/sites"}} aria-current="page"{{end}}>Sites</a>
+        <a href="/locations" class="{{if isActive "/locations"}}active{{end}}"{{if isActive "/locations"}} aria-current="page"{{end}}>Locations</a>
+        <a href="/racks" class="{{if isActive "/racks"}}active{{end}}"{{if isActive "/racks"}} aria-current="page"{{end}}>Racks</a>
       </details>
-      <details class="nav-group" open>
-        <summary class="nav-label">Facilities</summary>
-        <a href="/sites" class="{{if isActive "/sites"}}active{{end}}">Sites</a>
-        <a href="/locations" class="{{if isActive "/locations"}}active{{end}}">Locations</a>
-        <a href="/racks" class="{{if isActive "/racks"}}active{{end}}">Racks</a>
+      <details class="nav-group"{{if or (isActive "/subscriptions") (isActive "/accounts") (isActive "/contacts")}} open{{end}}>
+        <summary>{{icon "box"}}Business{{icon "chevron"}}</summary>
+        <a href="/subscriptions" class="{{if isActive "/subscriptions"}}active{{end}}"{{if isActive "/subscriptions"}} aria-current="page"{{end}}>Subscriptions</a>
+        <a href="/accounts" class="{{if isActive "/accounts"}}active{{end}}"{{if isActive "/accounts"}} aria-current="page"{{end}}>Accounts</a>
+        <a href="/contacts" class="{{if isActive "/contacts"}}active{{end}}"{{if isActive "/contacts"}} aria-current="page"{{end}}>Contacts</a>
       </details>
-      <details class="nav-group" open>
-        <summary class="nav-label">Business</summary>
-        <a href="/subscriptions" class="{{if isActive "/subscriptions"}}active{{end}}">Subscriptions</a>
-        <a href="/accounts" class="{{if isActive "/accounts"}}active{{end}}">Accounts</a>
-        <a href="/contacts" class="{{if isActive "/contacts"}}active{{end}}">Contacts</a>
+      <span class="nav-label nav-label-spaced">Manage</span>
+      <a href="/checks" class="{{if isActive "/checks"}}active{{end}}"{{if isActive "/checks"}} aria-current="page"{{end}}>{{icon "pulse"}}Needs attention</a>
+      {{if canWrite}}<a href="/discovery" class="{{if isActive "/discovery"}}active{{end}}"{{if isActive "/discovery"}} aria-current="page"{{end}}>{{icon "radar"}}Discover</a>{{end}}
+      <a href="/history" class="{{if isActive "/history"}}active{{end}}"{{if isActive "/history"}} aria-current="page"{{end}}>{{icon "history"}}Activity</a>
+      <details class="nav-group nav-tools"{{if or (isActive "/relationships") (isActive "/impact") (isActive "/health-report") (isActive "/tags")}} open{{end}}>
+        <summary>{{icon "shield"}}Inventory health{{icon "chevron"}}</summary>
+        <a href="/health-report" class="{{if isActive "/health-report"}}active{{end}}"{{if isActive "/health-report"}} aria-current="page"{{end}}>Health report</a>
+        <a href="/relationships" class="{{if isActive "/relationships"}}active{{end}}"{{if isActive "/relationships"}} aria-current="page"{{end}}>Relationships</a>
+        <a href="/impact" class="{{if isActive "/impact"}}active{{end}}"{{if isActive "/impact"}} aria-current="page"{{end}}>Impact analysis</a>
+        <a href="/tags" class="{{if isActive "/tags"}}active{{end}}"{{if isActive "/tags"}} aria-current="page"{{end}}>Tags</a>
       </details>
-      <div class="nav-sep"></div>
-      <details class="nav-group nav-tools" open>
-        <summary class="nav-label">Views</summary>
-        <a href="/relationships" class="{{if isActive "/relationships"}}active{{end}}">Relationships</a>
-        <a href="/impact" class="{{if isActive "/impact"}}active{{end}}">Impact</a>
-        <a href="/checks" class="{{if isActive "/checks"}}active{{end}}">Checks</a>
-        <a href="/health-report" class="{{if isActive "/health-report"}}active{{end}}">Health report</a>
-        <a href="/tags" class="{{if isActive "/tags"}}active{{end}}">Tags</a>
-        <a href="/history" class="{{if isActive "/history"}}active{{end}}">History</a>
+      <details class="nav-group nav-tools"{{if or (isActive "/custom-fields") (isActive "/data") (isActive "/users") (isActive "/audit") (isActive "/webhooks") (isActive "/tasks") (isActive "/kuma") (isActive "/api/docs")}} open{{end}}>
+        <summary>{{icon "settings"}}Settings & data{{icon "chevron"}}</summary>
+        {{if canWrite}}<a href="/custom-fields" class="{{if isActive "/custom-fields"}}active{{end}}"{{if isActive "/custom-fields"}} aria-current="page"{{end}}>Custom fields</a>{{end}}
+        <a href="/data" class="{{if isActive "/data"}}active{{end}}"{{if isActive "/data"}} aria-current="page"{{end}}>Import & export</a>
+        {{if isAdmin}}<a href="/users" class="{{if isActive "/users"}}active{{end}}"{{if isActive "/users"}} aria-current="page"{{end}}>Users</a>{{end}}
+        {{if isAdmin}}<a href="/audit" class="{{if isActive "/audit"}}active{{end}}"{{if isActive "/audit"}} aria-current="page"{{end}}>Audit log</a>{{end}}
+        {{if isAdmin}}<a href="/webhooks" class="{{if isActive "/webhooks"}}active{{end}}"{{if isActive "/webhooks"}} aria-current="page"{{end}}>Webhooks</a>{{end}}
+        {{if isAdmin}}<a href="/tasks" class="{{if isActive "/tasks"}}active{{end}}"{{if isActive "/tasks"}} aria-current="page"{{end}}>Scheduled tasks</a>{{end}}
+        {{if isAdmin}}{{if kumaEnabled}}<a href="/kuma" class="{{if isActive "/kuma"}}active{{end}}"{{if isActive "/kuma"}} aria-current="page"{{end}}>Uptime Kuma</a>{{end}}{{end}}
+        <a href="/api/docs" class="{{if isActive "/api/docs"}}active{{end}}"{{if isActive "/api/docs"}} aria-current="page"{{end}}>API reference</a>
       </details>
       {{if savedViews}}
-      <details class="nav-group nav-tools" open>
-        <summary class="nav-label">Saved views</summary>
-        {{range savedViews}}{{$title := .TypeTitle}}{{range .Views}}<a href="{{.URL}}">{{$title}}: {{.Name}}</a>{{end}}{{end}}
-        <a href="/views" class="{{if isActive "/views"}}active{{end}}">Manage views</a>
-      </details>
+      <div class="saved-nav">
+        <span class="nav-label nav-label-spaced">Saved views</span>
+        {{range savedViews}}{{$title := .TypeTitle}}{{range .Views}}<a href="{{.URL}}"><span class="saved-dot"></span><span>{{$title}}: {{.Name}}</span></a>{{end}}{{end}}
+        <a href="/views" class="{{if isActive "/views"}}active{{end}}"{{if isActive "/views"}} aria-current="page"{{end}}>Manage views</a>
+      </div>
       {{end}}
-      <details class="nav-group nav-tools" open>
-        <summary class="nav-label">Admin</summary>
-        {{if canWrite}}<a href="/custom-fields" class="{{if isActive "/custom-fields"}}active{{end}}">Custom fields</a>{{end}}
-        {{if canWrite}}<a href="/discovery" class="{{if isActive "/discovery"}}active{{end}}">Discover</a>{{end}}
-        <a href="/data" class="{{if isActive "/data"}}active{{end}}">Data</a>
-        {{if isAdmin}}<a href="/users" class="{{if isActive "/users"}}active{{end}}">Users</a>{{end}}
-        {{if isAdmin}}<a href="/audit" class="{{if isActive "/audit"}}active{{end}}">Audit log</a>{{end}}
-        {{if isAdmin}}<a href="/webhooks" class="{{if isActive "/webhooks"}}active{{end}}">Webhooks</a>{{end}}
-        {{if isAdmin}}<a href="/tasks" class="{{if isActive "/tasks"}}active{{end}}">Scheduled tasks</a>{{end}}
-        {{if isAdmin}}{{if kumaEnabled}}<a href="/kuma" class="{{if isActive "/kuma"}}active{{end}}">Uptime Kuma</a>{{end}}{{end}}
-        <a href="/account/tokens" class="{{if isActive "/account/tokens"}}active{{end}}">API tokens</a>
-        <a href="/api/docs" class="{{if isActive "/api/docs"}}active{{end}}">API docs</a>
-        {{if currentUser}}<a href="/account/2fa" class="{{if isActive "/account/2fa"}}active{{end}}">Two-factor auth</a>{{end}}
-      </details>
     </nav>
-    <form class="theme-switch" method="post" action="/theme">
-      {{ csrfField }}
-      <button name="theme" value="system" class="{{if eq (theme) "system"}}active{{end}}">System</button>
-      <button name="theme" value="light" class="{{if eq (theme) "light"}}active{{end}}">Light</button>
-      <button name="theme" value="dark" class="{{if eq (theme) "dark"}}active{{end}}">Dark</button>
-    </form>
-    {{if currentUser}}
-    <div class="nav-sep"></div>
-    <div class="nav-user">
-      <a href="/account/password" class="nav-user-name">{{currentUser}}</a>
-      <form method="post" action="/logout" class="inline">
+    <div class="sidebar-bottom">
+      <form class="theme-switch" method="post" action="/theme" aria-label="Appearance">
         {{ csrfField }}
-        <button class="btn btn-link" type="submit">Log out</button>
+        <input type="hidden" name="return_to" value="{{currentPath}}">
+        <button name="theme" value="system" class="{{if eq (theme) "system"}}active{{end}}" aria-pressed="{{eq (theme) "system"}}">System</button>
+        <button name="theme" value="light" class="{{if eq (theme) "light"}}active{{end}}" aria-pressed="{{eq (theme) "light"}}">{{icon "sun"}}Light</button>
+        <button name="theme" value="dark" class="{{if eq (theme) "dark"}}active{{end}}" aria-pressed="{{eq (theme) "dark"}}">{{icon "moon"}}Dark</button>
       </form>
+      {{if currentUser}}
+      <details class="account-menu"{{if isActive "/account"}} open{{end}}>
+        <summary><span class="avatar">{{initials (currentUser)}}</span><span class="profile-name">{{currentUser}}<small>Your account</small></span>{{icon "chevron"}}</summary>
+        <div class="account-links">
+          <a href="/account/password">Change password</a>
+          <a href="/account/2fa">Two-factor authentication</a>
+          <a href="/account/tokens">API tokens</a>
+          <form method="post" action="/logout">{{ csrfField }}<button class="btn btn-link" type="submit">Log out</button></form>
+        </div>
+      </details>
+      {{else}}<div class="nav-user"><span class="avatar">a.</span><span>Almanaut workspace</span><a href="/account/tokens">API tokens</a></div>{{end}}
     </div>
-    {{end}}
   </aside>
   <label for="nav-toggle" class="nav-overlay" aria-hidden="true"></label>
-  <div class="content">
-    <div class="topbar">
-      <label for="nav-toggle" class="hamburger" aria-label="Toggle navigation" role="button">☰</label>
+  <div class="content" id="app-content">
+    <header class="topbar">
+      <label for="nav-toggle" class="hamburger" aria-label="Toggle navigation">{{icon "menu"}}</label>
+      <nav class="breadcrumb" aria-label="Breadcrumb"><a href="/" aria-label="Home">{{icon "home"}}</a><span aria-hidden="true">/</span><span aria-current="page">{{.Title}}</span></nav>
       <form class="search" method="get" action="/search" role="search">
-        <input type="search" name="q" placeholder="Search…" aria-label="Search">
+        <label for="global-search" class="sr-only">Search your inventory</label>
+        <button class="search-button" aria-label="Search" type="submit">{{icon "search"}}</button>
+        <input id="global-search" type="search" name="q" placeholder="Find anything in your homelab…">
+        <kbd class="js-only" aria-hidden="true">Ctrl K</kbd>
       </form>
-    </div>
-    <main>{{template "content" .}}</main>
+    </header>
+    <main id="main" tabindex="-1">{{template "content" .}}</main>
+    <footer class="app-footer"><span>Everything in its right place.</span><span>Almanaut · Your homelab, documented.</span></footer>
   </div>
 </div>
 </body>

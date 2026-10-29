@@ -50,7 +50,7 @@ func (rs resource[T]) addJournal(d handlerDeps) http.HandlerFunc {
 			notFoundOrServerError(w, req, rs.sing, err)
 			return
 		}
-		http.Redirect(w, req, fmt.Sprintf("%s/%d", rs.basePath(), id), http.StatusSeeOther)
+		http.Redirect(w, req, detailReturnPath(req, fmt.Sprintf("%s/%d", rs.basePath(), id)), http.StatusSeeOther)
 	}
 }
 
@@ -71,6 +71,6 @@ func deleteJournal(cat entityCatalog, d handlerDeps) http.HandlerFunc {
 			serverError(w, req, err)
 			return
 		}
-		http.Redirect(w, req, cat.path(entry.EntityType, entry.EntityID), http.StatusSeeOther)
+		http.Redirect(w, req, detailReturnPath(req, cat.path(entry.EntityType, entry.EntityID)), http.StatusSeeOther)
 	}
 }

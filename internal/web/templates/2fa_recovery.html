@@ -5,12 +5,14 @@
     <h1>Recovery codes</h1>
   </div>
 </div>
+{{template "accountnav" .}}
 <section class="panel">
   <p><span class="badge badge-ok">2FA enabled</span></p>
   <p><strong>Save these recovery codes now.</strong> Each can be used once if you lose your authenticator. They will not be shown again.</p>
-  <ul class="recovery-codes">
+  <ul class="recovery-codes" id="recovery-codes">
     {{range .Codes}}<li><code>{{.}}</code></li>{{end}}
   </ul>
+  <div class="copy-control"><button class="btn js-only" type="button" data-copy-target="recovery-codes">Copy recovery codes</button><span role="status" data-copy-status></span></div>
   <p><a class="btn" href="/account/2fa">Done</a></p>
 </section>
 {{end}}

@@ -1,8 +1,9 @@
 {{define "content"}}
 <div class="page-header">
-  <div class="ph-titles"><h1>History</h1></div>
+  <div class="ph-titles"><span class="ph-eyebrow">Workspace activity</span><h1>History</h1><p class="page-description">See what changed in your inventory, when it changed, and who made the change.</p></div>
 </div>
 <section class="panel">
+  <h2>Recent inventory changes</h2>
   {{if .Rows}}
   <ul class="changelog-list">
     {{range .Rows}}
@@ -10,7 +11,7 @@
       <span class="cl-action cl-{{.Action}}">{{.Action}}</span>
       {{if .Path}}<a href="{{.Path}}">{{.Label}}</a>{{else}}{{.Label}}{{end}}
       <span class="cl-actor">{{.EntityType}}</span>
-      <time>{{.CreatedAt}}</time>{{if .Actor}} <span class="cl-actor">by {{.Actor}}</span>{{end}}
+      <time datetime="{{.CreatedAt}}" title="{{.CreatedAt}}">{{displayTime .CreatedAt}}</time>{{if .Actor}} <span class="cl-actor">by {{.Actor}}</span>{{end}}
       {{if .Changes}}<ul class="cl-fields">{{range .Changes}}<li><b>{{.Field}}</b>: {{.Old}} → {{.New}}</li>{{end}}</ul>{{end}}
     </li>
     {{end}}

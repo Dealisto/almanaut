@@ -1,42 +1,29 @@
 {{define "listcontrols"}}
 {{if .Columns}}
-<form class="list-controls" method="get" action="{{.BasePath}}">
-  <label class="lc-field">Sort
-    <select name="sort">
-      <option value=""{{if not .Sort}} selected{{end}}>—</option>
-      {{range .Columns}}<option value="{{.}}"{{if eq . $.Sort}} selected{{end}}>{{.}}</option>{{end}}
-    </select>
-  </label>
-  <select name="dir" aria-label="Sort direction">
-    <option value="asc"{{if eq .Dir "asc"}} selected{{end}}>asc</option>
-    <option value="desc"{{if eq .Dir "desc"}} selected{{end}}>desc</option>
-  </select>
-  {{if .Tags}}
-  <label class="lc-field">Tag
-    <select name="tag">
-      <option value=""{{if not .Tag}} selected{{end}}>—</option>
-      {{range .Tags}}<option value="{{.}}"{{if eq . $.Tag}} selected{{end}}>{{.}}</option>{{end}}
-    </select>
-  </label>
-  {{end}}
-  <label class="lc-field">Filter
-    <select name="field">
-      <option value=""{{if not .FilterField}} selected{{end}}>—</option>
-      {{range .Columns}}<option value="{{.}}"{{if eq . $.FilterField}} selected{{end}}>{{.}}</option>{{end}}
-    </select>
-  </label>
-  <input type="search" name="value" value="{{.FilterValue}}" placeholder="contains…" aria-label="Filter value">
-  <button class="btn" type="submit">Apply</button>
-  {{if .Active}}<a class="btn btn-link" href="{{.BasePath}}">Clear</a>{{end}}
-</form>
-<form class="list-controls lc-save" method="post" action="/views">
-  {{ csrfField }}
-  <input type="hidden" name="entity_type" value="{{.Type}}">
-  <input type="hidden" name="query" value="{{.CurrentQuery}}">
-  <label class="lc-field">Save current view
-    <input name="name" placeholder="view name" required aria-label="Saved view name">
-  </label>
-  <button class="btn" type="submit">Save view</button>
-</form>
+<div class="list-toolbar">
+  <form class="list-controls" method="get" action="{{.BasePath}}">
+    <label class="lc-field filter-query">Find in this list
+      <input type="search" name="q" value="{{.Query}}" placeholder="Name, address, or another detail…" aria-label="Search this list">
+    </label>
+    {{if .Tags}}<label class="lc-field">Tag<select name="tag"><option value="">All tags</option>{{range .Tags}}<option value="{{.}}"{{if eq . $.Tag}} selected{{end}}>{{.}}</option>{{end}}</select></label>{{end}}
+    <label class="lc-field">Sort by<select name="sort"><option value="">Default order</option>{{range .Columns}}<option value="{{.}}"{{if eq . $.Sort}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+    <label class="lc-field">Direction<select name="dir"><option value="asc"{{if eq .Dir "asc"}} selected{{end}}>Ascending</option><option value="desc"{{if eq .Dir "desc"}} selected{{end}}>Descending</option></select></label>
+    <button class="btn btn-primary" type="submit">Apply</button>
+    {{if .Active}}<a class="btn" href="{{.BasePath}}">Clear</a>{{end}}
+    <details class="field-filter"{{if .FilterField}} open{{end}}>
+      <summary>Filter a specific field</summary>
+      <div class="field-filter-controls"><label class="lc-field">Field<select name="field"><option value="">Choose a field</option>{{range .Columns}}<option value="{{.}}"{{if eq . $.FilterField}} selected{{end}}>{{.}}</option>{{end}}</select></label><label class="lc-field">Contains<input name="value" value="{{.FilterValue}}" placeholder="Value to match"></label><button class="btn" type="submit">Apply filter</button></div>
+    </details>
+  </form>
+  <details class="saved-view-control"><summary>Save view</summary>
+    <form class="list-controls lc-save" method="post" action="/views">
+      {{ csrfField }}
+      <input type="hidden" name="entity_type" value="{{.Type}}">
+      <input type="hidden" name="query" value="{{.CurrentQuery}}">
+      <label class="lc-field">View name<input name="name" placeholder="e.g. Production hosts" required aria-label="Saved view name"></label>
+      <button class="btn" type="submit">Save view</button>
+    </form>
+  </details>
+</div>
 {{end}}
 {{end}}

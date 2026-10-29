@@ -1,39 +1,32 @@
 {{define "content"}}
-<div class="page-header">
-  <div class="ph-titles">
-    <span class="ph-eyebrow">Inventory</span>
-    <h1>{{.Heading}}</h1>
-  </div>
-</div>
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Inventory / Hosts</span><h1>{{.Heading}}</h1><p class="page-description">Start with the essentials. Add the details that help you find and maintain this machine.</p></div></div>
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
 {{ csrfField }}
-  <label>Name<input name="name" value="{{.Item.Name}}" required></label>
-  <label>Type
-    <select name="type">
-      {{range .Extras.Types}}<option value="{{.}}" {{if eq . $.Item.Type}}selected{{end}}>{{.}}</option>{{end}}
-    </select>
-  </label>
-  <label>OS<input name="os" value="{{.Item.OS}}"></label>
-  <label>CPU<input name="cpu" value="{{.Item.CPU}}"></label>
-  <label>RAM<input name="ram" value="{{.Item.RAM}}"></label>
-  <label>Disk<input name="disk" value="{{.Item.Disk}}"></label>
-  <label>IPs (comma-separated)<input name="ips" value="{{range $i, $ip := .Item.IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}"></label>
-  <label>Status<input name="status" value="{{.Item.Status}}"></label>
-  <label>Liveness check address (host:port, optional)<input name="check_address" value="{{.Item.CheckAddress}}" placeholder="192.168.1.10:443"></label>
-  <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
-  <label>Rack
-    <select name="rack_id">
-      <option value="0">— none —</option>
-      {{range .Extras.Racks}}<option value="{{.ID}}"{{if eq .ID $.Item.RackID}} selected{{end}}>{{.Name}}</option>{{end}}
-    </select>
-  </label>
-  <label>Rack position (U)<input type="number" name="rack_position" min="0" value="{{.Item.RackPosition}}"></label>
-  <label>Height (U)<input type="number" name="u_height" min="1" value="{{.Item.UHeight}}"></label>
-  {{template "customFieldsForm" .Extras.customFields}}
-  <div class="actions">
-    <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
-    <a class="btn" href="/hosts">Cancel</a>
+  <p class="form-help">Name and type are required. All other details can be added later.</p>
+  <div class="form-grid">
+    <label>Name<input name="name" value="{{.Item.Name}}" placeholder="e.g. atlas" required autocomplete="off"></label>
+    <label>Type<select name="type">{{range .Extras.Types}}<option value="{{.}}" {{if eq . $.Item.Type}}selected{{end}}>{{.}}</option>{{end}}</select></label>
+    <label>Operating system<input name="os" value="{{.Item.OS}}" placeholder="e.g. Debian 12"></label>
+    <label>Inventory status<input name="status" value="{{.Item.Status}}" placeholder="e.g. running, maintenance"></label>
   </div>
+  <fieldset class="form-section"><legend>Network & availability</legend>
+    <label>IP addresses<input name="ips" value="{{range $i, $ip := .Item.IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}" placeholder="192.168.1.10, 2001:db8::10" aria-describedby="ips-help"></label>
+    <p class="form-help" id="ips-help">Separate multiple IPv4 or IPv6 addresses with commas.</p>
+    <label>Liveness check address<input name="check_address" value="{{.Item.CheckAddress}}" placeholder="192.168.1.10:443" aria-describedby="check-help"></label>
+    <p class="form-help" id="check-help">Optional host:port for TCP checks. Leave empty if this host should not be monitored.</p>
+  </fieldset>
+  <fieldset class="form-section"><legend>Hardware</legend><div class="form-grid">
+    <label>CPU<input name="cpu" value="{{.Item.CPU}}"></label>
+    <label>RAM<input name="ram" value="{{.Item.RAM}}" placeholder="e.g. 32 GB"></label>
+    <label>Disk<input name="disk" value="{{.Item.Disk}}" placeholder="e.g. 1 TB NVMe"></label>
+  </div></fieldset>
+  <fieldset class="form-section"><legend>Physical location</legend>
+    <label>Rack<select name="rack_id"><option value="0">No rack assigned</option>{{range .Extras.Racks}}<option value="{{.ID}}"{{if eq .ID $.Item.RackID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+    <div class="form-grid"><label>Rack position (U)<input type="number" name="rack_position" min="0" value="{{.Item.RackPosition}}"></label><label>Height (U)<input type="number" name="u_height" min="1" value="{{.Item.UHeight}}"></label></div>
+  </fieldset>
+  <label>Notes<textarea name="notes" placeholder="Purpose, maintenance notes, or anything worth remembering…">{{.Item.Notes}}</textarea></label>
+  {{template "customFieldsForm" .Extras.customFields}}
+  <div class="actions"><button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button><a class="btn" href="/hosts">Cancel</a></div>
 </form>
 {{end}}
