@@ -11,7 +11,7 @@
 
 One Go binary · SQLite storage · server-rendered UI · zero client-side JS frameworks
 
-![almanaut dashboard](docs/screenshots/dashboard.png)
+![Almanaut overview with inventory counts, health alerts, services, and port connections](docs/screenshots/dashboard.png)
 
 </div>
 
@@ -86,14 +86,17 @@ server-rendered UI. Back it up by copying one file (or one YAML export).
 
 ## Screenshots
 
-**Relationship graph** — each entity's neighbourhood is drawn on its detail
-page (here, a host with the VM it runs on and the services running on it):
+Screenshots show the application with a demo inventory.
 
-![relationship neighbourhood graph](docs/screenshots/graph.png)
+**Connections** — the record's Connections tab brings physical ports,
+relationships, and a neighbourhood graph together (here, a host with its
+Proxmox service and nightly backup):
+
+![Host Connections tab showing a linked switch port, a service, and a backup](docs/screenshots/graph.png)
 
 **Dark mode** — a built-in System / Light / Dark switch; System follows your OS:
 
-![almanaut in dark mode](docs/screenshots/dashboard-dark.png)
+![Almanaut overview in dark mode](docs/screenshots/dashboard-dark.png)
 
 ## Quick start
 
