@@ -5,7 +5,7 @@
     <h1>{{.Heading}}</h1>
   </div>
 </div>
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
 {{ csrfField }}
   <label>Name<input name="name" value="{{.Item.Name}}" placeholder="onboard, X540-T2" required></label>

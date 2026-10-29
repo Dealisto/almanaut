@@ -1,0 +1,20 @@
+{{define "settingsnav"}}
+<nav class="section-nav" aria-label="Settings and data">
+  <a href="/data"{{if isActive "/data"}} aria-current="page"{{end}}>Import &amp; export</a>
+  <a href="/views"{{if isActive "/views"}} aria-current="page"{{end}}>Saved views</a>
+  {{if canWrite}}<a href="/custom-fields"{{if isActive "/custom-fields"}} aria-current="page"{{end}}>Custom fields</a>{{end}}
+  {{if isAdmin}}
+  <a href="/users"{{if isActive "/users"}} aria-current="page"{{end}}>Users</a>
+  <a href="/audit"{{if isActive "/audit"}} aria-current="page"{{end}}>Audit log</a>
+  <a href="/webhooks"{{if isActive "/webhooks"}} aria-current="page"{{end}}>Webhooks</a>
+  <a href="/tasks"{{if isActive "/tasks"}} aria-current="page"{{end}}>Scheduled tasks</a>
+  {{end}}
+</nav>
+{{end}}
+{{define "accountnav"}}
+<nav class="section-nav" aria-label="Account settings">
+  <a href="/account/password"{{if isActive "/account/password"}} aria-current="page"{{end}}>Password</a>
+  <a href="/account/2fa"{{if isActive "/account/2fa"}} aria-current="page"{{end}}>Two-factor authentication</a>
+  <a href="/account/tokens"{{if isActive "/account/tokens"}} aria-current="page"{{end}}>API tokens</a>
+</nav>
+{{end}}

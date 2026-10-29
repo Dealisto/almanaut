@@ -13,10 +13,10 @@
 {{template "bulkactions" .Controls}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th class="bulk-col"></th><th>Name</th><th>Kind</th><th>Username</th><th>Password manager</th><th>Status</th><th></th></tr></thead>
+  <thead><tr><th scope="col" class="bulk-col"><span class="sr-only">Selection</span>{{if canWrite}}<input type="checkbox" class="js-only" data-select-all aria-label="Select all rows">{{end}}</th><th scope="col">Name</th><th scope="col">Kind</th><th scope="col">Username</th><th scope="col">Password manager</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
   <tbody>
   {{range .Items}}
-    <tr><td class="bulk-col"><input type="checkbox" name="ids" value="{{.ID}}" form="bulkform"></td>
+    <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select row {{.ID}}">{{end}}</td>
       <td><a href="/accounts/{{.ID}}">{{.Name}}</a></td>
       <td>{{.Kind}}</td>
       <td>{{.Username}}</td>
@@ -24,12 +24,14 @@
       <td>{{.Status}}</td>
       <td>
         {{if canWrite}}
+        <details class="row-menu"><summary>Actions</summary>
         <a class="btn" href="/accounts/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/accounts/{{.ID}}/delete"
               onsubmit="return confirm('Delete this account?');">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
+        </details>
         {{end}}
       </td>
     </tr>
@@ -38,6 +40,6 @@
 </table>
 </div>
 {{else}}
-<div class="table-wrap"><div class="empty">No accounts yet.</div></div>
+<div class="table-wrap"><div class="empty">{{if .Controls.Active}}{{icon "search"}}<strong>No matching records.</strong><p>Try a different search or clear your filters.</p><a class="btn" href="{{.Controls.BasePath}}">Clear filters</a>{{else}}{{icon "box"}}<strong>No accounts yet.</strong><p>Add your first record to start documenting your inventory.</p>{{if canWrite}}<a class="btn" href="{{.Controls.BasePath}}/new">Add a record</a>{{end}}{{end}}</div></div>
 {{end}}
 {{end}}

@@ -1,18 +1,19 @@
 {{define "bulkactions"}}
 {{if canWrite}}
-<form id="bulkform" class="bulk-actions" method="post" action="{{.BasePath}}/bulk">
-  {{ csrfField }}
-  <span class="bulk-hint">With selected:</span>
-  <input name="tag" placeholder="tag" aria-label="Tag name">
-  <button class="btn" name="action" value="tag-add" type="submit">Add tag</button>
-  <button class="btn" name="action" value="tag-remove" type="submit">Remove tag</button>
-  {{if .SetFields}}
-  <select name="field" aria-label="Field to set">{{range .SetFields}}<option value="{{.}}">{{.}}</option>{{end}}</select>
-  <input name="value" placeholder="value" aria-label="Field value">
-  <button class="btn" name="action" value="set-field" type="submit">Set field</button>
-  {{end}}
-  <button class="btn btn-danger" name="action" value="delete" type="submit"
-          onclick="return confirm('Delete the selected items? This cannot be undone.');">Delete</button>
-</form>
+<details class="bulk-panel">
+  <summary>Bulk actions <span class="bulk-hint" data-selection-count role="status">Select rows to apply an action</span></summary>
+  <form id="bulkform" class="bulk-actions" method="post" action="{{.BasePath}}/bulk">
+    {{ csrfField }}
+    <label>Tag<input name="tag" placeholder="Tag name" aria-label="Tag name"></label>
+    <button class="btn" name="action" value="tag-add" type="submit">Add tag</button>
+    <button class="btn" name="action" value="tag-remove" type="submit">Remove tag</button>
+    {{if .SetFields}}
+    <label>Field<select name="field" aria-label="Field to set">{{range .SetFields}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
+    <label>Value<input name="value" placeholder="New value" aria-label="Field value"></label>
+    <button class="btn" name="action" value="set-field" type="submit">Set field</button>
+    {{end}}
+    <button class="btn btn-danger" name="action" value="delete" type="submit" onclick="return confirm('Delete the selected items? This cannot be undone.');">Delete selected</button>
+  </form>
+</details>
 {{end}}
 {{end}}

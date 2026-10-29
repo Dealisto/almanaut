@@ -1,20 +1,27 @@
 package web
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"net/http"
 )
 
-// staticCSS serves the embedded stylesheet. The ETag is the build version, so
-// a new release invalidates caches; Cache-Control: no-cache makes browsers
-// revalidate cheaply (304 when unchanged).
+// staticCSS serves the embedded stylesheet, revalidating cached copies.
 func staticCSS(version string) http.HandlerFunc {
-	body, err := templatesFS.ReadFile("static/app.css")
+	return staticAsset("static/app.css", "text/css; charset=utf-8", version)
+}
+
+func staticAsset(path, contentType, version string) http.HandlerFunc {
+	body, err := templatesFS.ReadFile(path)
 	if err != nil {
-		panic("embed: static/app.css missing: " + err.Error())
+		panic("embed: " + path + " missing: " + err.Error())
 	}
-	etag := `"` + version + `"`
+	// Include the asset content so rebuilding the same development version
+	// cannot leave browsers using an earlier stylesheet or enhancement script.
+	digest := sha256.Sum256(body)
+	etag := fmt.Sprintf(`"%s-%x"`, version, digest[:12])
 	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		w.Header().Set("Content-Type", contentType)
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("ETag", etag)
 		if r.Header.Get("If-None-Match") == etag {

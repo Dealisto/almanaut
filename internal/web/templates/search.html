@@ -1,14 +1,14 @@
 {{define "content"}}
 <div class="page-header">
   <div class="ph-titles">
-    <h1>Search</h1>
+    <h1>Find anything in your homelab.</h1><p class="page-description">Search names, IP addresses, tags and custom fields across your inventory.</p>
   </div>
 </div>
 <form class="search-page" method="get" action="/search" role="search">
   <input type="search" name="q" value="{{.Query}}" placeholder="Search…" aria-label="Search" autofocus>
   <button class="btn btn-primary" type="submit">Search</button>
 </form>
-<section class="panel">
+<section class="panel search-results">
 {{if .Query}}
   {{if .Groups}}
     <p class="muted">{{.Total}} result{{if ne .Total 1}}s{{end}} for "{{.Query}}".</p>

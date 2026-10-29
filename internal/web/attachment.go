@@ -83,7 +83,7 @@ func (rs resource[T]) addAttachment(d handlerDeps) http.HandlerFunc {
 			notFoundOrServerError(w, req, rs.sing, err)
 			return
 		}
-		http.Redirect(w, req, fmt.Sprintf("%s/%d", rs.basePath(), id), http.StatusSeeOther)
+		http.Redirect(w, req, detailReturnPath(req, fmt.Sprintf("%s/%d", rs.basePath(), id)), http.StatusSeeOther)
 	}
 }
 
@@ -132,7 +132,7 @@ func deleteAttachment(cat entityCatalog, d handlerDeps) http.HandlerFunc {
 			notFoundOrServerError(w, req, "attachment", err)
 			return
 		}
-		http.Redirect(w, req, cat.path(att.EntityType, att.EntityID), http.StatusSeeOther)
+		http.Redirect(w, req, detailReturnPath(req, cat.path(att.EntityType, att.EntityID)), http.StatusSeeOther)
 	}
 }
 

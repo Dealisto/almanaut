@@ -1872,8 +1872,8 @@ func TestSidebarToolsCluster(t *testing.T) {
 			t.Errorf("Tools cluster missing %s", href)
 		}
 	}
-	if strings.Contains(body, ">Overview<") {
-		t.Error("the Overview group header should be gone")
+	if !strings.Contains(body, `aria-label="Workspace"`) {
+		t.Error("workspace navigation must have an accessible name")
 	}
 }
 

@@ -30,9 +30,26 @@ type attentionGroup struct {
 }
 
 type serviceLink struct {
-	Name     string
-	Href     string
-	External bool
+	ID        int64
+	Name      string
+	Href      string
+	External  bool
+	DetailURL string
+	HostName  string
+	Liveness  *domain.LivenessStatus
+}
+
+type summaryCard struct {
+	Label string
+	Count int
+	URL   string
+	Icon  string
+	Hint  string
+}
+
+type portConnection struct {
+	From, To       string
+	FromURL, ToURL string
 }
 
 type serviceGroup struct {
@@ -41,12 +58,16 @@ type serviceGroup struct {
 }
 
 type dashboardData struct {
-	Title        string
-	Counts       []countCard
-	Groups       []attentionGroup
-	Services     []serviceGroup
-	AnyAttention bool
-	Recent       []historyRow
+	Title           string
+	Counts          []countCard
+	Groups          []attentionGroup
+	Services        []serviceGroup
+	AnyAttention    bool
+	Recent          []historyRow
+	Summary         []summaryCard
+	Connections     []portConnection
+	ConnectionCount int
+	Empty           bool
 }
 
 // dashboard renders the landing page: per-entity counts and attention groups
@@ -142,7 +163,7 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalo
 			fail(err)
 			return
 		}
-		portCount, err := repos.ports.Count()
+		ports, err := repos.ports.List()
 		if err != nil {
 			fail(err)
 			return
@@ -165,7 +186,7 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalo
 			{"VLANs", vlanCount, "/vlans"},
 			{"Reservations", reservationCount, "/reservations"},
 			{"NICs", nicCount, "/nics"},
-			{"Ports", portCount, "/ports"},
+			{"Ports", len(ports), "/ports"},
 		}
 
 		expiring := domain.ExpiringSoon(certs, time.Now(), 30)
@@ -182,6 +203,15 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalo
 			svcItems = append(svcItems, attentionItem{Label: s.Name, URL: fmt.Sprintf("/services/%d", s.ID)})
 		}
 		down := domain.HostsDown(hosts)
+		downIDs := make(map[int64]bool, len(down))
+		for _, h := range down {
+			downIDs[h.ID] = true
+		}
+		for _, h := range hosts {
+			if h.Liveness != nil && h.Liveness.Status == domain.LivenessDown && !downIDs[h.ID] {
+				down = append(down, h)
+			}
+		}
 		hostItems := make([]attentionItem, 0, len(down))
 		for _, h := range down {
 			hostItems = append(hostItems, attentionItem{Label: h.Name, URL: fmt.Sprintf("/hosts/%d", h.ID)})
@@ -221,12 +251,58 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalo
 		}
 
 		groups := []attentionGroup{
+			{Title: "Hosts down", Severity: "crit", Items: hostItems},
 			{Title: "Inventory health", MoreURL: "/health-report", Severity: "warn", Items: healthItems},
 			{Title: "Certificates expiring soon", MoreURL: "/checks", Severity: "warn", Items: certItems},
 			{Title: "Services without backup", MoreURL: "/checks", Severity: "warn", Items: svcItems},
-			{Title: "Hosts down", Severity: "crit", Items: hostItems},
 			{Title: "Hardware warranty expiring", MoreURL: "/checks", Severity: "warn", Items: hwItems},
 			{Title: "Subscriptions renewing soon", MoreURL: "/checks", Severity: "warn", Items: subItems},
+		}
+		attentionCategories := 0
+		for _, group := range groups {
+			if len(group.Items) > 0 {
+				attentionCategories++
+			}
+		}
+		var hostChecks, serviceChecks []*domain.LivenessStatus
+		hostNames := make(map[int64]string, len(hosts))
+		for _, host := range hosts {
+			hostChecks = append(hostChecks, host.Liveness)
+			hostNames[host.ID] = host.Name
+		}
+		for _, service := range services {
+			serviceChecks = append(serviceChecks, service.Liveness)
+		}
+		serviceHosts := make(map[int64]string)
+		for _, rel := range relList {
+			if rel.Kind == "runs on" && rel.FromType == "service" && rel.ToType == "host" {
+				if name := hostNames[rel.ToID]; name != "" {
+					if serviceHosts[rel.FromID] != "" {
+						serviceHosts[rel.FromID] += ", "
+					}
+					serviceHosts[rel.FromID] += name
+				}
+			}
+		}
+		serviceGroups := groupServices(services)
+		for i := range serviceGroups {
+			for j := range serviceGroups[i].Services {
+				service := &serviceGroups[i].Services[j]
+				service.DetailURL = cat.path("service", service.ID)
+				service.HostName = serviceHosts[service.ID]
+			}
+		}
+		connections := buildPortConnections(ports, cat)
+		connectionCount := len(connections)
+		if len(connections) > 3 {
+			connections = connections[:3]
+		}
+		empty := true
+		for _, count := range counts {
+			if count.Count > 0 {
+				empty = false
+				break
+			}
 		}
 		recentEvents, err := changelog.ListRecent(5)
 		if err != nil {
@@ -242,9 +318,18 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalo
 			Title:        "Dashboard",
 			Counts:       counts,
 			Groups:       groups,
-			Services:     groupServices(services),
+			Services:     serviceGroups,
 			AnyAttention: anyAttention(groups),
 			Recent:       recent,
+			Summary: []summaryCard{
+				{"Hosts", len(hosts), "/hosts", "server", checkSummary(hostChecks)},
+				{"Services", len(services), "/services", "layers", checkSummary(serviceChecks)},
+				{"Networks", networkCount, "/networks", "network", "Subnets & IP allocations"},
+				{"Needs attention", attentionCategories, "/#attention", "alert", "Categories to review"},
+			},
+			Connections:     connections,
+			ConnectionCount: connectionCount,
+			Empty:           empty,
 		})
 	}
 }
@@ -260,7 +345,7 @@ func groupServices(services []domain.Service) []serviceGroup {
 		if cat == "" {
 			cat = "Uncategorized"
 		}
-		link := serviceLink{Name: s.Name}
+		link := serviceLink{ID: s.ID, Name: s.Name, Liveness: s.Liveness}
 		if u := strings.TrimSpace(s.URL); u != "" {
 			link.Href, link.External = u, true
 		} else {
@@ -279,6 +364,50 @@ func groupServices(services []domain.Service) []serviceGroup {
 		return strings.ToLower(groups[i].Category) < strings.ToLower(groups[j].Category)
 	})
 	return groups
+}
+
+// checkSummary reports observations, never inferring availability from a
+// missing probe or a manually maintained inventory status.
+func checkSummary(checks []*domain.LivenessStatus) string {
+	up, down := 0, 0
+	for _, check := range checks {
+		if check == nil {
+			continue
+		}
+		switch check.Status {
+		case domain.LivenessUp:
+			up++
+		case domain.LivenessDown:
+			down++
+		}
+	}
+	if up+down == 0 {
+		return "No liveness results yet"
+	}
+	return fmt.Sprintf("%d up · %d down · %d not checked", up, down, len(checks)-up-down)
+}
+
+// buildPortConnections shows each recorded cable once, with links to both
+// endpoint records. Dangling peers do not become invented connections.
+func buildPortConnections(ports []domain.Port, cat entityCatalog) []portConnection {
+	byID := make(map[int64]domain.Port, len(ports))
+	for _, port := range ports {
+		byID[port.ID] = port
+	}
+	var connections []portConnection
+	for _, port := range ports {
+		peer, ok := byID[port.PeerPortID]
+		if !ok || port.ID >= peer.ID {
+			continue
+		}
+		connections = append(connections, portConnection{
+			From:    port.OwnerName + " / " + port.Name,
+			To:      peer.OwnerName + " / " + peer.Name,
+			FromURL: cat.path("port", port.ID),
+			ToURL:   cat.path("port", peer.ID),
+		})
+	}
+	return connections
 }
 
 // anyAttention reports whether any attention group has items.

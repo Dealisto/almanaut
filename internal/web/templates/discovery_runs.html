@@ -3,26 +3,27 @@
 <div class="page-header">
   <div class="ph-titles">
     <p class="ph-eyebrow">Administration</p>
-    <h1>Discovery runs</h1>
+    <h1>Discovery runs</h1><p class="page-description">Review recent discovery results and investigate unsuccessful runs.</p>
   </div>
 </div>
 
+<div class="toolbar"><a class="btn" href="/tasks">Back to scheduled tasks</a></div>
 <div class="panel">
   {{if .Runs}}
   <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>Source</th><th>Started</th><th>Finished</th><th>Found</th><th>New</th><th>Status</th></tr>
+      <tr><th scope="col">Source</th><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">Found</th><th scope="col">New</th><th scope="col">Status</th></tr>
     </thead>
     <tbody>
       {{range .Runs}}
       <tr>
         <td>{{.Source}}</td>
-        <td>{{.StartedAt}}</td>
-        <td>{{.FinishedAt}}</td>
+        <td><time datetime="{{.StartedAt}}">{{displayTime .StartedAt}}</time></td>
+        <td><time datetime="{{.FinishedAt}}">{{displayTime .FinishedAt}}</time></td>
         <td>{{.FoundCount}}</td>
         <td>{{.NewCount}}</td>
-        <td>{{if .Error}}<span class="badge badge-warn">{{.Error}}</span>{{else}}<span class="badge">ok</span>{{end}}</td>
+        <td class="wrap-cell">{{if .Error}}<span class="badge badge-warn">{{.Error}}</span>{{else}}<span class="badge">ok</span>{{end}}</td>
       </tr>
       {{end}}
     </tbody>

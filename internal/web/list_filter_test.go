@@ -76,6 +76,43 @@ func TestListControlsRendered(t *testing.T) {
 	}
 }
 
+func TestListSearchCombinesFieldsTagsAndSort(t *testing.T) {
+	srv := newTestServer(t)
+	if rec := postForm(t, srv, "/custom-fields", url.Values{
+		"entity_type": {"host"}, "label": {"Asset tag"}, "kind": {"text"},
+	}); rec.Code != 303 {
+		t.Fatalf("create custom field = %d", rec.Code)
+	}
+	for _, name := range []string{"zebra", "alpha", "other"} {
+		if rec := postForm(t, srv, "/hosts", url.Values{
+			"name": {name}, "type": {"physical"}, "status": {"running"},
+			"ips": {"10.20.30.40"}, "notes": {"Emergency console"}, "cf_asset_tag": {"ASSET-9000"},
+		}); rec.Code != 303 {
+			t.Fatalf("create host = %d: %s", rec.Code, rec.Body.String())
+		}
+	}
+	for _, id := range []string{"1", "2"} {
+		if rec := postForm(t, srv, "/tags", url.Values{"entity_type": {"host"}, "entity_id": {id}, "tag": {"prod"}}); rec.Code != 303 {
+			t.Fatalf("tag host = %d", rec.Code)
+		}
+	}
+	for _, query := range []string{"  ZEBRA  ", "10.20.30", "emergency", "asset-9000"} {
+		body := getBody(t, srv, "/hosts?q="+url.QueryEscape(query))
+		if !strings.Contains(body, `href="/hosts/1"`) {
+			t.Errorf("query %q did not match host", query)
+		}
+	}
+	body := getBody(t, srv, "/hosts?q=asset-9000&tag=prod&field=Status&value=running&sort=Name&dir=asc")
+	a, z := idxOf(body, `href="/hosts/2"`), idxOf(body, `href="/hosts/1"`)
+	if a < 0 || z < 0 || a >= z || strings.Contains(body, `href="/hosts/3"`) {
+		t.Fatal("combined search, tag, field filter and sort returned the wrong rows or order")
+	}
+	body = getBody(t, srv, "/hosts?q=asset-9000&field=Status&value=stopped")
+	if strings.Contains(body, `href="/hosts/1"`) || !strings.Contains(body, "No matching records") {
+		t.Fatal("field filter must still apply to a matching text search")
+	}
+}
+
 func TestCompareValuesNumeric(t *testing.T) {
 	if compareValues("9", "10") >= 0 {
 		t.Error("numeric compare: 9 should sort before 10")

@@ -5,16 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · Almanaut</title>
 <link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
 </head>
 <body class="login-body">
 <main class="login-card">
-  <h1 class="brand">Almanaut</h1>
-  {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
-  <form class="stack" method="post" action="/login">
+  <h1 class="brand"><span class="brand-mark" aria-hidden="true">a.</span>almanaut<span class="brand-dot">.</span></h1>
+  <p class="login-intro">Your homelab, in focus.<br>Sign in to your workspace.</p>
+  {{if .Error}}<div class="error" id="sign-in-error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
+  <form{{if .Error}} aria-describedby="sign-in-error"{{end}} class="stack" method="post" action="/login">
     {{ csrfField }}
     <input type="hidden" name="next" value="{{.Next}}">
-    <label>Username<input name="username" autofocus required></label>
-    <label>Password<input name="password" type="password" required></label>
+    <label>Username<input name="username" autocomplete="username" autofocus required></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
     <div class="actions">
       <button class="btn btn-primary" type="submit">Sign in</button>
     </div>

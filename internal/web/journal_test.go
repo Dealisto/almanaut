@@ -54,6 +54,25 @@ func TestJournalAddRejectsInvalidKind(t *testing.T) {
 	}
 }
 
+func TestJournalReturnsToActivitySection(t *testing.T) {
+	srv, db := newTestServerDB(t)
+	postForm(t, srv, "/hosts", url.Values{"name": {"nas"}, "type": {"physical"}})
+	rec := postForm(t, srv, "/hosts/1/journal", url.Values{
+		"kind": {"info"}, "body": {"checked cables"}, "return_section": {"activity"},
+	})
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/hosts/1#activity" {
+		t.Fatalf("journal add: status=%d location=%q", rec.Code, rec.Header().Get("Location"))
+	}
+	entries, err := store.NewJournalRepo(db).ListForEntity("host", 1)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("journal entries=%v, err=%v", entries, err)
+	}
+	rec = postForm(t, srv, fmt.Sprintf("/journal/%d/delete", entries[0].ID), url.Values{"return_section": {"activity"}})
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/hosts/1#activity" {
+		t.Fatalf("journal delete: status=%d location=%q", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
 func TestDeletingEntityPurgesJournalKeepsChangelog(t *testing.T) {
 	srv, db := newTestServerDB(t)
 	postForm(t, srv, "/hosts", url.Values{"name": {"nas"}, "type": {"physical"}})

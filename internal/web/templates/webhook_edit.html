@@ -3,11 +3,12 @@
 <div class="page-header">
   <div class="ph-titles">
     <p class="ph-eyebrow">Administration</p>
-    <h1>Edit webhook</h1>
+    <h1>Edit webhook</h1><p class="page-description">Update the receiver and choose which inventory changes it receives.</p>
   </div>
 </div>
 
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{template "settingsnav" .}}
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
 
 <div class="panel">
   <form class="stack" method="post" action="/webhooks/{{.ID}}">

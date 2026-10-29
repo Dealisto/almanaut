@@ -84,8 +84,8 @@ func TestCustomFieldsPageCRUD(t *testing.T) {
 		t.Fatalf("POST /custom-fields/{id}/delete = %d, want 303, body: %s", delRec.Code, delRec.Body.String())
 	}
 	_, body = getBody("/custom-fields")
-	if strings.Contains(body, "Asset tag") {
-		t.Errorf("GET /custom-fields body still contains %q after delete:\n%s", "Asset tag", body)
+	if customFieldDeleteActionRE.MatchString(body) {
+		t.Error("GET /custom-fields still contains a field management action after deleting the only definition")
 	}
 }
 

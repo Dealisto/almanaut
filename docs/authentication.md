@@ -16,7 +16,8 @@ Every user has one of three built-in roles (there are no custom roles):
 | **viewer** | Read-only access to everything |
 
 Admins manage accounts at **Users** (`/users`): create users (viewer by
-default), change roles, reset passwords, and delete accounts. The last
+default), then open **Manage access** on an account to change its role, reset
+its password, or delete it. Role descriptions sit beside the create form. The last
 remaining user cannot be deleted, and the last admin cannot be demoted or
 deleted, so you can't lock yourself out of user management.
 Each user changes their own password at `/account/password`.
@@ -40,7 +41,8 @@ credentials (a session cookie or a bearer token).
 
 [`/healthz` and `/version`](monitoring.md#health--version) bypass the login so
 container health probes keep working, and the login pages themselves plus the
-stylesheet they need (`/static/app.css`) are public by necessity. Nothing that
+stylesheet and enhancement script they need (`/static/app.css` and
+`/static/app.js`) are public by necessity. Nothing that
 reads or writes inventory is: every other route requires a session or a token.
 
 ## Lockout recovery

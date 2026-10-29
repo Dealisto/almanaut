@@ -5,7 +5,7 @@
     <h1>{{.Heading}}</h1>
   </div>
 </div>
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
 {{ csrfField }}
   <label>Name<input name="name" value="{{.Item.Name}}" placeholder="eth0, Port 1" required></label>
@@ -37,7 +37,7 @@
 </form>
 {{if not .Item.ID}}
 <div class="page-header">
-  <div class="ph-titles"><h1>Generate multiple ports</h1></div>
+  <div class="ph-titles"><h2>Generate multiple ports</h2></div>
 </div>
 <p>Create "Prefix 1" … "Prefix N" on one owner in a single step. Existing names are skipped.</p>
 <form class="stack" method="post" action="/ports/generate">

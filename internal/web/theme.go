@@ -74,6 +74,10 @@ func setTheme(forceSecure bool) http.HandlerFunc {
 			SameSite: http.SameSiteLaxMode,
 			MaxAge:   int((365 * 24 * time.Hour).Seconds()),
 		})
-		http.Redirect(w, r, safeRedirectTarget(r), http.StatusSeeOther)
+		target := safeRedirectTarget(r)
+		if next := r.FormValue("return_to"); next != "" {
+			target = safeNext(next)
+		}
+		http.Redirect(w, r, target, http.StatusSeeOther)
 	}
 }

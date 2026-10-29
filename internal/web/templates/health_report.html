@@ -2,7 +2,7 @@
 <div class="page-header">
   <div class="ph-titles">
     <span class="ph-eyebrow">Connections &amp; views</span>
-    <h1>Health report</h1>
+    <h1>Health report</h1><p class="page-description">Find incomplete records, conflicts, and documentation that needs a second look.</p>
   </div>
   <div class="ph-actions">
     {{if .Total}}<span class="badge badge-warn">{{.Total}} finding{{if ne .Total 1}}s{{end}}</span>{{else}}<span class="badge badge-ok">All clear</span>{{end}}
@@ -10,18 +10,18 @@
 </div>
 
 {{range .Rules}}
-<section class="panel">
-<h2>{{.Title}} <span class="attn-count">{{.Count}}</span></h2>
+<details class="panel health-rule"{{if .Findings}} open{{end}}>
+<summary><h2>{{.Title}}</h2><span class="badge{{if .Count}} badge-pending{{else}} badge-ok{{end}}">{{if .Count}}{{.Count}} findings{{else}}No findings{{end}}</span></summary>
 <p class="muted">{{.Description}}</p>
 {{if .Findings}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Entity</th><th></th></tr></thead>
+  <thead><tr><th scope="col">Entity</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
   <tbody>
   {{range .Findings}}
     <tr>
       <td><a href="{{.URL}}">{{.Label}}</a></td>
-      <td>{{if .AckRef}}<form method="post" action="/health-report/acknowledge" class="inline">{{ csrfField }}<input type="hidden" name="ref" value="{{.AckRef}}"><button class="btn btn-link" type="submit">Acknowledge</button></form>{{end}}</td>
+      <td>{{if and .AckRef canWrite}}<form method="post" action="/health-report/acknowledge" class="inline">{{ csrfField }}<input type="hidden" name="ref" value="{{.AckRef}}"><button class="btn btn-link" type="submit">Acknowledge</button></form>{{end}}</td>
     </tr>
   {{end}}
   </tbody>
@@ -30,6 +30,6 @@
 {{else}}
 <div class="table-wrap"><div class="empty">Nothing to fix here.</div></div>
 {{end}}
-</section>
+</details>
 {{end}}
 {{end}}

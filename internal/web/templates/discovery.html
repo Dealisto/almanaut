@@ -1,20 +1,9 @@
 {{define "content"}}
-<div class="page-header">
-  <div class="ph-titles">
-    <span class="ph-eyebrow">System</span>
-    <h1>Discover</h1>
-  </div>
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Discovery</span><h1>Let your homelab introduce itself.</h1><p class="page-description">Choose a source. Review what was found. Add only what you need.</p></div></div>
+<div class="source-grid">
+  <a class="source-card" href="/discovery/docker">{{icon "box"}}<h2>Docker containers</h2><p>Read your configured Docker socket and import running containers as services.</p><span class="text-link">Discover containers {{icon "arrow"}}</span></a>
+  {{if .NetworkEnabled}}<a class="source-card" href="/discovery/network">{{icon "network"}}<h2>Network scan</h2><p>Find live hosts in a subnet and review their IP addresses before importing.</p><span class="text-link">Scan a network {{icon "arrow"}}</span></a>{{end}}
+  {{if .ProxmoxEnabled}}<a class="source-card" href="/discovery/proxmox">{{icon "server"}}<h2>Proxmox</h2><p>Bring nodes, virtual machines and LXC containers into your inventory.</p><span class="text-link">Explore Proxmox {{icon "arrow"}}</span></a>{{end}}
 </div>
-<section class="panel">
-  <p class="muted">Scan an external source to discover entities. Discovery proposes; you confirm. Manual data is never overwritten.</p>
-  <ul class="related">
-    <li><a href="/discovery/docker">Docker containers</a> — read a mounted Docker socket and import running containers as services.</li>
-    {{if .NetworkEnabled}}
-    <li><a href="/discovery/network">Network scan</a> — scan a subnet for live hosts and import them.</li>
-    {{end}}
-    {{if .ProxmoxEnabled}}
-    <li><a href="/discovery/proxmox">Proxmox</a> — import nodes, VMs, and LXC containers from a Proxmox VE instance.</li>
-    {{end}}
-  </ul>
-</section>
+<section class="panel"><h2>You stay in control.</h2><p class="muted">Discovery proposes; you confirm. Manual data is never overwritten. Only enabled sources are shown here.</p></section>
 {{end}}

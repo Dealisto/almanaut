@@ -7,6 +7,12 @@ arrangement under a name, and act on several rows at once.
 
 ## Filtering & sorting
 
+Use **Find in this list** to search names, addresses, notes, and custom-field
+values without leaving the current entity type. Searches ignore letter case.
+Combine that search with a tag, a sort order, or **Filter a specific field**,
+then select **Apply**. The header's global search looks across all entity types;
+press **Ctrl+K** (or **Cmd+K**) to focus it.
+
 Each list page can be filtered and sorted by any of its columns — the entity's
 own fields, its tags, and any [custom fields](inventory-model.md#custom-fields)
 defined for that type. No per-type configuration is involved: the columns come
@@ -26,8 +32,10 @@ A "clear" affordance appears only when a filter or sort is actually applied.
 ## Saved views (`/views`)
 
 A view you keep coming back to can be saved instead of rebuilt. On a filtered
-list, save it under a name and it appears in the sidebar, grouped by entity
+list, open **Save view**, give it a name, and it appears in the sidebar, grouped by entity
 type.
+
+Apply your filters before saving: a saved view captures the current page URL.
 
 Saved views are **per-user**: yours are yours, and another account's views never
 show up in your sidebar. Each one stores the query string, so opening a view is
@@ -39,7 +47,10 @@ longer matches anything still opens — it simply lists nothing.
 
 ## Bulk actions
 
-Select rows with the checkboxes and apply one action to all of them:
+Select rows with the checkboxes, open **Bulk actions**, and apply one action to
+all of them. The header checkbox selects every row in the current filtered list;
+the selection count shows how many records the action will affect. Individual
+rows keep their edit and delete controls under **Actions**.
 
 | Action | What it does |
 |---|---|

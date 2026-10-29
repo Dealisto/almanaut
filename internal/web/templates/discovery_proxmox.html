@@ -5,7 +5,7 @@
     <h1>Proxmox discovery</h1>
   </div>
 </div>
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
 {{if .Rows}}
 <section class="panel">
   <form method="post" action="/discovery/proxmox/import">
@@ -13,7 +13,7 @@
     <label><input type="checkbox" name="link" value="on" checked> Link VMs/LXC to their Proxmox node</label>
     <div class="table-wrap">
     <table>
-      <thead><tr><th></th><th>Name</th><th>Type</th><th>Status</th><th>CPU</th><th>RAM</th><th>Disk</th><th></th></tr></thead>
+      <thead><tr><th scope="col"><span class="sr-only">Actions</span></th><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">CPU</th><th scope="col">RAM</th><th scope="col">Disk</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>
       {{range .Rows}}
         <tr>

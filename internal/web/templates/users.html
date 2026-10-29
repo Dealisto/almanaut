@@ -1,53 +1,49 @@
 {{define "content"}}
-<div class="page-header">
-  <div class="ph-titles">
-    <span class="ph-eyebrow">Administration</span>
-    <h1>Users</h1>
-  </div>
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Administration</span><h1>Users</h1><p class="page-description">Manage who can view, edit, and administer your homelab.</p></div><div class="ph-actions"><a class="btn btn-primary" href="#add-user">{{icon "plus"}}New user</a></div></div>
+{{template "settingsnav" .}}
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
+<div class="settings-grid">
+  <section class="panel" aria-labelledby="members-heading">
+    <div class="panel-head"><h2 id="members-heading">Workspace access</h2><span class="badge">{{len .Users}} user{{if ne (len .Users) 1}}s{{end}}</span></div>
+    <ul class="record-list">
+    {{range $user := .Users}}
+      <li class="user-record">
+        <div class="record-heading"><span class="avatar">{{initials .Username}}</span><div class="record-identity"><h3>{{.Username}}{{if eq .Username currentUser}} <span class="badge">You</span>{{end}}</h3><p>Joined <time datetime="{{.CreatedAt}}">{{displayTime .CreatedAt}}</time></p></div><span class="badge">{{.Role}}</span></div>
+        <details class="disclosure"><summary>Manage access<span class="sr-only"> for {{.Username}}</span></summary>
+          <div class="user-controls">
+            <form class="stack" method="post" action="/users/{{.ID}}/role">
+              {{ csrfField }}
+              <label>Role for {{.Username}}<select name="role" aria-describedby="role-help">{{range $.Roles}}<option value="{{.}}"{{if eq . $user.Role}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+              <button class="btn" type="submit">Set role</button>
+            </form>
+            <form class="stack" method="post" action="/users/{{.ID}}/password">
+              {{ csrfField }}
+              <label>New password for {{.Username}}<input name="password" type="password" autocomplete="new-password" aria-describedby="reset-help-{{.ID}}" required></label>
+              <p class="form-help" id="reset-help-{{.ID}}">At least 8 characters. Existing sessions will be signed out.</p>
+              <button class="btn" type="submit">Reset password</button>
+            </form>
+          </div>
+          <form method="post" action="/users/{{.ID}}/delete" class="destructive-action" onsubmit="return confirm('Delete this user and revoke their access?');">
+            {{ csrfField }}<p class="muted">Remove this account and its access to Almanaut.</p><button class="btn btn-danger" type="submit">Delete user<span class="sr-only"> {{.Username}}</span></button>
+          </form>
+        </details>
+      </li>
+    {{end}}
+    </ul>
+  </section>
+  <aside class="settings-aside">
+    <section class="panel" id="add-user" aria-labelledby="add-user-heading">
+      <h2 id="add-user-heading">Add user</h2>
+      <form class="stack" method="post" action="/users">
+        {{ csrfField }}
+        <label>Username<input name="username" autocomplete="off" required></label>
+        <label>Password<input name="password" type="password" autocomplete="new-password" required aria-describedby="new-password-help"></label>
+        <p class="form-help" id="new-password-help">Use at least 8 characters.</p>
+        <label>Role<select name="role" aria-describedby="role-help">{{range .Roles}}<option value="{{.}}"{{if eq . $.NewRole}} selected{{end}}>{{.}}</option>{{end}}</select></label>
+        <div class="actions"><button class="btn btn-primary" type="submit">Create user</button></div>
+      </form>
+    </section>
+    <section class="help-card" id="role-help"><h2>Choose their access</h2><dl class="help-definitions"><dt>Viewer</dt><dd>Browse and export the inventory.</dd><dt>Editor</dt><dd>Manage inventory records, imports, and discovery.</dd><dt>Admin</dt><dd>Also manage users, integrations, and system settings.</dd></dl></section>
+  </aside>
 </div>
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
-<table class="list">
-  <thead><tr><th>Username</th><th>Role</th><th>Created</th><th></th></tr></thead>
-  <tbody>
-  {{range $user := .Users}}
-    <tr>
-      <td>{{$user.Username}}</td>
-      <td>{{$user.Role}}</td>
-      <td>{{$user.CreatedAt}}</td>
-      <td class="row-actions">
-        <form method="post" action="/users/{{$user.ID}}/role" class="inline">
-          {{ csrfField }}
-          <select name="role">
-            {{range $.Roles}}<option value="{{.}}"{{if eq . $user.Role}} selected{{end}}>{{.}}</option>{{end}}
-          </select>
-          <button class="btn" type="submit">Set role</button>
-        </form>
-        <form method="post" action="/users/{{$user.ID}}/password" class="inline">
-          {{ csrfField }}
-          <input name="password" type="password" placeholder="new password" required>
-          <button class="btn" type="submit">Reset</button>
-        </form>
-        <form method="post" action="/users/{{$user.ID}}/delete" class="inline">
-          {{ csrfField }}
-          <button class="btn btn-danger" type="submit">Delete</button>
-        </form>
-      </td>
-    </tr>
-  {{end}}
-  </tbody>
-</table>
-<h2>Add user</h2>
-<form class="stack" method="post" action="/users">
-  {{ csrfField }}
-  <label>Username<input name="username" required></label>
-  <label>Password<input name="password" type="password" required></label>
-  <label>Role
-    <select name="role">
-      {{range .Roles}}<option value="{{.}}"{{if eq . $.NewRole}} selected{{end}}>{{.}}</option>{{end}}
-    </select>
-  </label>
-  <div class="actions">
-    <button class="btn btn-primary" type="submit">Create</button>
-  </div>
-</form>
 {{end}}

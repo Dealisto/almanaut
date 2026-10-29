@@ -1,61 +1,16 @@
-{{/* internal/web/templates/webhooks.html */}}
 {{define "content"}}
-<div class="page-header">
-  <div class="ph-titles">
-    <p class="ph-eyebrow">Administration</p>
-    <h1>Webhooks</h1>
-  </div>
-</div>
-
-{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
-{{if .NewSecret}}
-<div class="notice">
-  <p>New endpoint secret — copy it now, it will not be shown again. Configure your receiver to verify the <code>X-Almanaut-Signature: sha256=&lt;hmac&gt;</code> header with it:</p>
-  <code class="token">{{.NewSecret}}</code>
-</div>
-{{end}}
-
-<div class="panel">
-  <h2>Registered endpoints</h2>
-  {{if .Webhooks}}
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>URL</th><th>Events</th><th>Types</th><th>Status</th><th>Created</th><th></th></tr></thead>
-      <tbody>
-      {{range .Webhooks}}
-        <tr>
-          <td class="mono">{{.URL}}</td>
-          <td>{{if .Events}}{{range $i, $e := .Events}}{{if $i}}, {{end}}{{$e}}{{end}}{{else}}<span class="muted">all</span>{{end}}</td>
-          <td>{{if .EntityTypes}}{{range $i, $t := .EntityTypes}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}<span class="muted">all</span>{{end}}</td>
-          <td>{{if .Enabled}}<span class="badge">enabled</span>{{else}}<span class="badge badge-warn">disabled</span>{{end}}</td>
-          <td>{{.CreatedAt}}</td>
-          <td class="row-actions">
-            <a class="btn" href="/webhooks/{{.ID}}/edit">Edit</a>
-            <form method="post" action="/webhooks/{{.ID}}/toggle" class="inline">
-              {{ csrfField }}
-              <button class="btn" type="submit">{{if .Enabled}}Disable{{else}}Enable{{end}}</button>
-            </form>
-            <form method="post" action="/webhooks/{{.ID}}/delete" class="inline">
-              {{ csrfField }}
-              <button class="btn btn-danger" type="submit">Delete</button>
-            </form>
-          </td>
-        </tr>
-      {{end}}
-      </tbody>
-    </table>
-  </div>
-  {{else}}
-  <p class="muted">No webhook endpoints yet.</p>
-  {{end}}
-</div>
-
-<div class="panel">
-  <h2>Add endpoint</h2>
-  <form class="stack" method="post" action="/webhooks">
-    {{ csrfField }}
-    {{template "webhook_form_fields" .Form}}
-    <div class="actions"><button class="btn btn-primary" type="submit">Create endpoint</button></div>
-  </form>
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Administration</span><h1>Webhooks</h1><p class="page-description">Notify your integrations when inventory records change.</p></div><a class="btn btn-primary" href="#add-endpoint">{{icon "plus"}}New endpoint</a></div>
+{{template "settingsnav" .}}
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
+{{if .NewSecret}}<section class="notice" aria-labelledby="secret-heading"><h2 id="secret-heading">Your endpoint secret is ready</h2><p>Copy it now; it will not be shown again. Use it to verify the <code>X-Almanaut-Signature</code> header on received events.</p><code class="token secret-value" id="endpoint-secret">{{.NewSecret}}</code><div class="copy-control"><button class="btn js-only" type="button" data-copy-target="endpoint-secret">Copy secret</button><span role="status" data-copy-status></span></div></section>{{end}}
+<div class="settings-grid">
+<section class="panel" aria-labelledby="endpoints-heading"><div class="panel-head"><h2 id="endpoints-heading">Registered endpoints</h2><span class="badge">{{len .Webhooks}} endpoints</span></div>
+{{if .Webhooks}}<ul class="record-list">{{range .Webhooks}}<li>
+<div class="record-heading"><span class="entity-icon">{{icon "network"}}</span><div class="record-identity"><h3 class="endpoint-url">{{.URL}}</h3><p>Created <time datetime="{{.CreatedAt}}">{{displayTime .CreatedAt}}</time></p></div>{{if .Enabled}}<span class="badge badge-ok">Enabled</span>{{else}}<span class="badge">Disabled</span>{{end}}</div>
+<dl class="endpoint-details"><dt>Events</dt><dd>{{if .Events}}{{range $i, $e := .Events}}{{if $i}}, {{end}}{{$e}}{{end}}{{else}}All events{{end}}</dd><dt>Record types</dt><dd>{{if .EntityTypes}}{{range $i, $t := .EntityTypes}}{{if $i}}, {{end}}{{$t}}{{end}}{{else}}All types{{end}}</dd></dl>
+<div class="record-actions"><a class="btn" href="/webhooks/{{.ID}}/edit">Edit<span class="sr-only"> {{.URL}}</span></a><form method="post" action="/webhooks/{{.ID}}/toggle">{{ csrfField }}<button class="btn" type="submit">{{if .Enabled}}Disable{{else}}Enable{{end}}<span class="sr-only"> {{.URL}}</span></button></form><form method="post" action="/webhooks/{{.ID}}/delete" onsubmit="return confirm('Delete this webhook endpoint? Event deliveries to it will stop.');">{{ csrfField }}<button class="btn btn-danger" type="submit">Delete<span class="sr-only"> {{.URL}}</span></button></form></div>
+</li>{{end}}</ul>{{else}}<div class="empty">{{icon "network"}}<strong>No webhook endpoints yet.</strong><p>Add a receiver to send it inventory events.</p><a class="btn" href="#add-endpoint">Add your first endpoint</a></div>{{end}}
+</section>
+<aside class="settings-aside"><section class="panel" id="add-endpoint"><h2>Add endpoint</h2><form class="stack" method="post" action="/webhooks">{{ csrfField }}{{template "webhook_form_fields" .Form}}<div class="actions"><button class="btn btn-primary" type="submit">Create endpoint</button></div></form></section><section class="help-card"><h2>Choose what to send</h2><p>Leave a filter empty to receive all events or all record types. Disabling an endpoint pauses deliveries and keeps its configuration.</p></section></aside>
 </div>
 {{end}}

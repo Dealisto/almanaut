@@ -112,6 +112,41 @@ func totpTestHandler(t *testing.T) (http.Handler, *sql.DB) {
 	return newAuthedTestHandler(t, db), db
 }
 
+func TestTOTPInvalidCodesKeepAnAccessibleRetryForm(t *testing.T) {
+	h, db := totpTestHandler(t)
+	session := loginAs(t, h, "admin", "password123")
+	postCSRF(t, h, session, "/account/2fa/setup", "")
+	before, err := store.NewTOTPRepo(db).Get(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := postCSRF(t, h, session, "/account/2fa/confirm", "code=invalid")
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Header().Get("Content-Type"), "text/html") {
+		t.Fatalf("invalid enrollment response: %d %s", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	for _, want := range []string{`role="alert"`, `aria-describedby="two-factor-error"`, `action="/account/2fa/confirm"`, "Invalid code"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("enrollment retry missing %q", want)
+		}
+	}
+	after, err := store.NewTOTPRepo(db).Get(1)
+	if err != nil || after.Enabled || after.Secret != before.Secret {
+		t.Fatal("invalid enrollment changed the stored factor")
+	}
+	enroll2FA(t, h, db, session, 1)
+	rec = postCSRF(t, h, session, "/account/2fa/disable", "code=invalid")
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `action="/account/2fa/disable"`) || !strings.Contains(rec.Body.String(), `role="alert"`) {
+		t.Fatal("invalid disable must show the error and retry form")
+	}
+	after, err = store.NewTOTPRepo(db).Get(1)
+	if err != nil || !after.Enabled {
+		t.Fatal("invalid disable changed the stored factor")
+	}
+	if left, err := store.NewTOTPRepo(db).CountUnusedRecovery(1); err != nil || left != recoveryCodeCount {
+		t.Fatal("invalid disable consumed recovery codes")
+	}
+}
+
 func TestTOTPEnrollAndLogin(t *testing.T) {
 	h, db := totpTestHandler(t)
 	session := loginAs(t, h, "admin", "password123") // admin is user id 1
