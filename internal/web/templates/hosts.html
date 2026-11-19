@@ -17,8 +17,8 @@
   <tbody>
   {{range .Items}}
     <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select row {{.ID}}">{{end}}</td>
-      <td><div class="entity-cell"><span class="entity-icon">{{icon "server"}}</span><div><a href="/hosts/{{.ID}}"><strong>{{.Name}}</strong></a><small>{{.Type}}</small></div></div></td>
-      <td>{{.Type}}</td>
+      <td><div class="entity-cell"><span class="entity-icon">{{icon "server"}}</span><div><a href="/hosts/{{.ID}}"><strong>{{.Name}}</strong></a><small>{{.TypeLabel}}</small></div></div></td>
+      <td>{{.TypeLabel}}</td>
       <td>{{.OS}}</td>
       <td>{{range $i, $ip := .IPs}}{{if $i}}, {{end}}{{$ip}}{{end}}</td>
       <td>{{.Status}}</td>

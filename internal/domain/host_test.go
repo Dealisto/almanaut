@@ -11,7 +11,9 @@ func TestHostValidate(t *testing.T) {
 		{"valid minimal", Host{Name: "web01", Type: "physical"}, false},
 		{"valid with ips", Host{Name: "web01", Type: "vm", IPs: []string{"10.0.0.5", "fe80::1"}}, false},
 		{"empty name", Host{Name: "  ", Type: "physical"}, true},
-		{"bad type", Host{Name: "web01", Type: "toaster"}, true},
+		{"custom type name", Host{Name: "web01", Type: "toaster"}, false},
+		{"bad type name", Host{Name: "web01", Type: "bad type"}, true},
+		{"empty type", Host{Name: "web01"}, true},
 		{"bad ip", Host{Name: "web01", Type: "vm", IPs: []string{"not-an-ip"}}, true},
 	}
 	for _, tc := range tests {

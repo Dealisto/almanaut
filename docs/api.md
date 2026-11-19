@@ -55,6 +55,11 @@ curl -X POST http://localhost:8080/api/hosts \
   -d '{"name":"nas","type":"physical"}'
 ```
 
+Host `type` values must be names from `GET /api/host-types`, including any
+custom types created through **Settings & data → Host types**. Send the stable
+`name`, not its display `label`. An unknown name returns `400` on create or
+update. Host JSON continues to use the same string `type` field.
+
 ## Endpoints
 
 | Endpoint | Returns |
@@ -64,6 +69,7 @@ curl -X POST http://localhost:8080/api/hosts \
 | `GET /api/{type}/{id}` | One entity, or `404 {"error":"…"}` if absent |
 | `PUT /api/{type}/{id}` | Full replace from a JSON body (not a partial patch); `200` + the updated entity, or `404`/`400` |
 | `DELETE /api/{type}/{id}` | `204` on success, `404` if absent |
+| `GET /api/host-types` | Available host types as `[{"name":"vm","label":"Virtual machine"}, …]` |
 | `GET /api/search?q=<term>` | Flat array of matches: `[{"type","id","label","path"}]` |
 | `GET /api/relationships` | All relationships |
 | `GET /api/openapi.json` | The OpenAPI 3 document describing every route and schema |

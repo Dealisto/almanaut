@@ -58,8 +58,8 @@ func TestExportEmptyMarshalsEmptyLists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Export: %v", err)
 	}
-	if snap.Version != 1 {
-		t.Errorf("Version = %d, want 1", snap.Version)
+	if snap.Version != snapshotVersion {
+		t.Errorf("Version = %d, want %d", snap.Version, snapshotVersion)
 	}
 	out, err := yaml.Marshal(snap)
 	if err != nil {

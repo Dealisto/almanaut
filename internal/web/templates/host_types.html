@@ -1,0 +1,23 @@
+{{define "content"}}
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Settings &amp; data</span><h1>Host types</h1><p class="page-description">Choose the types available when adding or editing hosts.</p></div>{{if canWrite}}<a class="btn btn-primary" href="#add-type">{{icon "plus"}}New type</a>{{end}}</div>
+{{template "settingsnav" .}}
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
+<div class="settings-grid">
+<section class="panel" aria-labelledby="types-heading"><div class="panel-head"><h2 id="types-heading">Available types</h2><span class="badge">{{len .Types}} types</span></div>
+<ul class="record-list">{{range .Types}}<li><div class="record-heading"><span class="entity-icon">{{icon "server"}}</span><div class="record-identity"><h3>{{.Label}}</h3><p><code>{{.Name}}</code>{{if .Builtin}} · Built-in{{end}}</p></div></div>
+{{if canWrite}}<details class="disclosure"{{if or (eq $.EditName .Name) (eq $.DeleteName .Name)}} open{{end}}><summary>Edit type<span class="sr-only"> {{.Label}}</span></summary>
+<form class="inline-editor" method="post" action="/host-types/{{.Name}}">{{csrfField}}<label>Display label<input name="label" value="{{if eq $.EditName .Name}}{{$.EditLabel}}{{else}}{{.Label}}{{end}}" maxlength="100" required aria-label="Display label for {{.Name}}"></label><button class="btn" type="submit">Save label</button></form>
+{{if .Builtin}}<p class="muted">This built-in type can be renamed but cannot be deleted.</p>{{else}}
+<form class="destructive-action" method="post" action="/host-types/{{.Name}}/delete" onsubmit="return confirm('Delete this type and reassign its hosts if a replacement is selected?');">{{csrfField}}
+<p class="muted">If hosts use this type, choose a replacement. Their other details will be kept.</p>
+<label>Replacement type<select name="replacement"><option value="">Delete only if unused</option>{{$name := .Name}}{{range $.Types}}{{if ne .Name $name}}<option value="{{.Name}}"{{if and (eq $.DeleteName $name) (eq $.Replacement .Name)}} selected{{end}}>{{.Label}}</option>{{end}}{{end}}</select></label>
+<button class="btn btn-danger" type="submit">Delete type<span class="sr-only"> {{.Label}}</span></button></form>{{end}}
+</details>{{end}}</li>{{end}}</ul>
+</section>
+<aside class="settings-aside">{{if canWrite}}<section class="panel" id="add-type"><h2>Add a type</h2><form class="stack" method="post" action="/host-types">{{csrfField}}
+<label>Label<input name="label" value="{{.Label}}" placeholder="e.g. Container" maxlength="100" required></label>
+<details class="disclosure"{{if .Name}} open{{end}}><summary>Advanced: type name</summary><label>Name (optional)<input name="name" value="{{.Name}}" placeholder="Generated from the label" maxlength="64" pattern="[a-z0-9][a-z0-9_\-]*" aria-describedby="type-name-help"></label><p id="type-name-help" class="form-help">A permanent name used by the API and imports. Use lowercase letters, digits, underscores or hyphens.</p></details>
+<div class="actions"><button class="btn btn-primary" type="submit">Add type</button></div></form></section>{{end}}
+<section class="help-card"><h2>Keep your inventory consistent</h2><p>Renaming a label updates its display on every host. The type name stays the same, so integrations keep working.</p><p>Custom types and labels are included in YAML exports.</p></section>
+</aside></div>
+{{end}}

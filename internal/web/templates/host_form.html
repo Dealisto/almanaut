@@ -6,7 +6,7 @@
   <p class="form-help">Name and type are required. All other details can be added later.</p>
   <div class="form-grid">
     <label>Name<input name="name" value="{{.Item.Name}}" placeholder="e.g. atlas" required autocomplete="off"></label>
-    <label>Type<select name="type">{{range .Extras.Types}}<option value="{{.}}" {{if eq . $.Item.Type}}selected{{end}}>{{.}}</option>{{end}}</select></label>
+    <label>Type<select name="type">{{range .Extras.Types}}<option value="{{.Name}}" {{if eq .Name $.Item.Type}}selected{{end}}>{{.Label}}</option>{{end}}</select></label>
     <label>Operating system<input name="os" value="{{.Item.OS}}" placeholder="e.g. Debian 12"></label>
     <label>Inventory status<input name="status" value="{{.Item.Status}}" placeholder="e.g. running, maintenance"></label>
   </div>

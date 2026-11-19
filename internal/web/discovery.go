@@ -118,7 +118,7 @@ type networkDiscoveryData struct {
 	Title        string
 	Subnet       string
 	PortsInput   string
-	Types        []string
+	Types        []domain.HostType
 	SelectedType string
 	Scanned      bool
 	Rows         []netHostRow
@@ -126,20 +126,25 @@ type networkDiscoveryData struct {
 	Error        string
 }
 
-func networkForm(opts NetDiscoveryOptions) http.HandlerFunc {
+func networkForm(opts NetDiscoveryOptions, hostTypes *store.HostTypeRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if !opts.Enabled {
 			http.NotFound(w, req)
 			return
 		}
+		types, err := hostTypes.List()
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
 		render(w, req, "discovery_network.html", networkDiscoveryData{
 			Title: "Network discovery", Subnet: opts.DefaultSubnet,
-			Types: domain.HostTypes, SelectedType: "physical",
+			Types: types, SelectedType: "physical",
 		})
 	}
 }
 
-func scanNetwork(netscan networkScanner, hosts *store.HostRepo, opts NetDiscoveryOptions) http.HandlerFunc {
+func scanNetwork(netscan networkScanner, hosts *store.HostRepo, opts NetDiscoveryOptions, hostTypes *store.HostTypeRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if !opts.Enabled {
 			http.NotFound(w, req)
@@ -151,9 +156,14 @@ func scanNetwork(netscan networkScanner, hosts *store.HostRepo, opts NetDiscover
 		}
 		subnet := strings.TrimSpace(req.FormValue("subnet"))
 		portsInput := strings.TrimSpace(req.FormValue("ports"))
+		types, err := hostTypes.List()
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
 		data := networkDiscoveryData{
 			Title: "Network discovery", Subnet: subnet, PortsInput: portsInput,
-			Types: domain.HostTypes, SelectedType: "physical",
+			Types: types, SelectedType: "physical",
 		}
 		if subnet == "" {
 			data.Error = "Subnet is required."
@@ -220,6 +230,9 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) 
 		}
 		hostType := req.FormValue("type")
 		txErr := store.WithTx(db, func(tx *sql.Tx) error {
+			if err := store.NewHostTypeRepo(db).WithTx(tx).Require(hostType); err != nil {
+				return err
+			}
 			hr := hosts.WithTx(tx)
 			cl := store.NewChangelogRepo(db).WithTx(tx)
 			// Build the tracked-IP set inside the transaction so the uniqueness
@@ -267,6 +280,10 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) 
 			}
 			return nil
 		})
+		if c := constraintError(txErr); c != nil {
+			http.Error(w, c.Error(), http.StatusBadRequest)
+			return
+		}
 		if txErr != nil {
 			serverError(w, req, txErr)
 			return

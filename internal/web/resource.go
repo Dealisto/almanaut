@@ -64,27 +64,28 @@ type handlerDeps struct {
 // resource describes one entity. Only the genuinely entity-specific behavior
 // lives here; all plumbing is in the generic methods below.
 type resource[T validatable] struct {
-	name      string // route base, e.g. "hosts"
-	sing      string // singular type key, e.g. "host" (relationships, tags, headings)
-	title     string // list page title, e.g. "Hosts"
-	heading   string // singular heading prefix, e.g. "Host" → "Host: name"
-	repo      crud[T]
-	parse     func(get func(string) string, id int64) T // field getter → T; id==0 for create
-	label     func(T) string                            // name shown in catalog/detail heading
-	id        func(T) int64
-	setID     func(item *T, id int64) // writes the id back onto a decoded/parsed T (JSON writes)
-	notes     func(T) string
-	fields    func(T) []fieldRow                                // detail-page rows
-	search    func(T) []string                                  // free-text fields matched by global search
-	ipam      func(T) *ipamSection                              // optional; nil for all but network
-	children  func(T, entityCatalog) (*childrenSection, error)  // optional; nil for all but Site/Location
-	elevation func(T, entityCatalog) (*elevationSection, error) // optional; only Rack
-	probe     func(T) *probeSection                             // optional; only certificates
-	agent     func(T, entityCatalog) *agentSection              // optional; only host
-	newItem   T                                                 // zero value with form defaults
-	listTmpl  string                                            // "hosts.html"
-	formTmpl  string                                            // "host_form.html"
-	extras    func() map[string]any                             // form selects (Types, Kinds…); may be nil
+	name       string // route base, e.g. "hosts"
+	sing       string // singular type key, e.g. "host" (relationships, tags, headings)
+	title      string // list page title, e.g. "Hosts"
+	heading    string // singular heading prefix, e.g. "Host" → "Host: name"
+	repo       crud[T]
+	parse      func(get func(string) string, id int64) T // field getter → T; id==0 for create
+	label      func(T) string                            // name shown in catalog/detail heading
+	id         func(T) int64
+	setID      func(item *T, id int64) // writes the id back onto a decoded/parsed T (JSON writes)
+	notes      func(T) string
+	fields     func(T) []fieldRow                                // detail-page rows
+	search     func(T) []string                                  // free-text fields matched by global search
+	ipam       func(T) *ipamSection                              // optional; nil for all but network
+	children   func(T, entityCatalog) (*childrenSection, error)  // optional; nil for all but Site/Location
+	elevation  func(T, entityCatalog) (*elevationSection, error) // optional; only Rack
+	probe      func(T) *probeSection                             // optional; only certificates
+	agent      func(T, entityCatalog) *agentSection              // optional; only host
+	newItem    T                                                 // zero value with form defaults
+	listTmpl   string                                            // "hosts.html"
+	formTmpl   string                                            // "host_form.html"
+	loadExtras func() (map[string]any, error)                    // fallible form lookups, preferred when set
+	extras     func() map[string]any                             // form selects (Types, Kinds…); may be nil
 }
 
 func (rs resource[T]) singular() string { return rs.sing }
@@ -112,11 +113,14 @@ func (rs resource[T]) options() ([]entityOption, error) {
 	return opts, nil
 }
 
-func (rs resource[T]) extraData() map[string]any {
-	if rs.extras == nil {
-		return nil
+func (rs resource[T]) extraData() (map[string]any, error) {
+	if rs.loadExtras != nil {
+		return rs.loadExtras()
 	}
-	return rs.extras()
+	if rs.extras == nil {
+		return nil, nil
+	}
+	return rs.extras(), nil
 }
 
 func (rs resource[T]) basePath() string { return "/" + rs.name }
@@ -216,13 +220,18 @@ func (rs resource[T]) newForm(d handlerDeps) http.HandlerFunc {
 			serverError(w, req, err)
 			return
 		}
+		extras, err := rs.extraData()
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
 		render(w, req, rs.formTmpl, formData[T]{
 			Title:       "New " + rs.sing,
 			Heading:     "New " + rs.sing,
 			Action:      rs.basePath(),
 			SubmitLabel: "Create",
 			Item:        rs.newItem,
-			Extras:      withCustomFields(rs.extraData(), rows),
+			Extras:      withCustomFields(extras, rows),
 		})
 	}
 }
@@ -243,10 +252,15 @@ func (rs resource[T]) editForm(d handlerDeps) http.HandlerFunc {
 			serverError(w, req, err)
 			return
 		}
+		extras, err := rs.extraData()
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
 		render(w, req, rs.formTmpl, formData[T]{
 			Title: "Edit " + rs.sing, Heading: "Edit " + rs.sing,
 			Action: fmt.Sprintf("%s/%d", rs.basePath(), id), SubmitLabel: "Save",
-			Item: item, Extras: withCustomFields(rs.extraData(), rows),
+			Item: item, Extras: withCustomFields(extras, rows),
 		})
 	}
 }
@@ -449,10 +463,15 @@ func (rs resource[T]) renderCreateError(w http.ResponseWriter, req *http.Request
 		serverError(w, req, err)
 		return
 	}
+	extras, err := rs.extraData()
+	if err != nil {
+		serverError(w, req, err)
+		return
+	}
 	render(w, req, rs.formTmpl, formData[T]{
 		Title: "New " + rs.sing, Heading: "New " + rs.sing,
 		Action: rs.basePath(), SubmitLabel: "Create",
-		Item: item, Extras: withCustomFields(rs.extraData(), rows), Error: cause.Error(),
+		Item: item, Extras: withCustomFields(extras, rows), Error: cause.Error(),
 	})
 }
 
@@ -492,10 +511,15 @@ func (rs resource[T]) renderUpdateError(w http.ResponseWriter, req *http.Request
 		serverError(w, req, err)
 		return
 	}
+	extras, err := rs.extraData()
+	if err != nil {
+		serverError(w, req, err)
+		return
+	}
 	render(w, req, rs.formTmpl, formData[T]{
 		Title: "Edit " + rs.sing, Heading: "Edit " + rs.sing,
 		Action: fmt.Sprintf("%s/%d", rs.basePath(), id), SubmitLabel: "Save",
-		Item: item, Extras: withCustomFields(rs.extraData(), rows), Error: cause.Error(),
+		Item: item, Extras: withCustomFields(extras, rows), Error: cause.Error(),
 	})
 }
 

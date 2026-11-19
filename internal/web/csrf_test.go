@@ -188,7 +188,7 @@ func TestRenderInjectsCSRFField(t *testing.T) {
 		Title: "New host", Heading: "New host",
 		Action: "/hosts", SubmitLabel: "Create",
 		Item:   domain.Host{Type: "physical"},
-		Extras: map[string]any{"Types": domain.HostTypes},
+		Extras: map[string]any{"Types": domain.DefaultHostTypes()},
 	})
 	body := rec.Body.String()
 	if !strings.Contains(body, `name="csrf_token"`) || !strings.Contains(body, "tok-xyz") {

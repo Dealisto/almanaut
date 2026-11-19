@@ -462,13 +462,8 @@ func TestAgentReportAllJunkIPsPreservesExisting(t *testing.T) {
 	}
 }
 
-// Defence in depth: if a merged host somehow still fails domain.Host.Validate
-// — here simulated by a pre-existing row whose Type was valid when written but
-// is no longer in domain.HostTypes, inserted directly to bypass Create's own
-// validation — the handler must answer 400 (bad input) rather than routing it
-// through apiServerError as a 500. mergeAgentReport does not touch Type on an
-// update, so the invalid value survives into the merged host and Validate()
-// rejects it.
+// A legacy row with a type absent from the catalog must yield a validation
+// error, not a server error. Agent updates preserve the human-selected type.
 func TestAgentReportInvalidMergedHostReturns400(t *testing.T) {
 	h, db, raw := agentServer(t, domain.ScopeAgent)
 
