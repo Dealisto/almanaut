@@ -34,6 +34,11 @@ details are listed there.
   replacing any inventory. Older releases reject version 2 exports; use a
   pre-upgrade database backup when rolling back to an older release.
 
+### Security
+- Build with Go 1.26.11 or newer, including the container image, to fix
+  GO-2026-6859 in the standard library's HTTP server and pass the CI
+  vulnerability scan.
+
 ## [1.0.2]
 
 ### Added
