@@ -38,7 +38,7 @@ func mergeAgentReport(h domain.Host, r agentapi.Report, isCreate bool) domain.Ho
 		h.Name = r.Hostname
 		t, ok := agentVirtToHostType[r.VirtKind]
 		if !ok {
-			t = "physical" // domain.Host.Validate rejects anything outside HostTypes
+			t = "physical" // fallback to a built-in catalog key
 		}
 		h.Type = t
 	}

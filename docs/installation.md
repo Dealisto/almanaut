@@ -65,7 +65,7 @@ platform, verify it, and run it:
 
 ```bash
 sha256sum -c checksums.txt --ignore-missing
-tar xzf almanaut_1.0.2_linux_amd64.tar.gz
+tar xzf almanaut_1.1.0_linux_amd64.tar.gz
 ALMANAUT_DATA_DIR=./data ./almanaut
 ```
 
@@ -81,7 +81,7 @@ See [CHANGELOG.md](../CHANGELOG.md) for what changed in each release.
 
 ## From source
 
-Requires Go 1.26.10 or newer — the version pinned by the `go` directive in
+Requires Go 1.26.11 or newer — the version pinned by the `go` directive in
 `go.mod`. With the default `GOTOOLCHAIN=auto`, an older Go downloads the right
 toolchain itself; with `GOTOOLCHAIN=local` it refuses to build instead.
 

@@ -232,6 +232,10 @@ func agentReport(d agentDeps) http.HandlerFunc {
 				"this agent_id is already bound to a different machine; run 'almanaut-agent reset-id' on the clone")
 			return
 		}
+		if c := constraintError(err); c != nil {
+			writeJSONError(w, http.StatusBadRequest, c.Error())
+			return
+		}
 		var invalidHost *invalidHostError
 		if errors.As(err, &invalidHost) {
 			writeJSONError(w, http.StatusBadRequest, invalidHost.Error())

@@ -2,6 +2,7 @@
 <nav class="section-nav" aria-label="Settings and data">
   <a href="/data"{{if isActive "/data"}} aria-current="page"{{end}}>Import &amp; export</a>
   <a href="/views"{{if isActive "/views"}} aria-current="page"{{end}}>Saved views</a>
+  {{if canWrite}}<a href="/host-types"{{if isActive "/host-types"}} aria-current="page"{{end}}>Host types</a>{{end}}
   {{if canWrite}}<a href="/custom-fields"{{if isActive "/custom-fields"}} aria-current="page"{{end}}>Custom fields</a>{{end}}
   {{if isAdmin}}
   <a href="/users"{{if isActive "/users"}} aria-current="page"{{end}}>Users</a>

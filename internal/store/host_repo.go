@@ -40,6 +40,18 @@ func (r *HostRepo) GetTx(tx *sql.Tx, id int64) (domain.Host, error) { return r.W
 
 // Create inserts h and returns its new ID.
 func (r *HostRepo) Create(h domain.Host) (int64, error) {
+	if db, ok := r.db.(*sql.DB); ok {
+		var id int64
+		err := WithTx(db, func(tx *sql.Tx) error {
+			var err error
+			id, err = r.WithTx(tx).Create(h)
+			return err
+		})
+		return id, err
+	}
+	if err := (&HostTypeRepo{db: r.db}).Require(h.Type); err != nil {
+		return 0, err
+	}
 	if h.IPs == nil {
 		h.IPs = []string{}
 	}
@@ -60,6 +72,15 @@ func (r *HostRepo) Create(h domain.Host) (int64, error) {
 
 // Update overwrites the host with h.ID with the values in h.
 func (r *HostRepo) Update(h domain.Host) error {
+	if db, ok := r.db.(*sql.DB); ok {
+		return WithTx(db, func(tx *sql.Tx) error { return r.WithTx(tx).Update(h) })
+	}
+	if _, err := r.Get(h.ID); err != nil {
+		return err
+	}
+	if err := (&HostTypeRepo{db: r.db}).Require(h.Type); err != nil {
+		return err
+	}
 	if h.IPs == nil {
 		h.IPs = []string{}
 	}
@@ -83,8 +104,9 @@ func (r *HostRepo) Get(id int64) (domain.Host, error) {
 	row := r.db.QueryRow(
 		`SELECT h.id, h.name, h.type, h.os, h.cpu, h.ram, h.disk, h.status, h.ips, h.notes,
 		        h.rack_id, h.rack_position, h.u_height, h.check_address,
-		        l.status, l.checked_at, l.changed_at, l.last_error
+		        l.status, l.checked_at, l.changed_at, l.last_error, COALESCE(t.label, h.type)
 		 FROM hosts h
+		 LEFT JOIN host_types t ON t.name = h.type
 		 LEFT JOIN liveness_state l ON l.entity_type = 'host' AND l.entity_id = h.id
 		 WHERE h.id = ?`, id,
 	)
@@ -96,8 +118,9 @@ func (r *HostRepo) List() ([]domain.Host, error) {
 	rows, err := r.db.Query(
 		`SELECT h.id, h.name, h.type, h.os, h.cpu, h.ram, h.disk, h.status, h.ips, h.notes,
 		        h.rack_id, h.rack_position, h.u_height, h.check_address,
-		        l.status, l.checked_at, l.changed_at, l.last_error
+		        l.status, l.checked_at, l.changed_at, l.last_error, COALESCE(t.label, h.type)
 		 FROM hosts h
+		 LEFT JOIN host_types t ON t.name = h.type
 		 LEFT JOIN liveness_state l ON l.entity_type = 'host' AND l.entity_id = h.id
 		 ORDER BY h.name`,
 	)
@@ -132,7 +155,7 @@ func scanHost(s scanner) (domain.Host, error) {
 	if err := s.Scan(
 		&h.ID, &h.Name, &h.Type, &h.OS, &h.CPU, &h.RAM, &h.Disk, &h.Status, &ipsJSON, &h.Notes,
 		&h.RackID, &h.RackPosition, &h.UHeight, &h.CheckAddress,
-		&lStatus, &lChecked, &lChanged, &lErr,
+		&lStatus, &lChecked, &lChanged, &lErr, &h.TypeLabel,
 	); err != nil {
 		return domain.Host{}, notFound(fmt.Errorf("scan host: %w", err))
 	}

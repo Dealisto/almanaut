@@ -10,6 +10,35 @@ details are listed there.
 
 ## [Unreleased]
 
+## [1.1.0]
+
+### Added
+- Manage host types from **Settings & data → Host types**: add custom types,
+  rename display labels, and delete unused types. Deleting a type still in
+  use requires a replacement; reassignment preserves host details and custom
+  fields, records host history, and dispatches update webhooks atomically.
+  Addresses #141.
+- `GET /api/host-types` lists stable type names and display labels. Custom
+  types are available in host forms, the host API, CSV imports, and network
+  discovery imports. Search matches both the type name and its label.
+
+### Changed
+- Store the host type catalog in SQLite. The built-in names `physical`, `vm`,
+  `lxc`, and `vps` remain stable and cannot be deleted; their labels can be
+  renamed without disrupting Proxmox discovery or agent reports. Existing
+  host assignments are preserved during migration, and agent updates retain
+  manually selected custom types.
+- YAML exports now use format version 2 and include the host type catalog.
+  Version 1 exports remain importable and restore the original built-in
+  catalog when no types are supplied. Invalid catalogs are rejected before
+  replacing any inventory. Older releases reject version 2 exports; use a
+  pre-upgrade database backup when rolling back to an older release.
+
+### Security
+- Build with Go 1.26.11 or newer, including the container image, to fix
+  GO-2026-6859 in the standard library's HTTP server and pass the CI
+  vulnerability scan.
+
 ## [1.0.2]
 
 ### Added
@@ -193,7 +222,8 @@ capabilities that make up v1.0.
 - Versioned releases: pushing a `v*` tag publishes prebuilt binaries with
   checksums (goreleaser) and container tags `:X.Y.Z`, `:X.Y`, and `:latest`.
 
-[Unreleased]: https://github.com/Dealisto/almanaut/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/Dealisto/almanaut/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Dealisto/almanaut/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/Dealisto/almanaut/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/Dealisto/almanaut/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Dealisto/almanaut/releases/tag/v1.0.0

@@ -13,6 +13,7 @@ import (
 // Snapshot is the full inventory in a form that round-trips through YAML.
 type Snapshot struct {
 	Version        int                   `yaml:"version"`
+	HostTypes      []domain.HostType     `yaml:"host_types"`
 	Hosts          []domain.Host         `yaml:"hosts"`
 	Services       []domain.Service      `yaml:"services"`
 	Networks       []domain.Network      `yaml:"networks"`
@@ -64,6 +65,7 @@ func Export(db *sql.DB) (Snapshot, error) {
 	var listErr error
 	snap := Snapshot{
 		Version:           snapshotVersion,
+		HostTypes:         exportList(&listErr, NewHostTypeRepo(db).WithTx(tx).List),
 		Hosts:             exportList(&listErr, NewHostRepo(db).WithTx(tx).List),
 		Services:          exportList(&listErr, NewServiceRepo(db).WithTx(tx).List),
 		Networks:          exportList(&listErr, NewNetworkRepo(db).WithTx(tx).List),
@@ -107,7 +109,7 @@ func exportList[T any](err *error, list func() ([]T, error)) []T {
 }
 
 // snapshotVersion is the Snapshot format Export writes and Import reads.
-const snapshotVersion = 1
+const snapshotVersion = 2
 
 // Import replaces the entire inventory with snap, in a single transaction.
 // It validates every record first (aborting before any delete on the first
@@ -119,6 +121,13 @@ const snapshotVersion = 1
 func Import(db *sql.DB, snap Snapshot) error {
 	if snap.Version > snapshotVersion {
 		return fmt.Errorf("snapshot version %d is newer than this almanaut supports (%d)", snap.Version, snapshotVersion)
+	}
+	// Older snapshots predate the catalog and contain only built-in types.
+	if snap.Version < 2 && len(snap.HostTypes) == 0 {
+		snap.HostTypes = domain.DefaultHostTypes()
+	}
+	if err := validateHostTypes(snap); err != nil {
+		return err
 	}
 	for _, err := range []error{
 		validateAll("host", snap.Hosts, func(h domain.Host) int64 { return h.ID }),
@@ -168,7 +177,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 		if err := reconcileSideTables(tx); err != nil {
 			return err
 		}
-		n := len(snap.Hosts) + len(snap.Services) + len(snap.Networks) + len(snap.Domains) +
+		n := len(snap.HostTypes) + len(snap.Hosts) + len(snap.Services) + len(snap.Networks) + len(snap.Domains) +
 			len(snap.Certificates) + len(snap.Backups) + len(snap.Hardware) +
 			len(snap.Subscriptions) + len(snap.Accounts) + len(snap.VLANs) + len(snap.Reservations) + len(snap.Contacts) +
 			len(snap.Sites) + len(snap.Locations) + len(snap.Racks) +
@@ -191,7 +200,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 // Import clears and refills exactly these. TestEveryTableIsClassified fails
 // when a migration adds a table that is in neither this list nor one of the
 // documented exclusions, so a new entity cannot silently miss the export.
-var inventoryTables = []string{"hosts", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "nics", "ports", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"}
+var inventoryTables = []string{"hosts", "host_types", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "nics", "ports", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"}
 
 // replaceInventory clears every table and re-inserts snap within tx. It must run
 // inside WithTx, which owns begin/commit/rollback and is panic-safe, so any
@@ -211,6 +220,11 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 		return nil
 	}
 
+	for _, t := range snap.HostTypes {
+		if _, err := tx.Exec(`INSERT INTO host_types (name, label) VALUES (?, ?)`, t.Name, t.Label); err != nil {
+			return fmt.Errorf("insert host type %q: %w", t.Name, err)
+		}
+	}
 	for _, h := range snap.Hosts {
 		ips := h.IPs
 		if ips == nil {
@@ -611,6 +625,32 @@ func validateAll[T interface{ Validate() error }](label string, items []T, id fu
 	for _, it := range items {
 		if err := it.Validate(); err != nil {
 			return fmt.Errorf("%s %d: %w", label, id(it), err)
+		}
+	}
+	return nil
+}
+
+// validateHostTypes keeps imports portable and ensures integrations always
+// have their built-in keys, even when their display labels were renamed.
+func validateHostTypes(snap Snapshot) error {
+	names := map[string]bool{}
+	for _, t := range snap.HostTypes {
+		if err := t.Validate(); err != nil {
+			return fmt.Errorf("host type %q: %w", t.Name, err)
+		}
+		if names[t.Name] {
+			return fmt.Errorf("duplicate host type %q", t.Name)
+		}
+		names[t.Name] = true
+	}
+	for _, name := range domain.HostTypes {
+		if !names[name] {
+			return fmt.Errorf("missing built-in host type %q", name)
+		}
+	}
+	for _, h := range snap.Hosts {
+		if !names[h.Type] {
+			return fmt.Errorf("host %d: unknown host type %q", h.ID, h.Type)
 		}
 	}
 	return nil

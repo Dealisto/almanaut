@@ -15,7 +15,8 @@ instances, or as a portable copy of your data.
 ## What the file contains
 
 Every entity type, with its relationships, tags, journal entries and custom
-fields (definitions and values). Records keep their ids, so references between
+fields (definitions and values), plus the host type catalog and its display
+labels. Records keep their ids, so references between
 them survive the round trip.
 
 It does **not** contain anything specific to one instance: users, sessions,
@@ -23,6 +24,13 @@ API tokens and 2FA, webhooks, saved views, the authentication audit log, the
 history (changelog), [attachments](inventory-model.md#attachments), agent
 bindings and reports, Uptime Kuma monitor mappings, and discovery runs. For a
 complete backup, copy the SQLite database file instead.
+
+Exports use format version 2 to include `host_types`. Version 1 files remain
+supported; files without a catalog restore the four built-in host types with
+their original labels. Version 2 files must include all four built-in names,
+unique type names, and a catalog entry for every host's type. Invalid catalogs
+are rejected before any inventory is replaced. Older almanaut versions reject
+version 2 exports rather than silently dropping the catalog.
 
 ## What import does to the rest
 
@@ -61,6 +69,8 @@ without touching other records. Select the record type, choose the file, and
 confirm the import. If validation fails, the error is shown next to the form;
 select the corrected file again before retrying.
 
+- For hosts, `type` is the permanent name from **Host types**, not the display
+  label. Create custom types before importing a CSV that refers to them.
 - The header row uses the entity's field names in `snake_case`, matching the
   YAML export (e.g. for hosts: `name,type,os,cpu,ram,disk,status,ips,notes`).
 - An optional `id` column controls create vs. update: a row with an existing

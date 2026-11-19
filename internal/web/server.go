@@ -119,6 +119,7 @@ func New(cfg Config) http.Handler {
 	reservations := cfg.Reservations
 	docker, netscan, netOpts := cfg.Docker, cfg.NetScan, cfg.NetOpts
 	proxmox, pveOpts := cfg.Proxmox, cfg.PVEOpts
+	hostTypes := store.NewHostTypeRepo(db)
 	hostRS := resource[domain.Host]{
 		name: "hosts", sing: "host", title: "Hosts", heading: "Host",
 		repo:  hosts,
@@ -129,14 +130,14 @@ func New(cfg Config) http.Handler {
 		notes: func(h domain.Host) string { return h.Notes },
 		fields: func(h domain.Host) []fieldRow {
 			return []fieldRow{
-				{"Type", h.Type}, {"OS", h.OS}, {"CPU", h.CPU}, {"RAM", h.RAM},
+				{"Type", h.TypeLabel}, {"OS", h.OS}, {"CPU", h.CPU}, {"RAM", h.RAM},
 				{"Disk", h.Disk}, {"Status", h.Status}, {"IPs", strings.Join(h.IPs, ", ")},
 				{"Rack", rackLabel(racks, h.RackID)}, {"Rack position (U)", rackPosLabel(h.RackID, h.RackPosition, h.UHeight)},
 				{"Liveness", livenessLabel(h.Liveness)},
 			}
 		},
 		search: func(h domain.Host) []string {
-			return []string{h.Name, h.OS, h.CPU, h.RAM, h.Disk, h.Status, h.Notes, strings.Join(h.IPs, " ")}
+			return []string{h.Name, h.Type, h.TypeLabel, h.OS, h.CPU, h.RAM, h.Disk, h.Status, h.Notes, strings.Join(h.IPs, " ")}
 		},
 		children: func(h domain.Host, cat entityCatalog) (*childrenSection, error) {
 			return ownedPortsChildren(ports, "host", h.ID, cat)
@@ -144,9 +145,16 @@ func New(cfg Config) http.Handler {
 		agent:    agentSectionFor(agents, hosts),
 		newItem:  domain.Host{Type: "physical", UHeight: 1},
 		listTmpl: "hosts.html", formTmpl: "host_form.html",
-		extras: func() map[string]any {
-			rackList, _ := racks.List()
-			return map[string]any{"Types": domain.HostTypes, "Racks": rackList}
+		loadExtras: func() (map[string]any, error) {
+			types, err := hostTypes.List()
+			if err != nil {
+				return nil, err
+			}
+			rackList, err := racks.List()
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"Types": types, "Racks": rackList}, nil
 		},
 	}
 	nicRS := resource[domain.NIC]{
@@ -815,6 +823,10 @@ func New(cfg Config) http.Handler {
 			r.Post("/tags/delete", removeTag(tags, cat))
 			r.Get("/tags", tagsOverview(tags, cat))
 
+			r.Get("/host-types", hostTypesPage(hostTypes))
+			r.Post("/host-types", createHostType(hostTypes))
+			r.Post("/host-types/{name}", updateHostType(hostTypes))
+			r.Post("/host-types/{name}/delete", deleteHostType(hostTypes, hosts, hostRS, deps))
 			r.Get("/custom-fields", customFieldsPage(customFields))
 			r.Post("/custom-fields", createCustomField(customFields))
 			r.Post("/custom-fields/{id}", updateCustomFieldLabel(customFields))
@@ -840,8 +852,8 @@ func New(cfg Config) http.Handler {
 			r.Get("/discovery", discoveryLanding(netOpts, pveOpts))
 			r.Get("/discovery/docker", scanDocker(docker, services, hosts))
 			r.Post("/discovery/docker/import", importDocker(docker, services, relationships, db))
-			r.Get("/discovery/network", networkForm(netOpts))
-			r.Post("/discovery/network/scan", scanNetwork(netscan, hosts, netOpts))
+			r.Get("/discovery/network", networkForm(netOpts, hostTypes))
+			r.Post("/discovery/network/scan", scanNetwork(netscan, hosts, netOpts, hostTypes))
 			r.Post("/discovery/network/import", importNetwork(hosts, netOpts, db))
 			r.Get("/discovery/proxmox", scanProxmox(proxmox, hosts, pveOpts))
 			r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts, db))
@@ -865,6 +877,7 @@ func New(cfg Config) http.Handler {
 		for _, rs := range resources {
 			rs.mountAPI(r, deps)
 		}
+		r.Get("/api/host-types", hostTypesJSON(hostTypes))
 		r.Get("/api/search", apiSearch(cat, customFields))
 		r.Get("/api/relationships", apiRelationships(relationships))
 		r.Get("/api/openapi.json", openAPISpec(resources, cfg.Version))

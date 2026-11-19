@@ -27,6 +27,23 @@ bulk](lists-and-views.md), and the inventory as a whole is audited on the
 | **NICs** | Network cards on a host (onboard or expansion) |
 | **Ports** | Physical network ports on hosts and hardware, and the cables between them |
 
+## Host types
+
+Open **Settings & data → Host types** (`/host-types`) to add a custom type,
+rename its display label, or delete it. Editors and administrators can manage
+the catalog. Types appear in host forms and network discovery imports.
+
+Each type has a permanent name used in the API and imports, and a display
+label shown on host lists and details. Renaming the label preserves every
+host's type assignment. The built-in names `physical`, `vm`, `lxc`, and `vps`
+can be relabeled but cannot be deleted: Proxmox discovery and agent reports
+use these stable names. Agent updates preserve a manually selected custom type.
+
+An unused custom type can be deleted directly. For a type still assigned to
+hosts, select a replacement before deleting it. All affected hosts are updated
+in one transaction; their other details and custom fields are preserved, and
+the changes appear in host history and update webhooks.
+
 ## Navigating a record
 
 Record pages have three sections:

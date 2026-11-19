@@ -7,21 +7,23 @@ import (
 	"strings"
 )
 
-// HostTypes is the closed set of allowed Host.Type values.
+// HostTypes contains the built-in type names used by discovery and the agent.
+// Additional types and display labels are stored in the host type catalog.
 var HostTypes = []string{"physical", "vm", "lxc", "vps"}
 
 // Host is a machine in the homelab (physical, VM, LXC, or VPS).
 type Host struct {
-	ID     int64    `yaml:"id" json:"id"`
-	Name   string   `yaml:"name" json:"name"`
-	Type   string   `yaml:"type" json:"type"`
-	OS     string   `yaml:"os" json:"os"`
-	CPU    string   `yaml:"cpu" json:"cpu"`
-	RAM    string   `yaml:"ram" json:"ram"`
-	Disk   string   `yaml:"disk" json:"disk"`
-	Status string   `yaml:"status" json:"status"`
-	IPs    []string `yaml:"ips" json:"ips"`
-	Notes  string   `yaml:"notes" json:"notes"`
+	ID        int64    `yaml:"id" json:"id"`
+	Name      string   `yaml:"name" json:"name"`
+	Type      string   `yaml:"type" json:"type"`
+	TypeLabel string   `yaml:"-" json:"-"` // derived display label; Type stays stable
+	OS        string   `yaml:"os" json:"os"`
+	CPU       string   `yaml:"cpu" json:"cpu"`
+	RAM       string   `yaml:"ram" json:"ram"`
+	Disk      string   `yaml:"disk" json:"disk"`
+	Status    string   `yaml:"status" json:"status"`
+	IPs       []string `yaml:"ips" json:"ips"`
+	Notes     string   `yaml:"notes" json:"notes"`
 
 	CheckAddress string          `yaml:"check_address" json:"check_address"` // optional host:port for TCP liveness checks; empty = not monitored
 	Liveness     *LivenessStatus `yaml:"-" json:"liveness,omitempty"`        // derived, populated by the repo join
@@ -36,9 +38,10 @@ func (h Host) Validate() error {
 	if strings.TrimSpace(h.Name) == "" {
 		return fmt.Errorf("name is required")
 	}
-	if !contains(HostTypes, h.Type) {
-		return fmt.Errorf("type %q must be one of %v", h.Type, HostTypes)
+	if !hostTypeNameRE.MatchString(h.Type) {
+		return fmt.Errorf("invalid host type name %q", h.Type)
 	}
+	// Catalog membership is checked by the repository in the write transaction.
 	for _, ip := range h.IPs {
 		if net.ParseIP(ip) == nil {
 			return fmt.Errorf("invalid IP address: %q", ip)

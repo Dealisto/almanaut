@@ -26,7 +26,7 @@
   {{ csrfField }}
     <label>Import discovered hosts as type
       <select name="type">
-        {{range .Types}}<option value="{{.}}"{{if eq . $.SelectedType}} selected{{end}}>{{.}}</option>{{end}}
+        {{range .Types}}<option value="{{.Name}}"{{if eq .Name $.SelectedType}} selected{{end}}>{{.Label}}</option>{{end}}
       </select>
     </label>
     <div class="table-wrap">

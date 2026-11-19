@@ -330,6 +330,7 @@ func buildOpenAPIDoc(resources []mountable, version string) *openAPIDoc {
 					p.set("error", &oaSchema{Type: "string"})
 					return p
 				}()},
+				"HostType":     schemaForType(reflect.TypeOf(domain.HostType{})),
 				"Relationship": schemaForType(reflect.TypeOf(domain.Relationship{})),
 				"SearchResult": schemaForType(reflect.TypeOf(searchEntry{})),
 			},
@@ -389,6 +390,11 @@ func buildOpenAPIDoc(resources []mountable, version string) *openAPIDoc {
 		}
 	}
 
+	// Catalog settings are not entities with relationships or custom fields.
+	doc.Paths["/api/host-types"] = &oaPathItem{Get: &oaOperation{
+		Tags: []string{"General"}, Summary: "List available host type names and labels",
+		Responses: map[string]oaResponse{"200": jsonArrayResp("Host type catalog", "HostType")},
+	}}
 	// Cross-entity endpoints, tagged "General".
 	doc.Paths["/api/search"] = &oaPathItem{Get: &oaOperation{
 		Tags: []string{"General"}, Summary: "Search entities by free-text query",
@@ -530,6 +536,7 @@ func buildAPIDocs(resources []mountable, version string) apiDocsData {
 		Endpoints: []apiDocEndpoint{
 			{"GET", "/api/search?q=", "Search entities by free-text query"},
 			{"GET", "/api/relationships", "List all relationships"},
+			{"GET", "/api/host-types", "List available host type names and labels"},
 			{"GET", "/metrics", "Prometheus metrics"},
 			{"GET", "/api/openapi.json", "This API's OpenAPI 3 document"},
 		},

@@ -9,7 +9,7 @@ import (
 
 func TestNICRepoRoundTrip(t *testing.T) {
 	db := newTestDB(t)
-	hostID, err := NewHostRepo(db).Create(domain.Host{Name: "server1"})
+	hostID, err := NewHostRepo(db).Create(domain.Host{Name: "server1", Type: "physical"})
 	if err != nil {
 		t.Fatalf("create host: %v", err)
 	}

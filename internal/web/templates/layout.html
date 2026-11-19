@@ -56,8 +56,9 @@
         <a href="/impact" class="{{if isActive "/impact"}}active{{end}}"{{if isActive "/impact"}} aria-current="page"{{end}}>Impact analysis</a>
         <a href="/tags" class="{{if isActive "/tags"}}active{{end}}"{{if isActive "/tags"}} aria-current="page"{{end}}>Tags</a>
       </details>
-      <details class="nav-group nav-tools"{{if or (isActive "/custom-fields") (isActive "/data") (isActive "/users") (isActive "/audit") (isActive "/webhooks") (isActive "/tasks") (isActive "/kuma") (isActive "/api/docs")}} open{{end}}>
+      <details class="nav-group nav-tools"{{if or (isActive "/custom-fields") (isActive "/host-types") (isActive "/data") (isActive "/users") (isActive "/audit") (isActive "/webhooks") (isActive "/tasks") (isActive "/kuma") (isActive "/api/docs")}} open{{end}}>
         <summary>{{icon "settings"}}Settings & data{{icon "chevron"}}</summary>
+        {{if canWrite}}<a href="/host-types" class="{{if isActive "/host-types"}}active{{end}}"{{if isActive "/host-types"}} aria-current="page"{{end}}>Host types</a>{{end}}
         {{if canWrite}}<a href="/custom-fields" class="{{if isActive "/custom-fields"}}active{{end}}"{{if isActive "/custom-fields"}} aria-current="page"{{end}}>Custom fields</a>{{end}}
         <a href="/data" class="{{if isActive "/data"}}active{{end}}"{{if isActive "/data"}} aria-current="page"{{end}}>Import & export</a>
         {{if isAdmin}}<a href="/users" class="{{if isActive "/users"}}active{{end}}"{{if isActive "/users"}} aria-current="page"{{end}}>Users</a>{{end}}
