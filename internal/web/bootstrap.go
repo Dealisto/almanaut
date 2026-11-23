@@ -28,6 +28,9 @@ func BootstrapAdmin(users *store.UserRepo, logger *log.Logger, envUser, envPass 
 	}
 
 	if n == 0 {
+		if err := (domain.User{Username: username, Role: domain.RoleAdmin}).Validate(); err != nil {
+			return err
+		}
 		password, generated, err := passwordOrGenerated(envPass)
 		if err != nil {
 			return err

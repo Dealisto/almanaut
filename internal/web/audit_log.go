@@ -32,17 +32,50 @@ func recordAuth(audit *store.AuthEventRepo, r *http.Request, eventType, username
 		return
 	}
 	err := audit.Create(domain.AuthEvent{
-		Type: eventType, Username: username, UserID: userID,
-		SourceIP: clientIP(r), Detail: detail, CreatedAt: nowRFC3339(),
+		Type: eventType, Username: boundedAuditText(username, domain.MaxUsernameBytes), UserID: userID,
+		SourceIP: boundedAuditText(clientIP(r), 64), Detail: boundedAuditText(detail, 1024), CreatedAt: nowRFC3339(),
 	})
 	if err != nil {
 		loggerFrom(r.Context()).Printf("audit: record %s failed: %v", eventType, err)
 	}
 }
 
+func boundedAuditText(s string, limit int) string {
+	if len(s) > limit {
+		s = s[:limit]
+	}
+	return strings.ToValidUTF8(s, "")
+}
+
+// auditRetention performs maintenance on the first request and at most hourly
+// thereafter, independent of password, SSO, API or 2FA authentication. Health
+// probes also trigger it. Reserving the interval before the database work keeps
+// concurrent requests and database failures from causing a cleanup stampede.
+func auditRetention(audit *store.AuthEventRepo, retentionDays int, now func() time.Time) func(http.Handler) http.Handler {
+	var mu sync.Mutex
+	var nextRun time.Time
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if audit != nil && retentionDays > 0 {
+				t := now()
+				mu.Lock()
+				due := !t.Before(nextRun)
+				if due {
+					nextRun = t.Add(time.Hour)
+				}
+				mu.Unlock()
+				if due {
+					pruneAuditOpportunistically(audit, r, t, retentionDays)
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // pruneAuditOpportunistically deletes audit events older than the retention
-// window. Called on the low-frequency login-success path so the table stays
-// bounded without a dedicated job. retentionDays <= 0 disables pruning. A nil
+// window. Called by shared request maintenance so the table stays bounded
+// without a dedicated job. retentionDays <= 0 disables pruning. A nil
 // repo or a delete failure is logged and ignored.
 func pruneAuditOpportunistically(audit *store.AuthEventRepo, r *http.Request, now time.Time, retentionDays int) {
 	if audit == nil || retentionDays <= 0 {

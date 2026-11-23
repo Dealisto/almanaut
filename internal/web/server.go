@@ -689,6 +689,7 @@ func New(cfg Config) http.Handler {
 	r.Use(injectLogger(logger))
 	r.Use(recoverer(logger))
 	r.Use(securityHeaders)
+	r.Use(auditRetention(authEvents, cfg.AuthAuditRetentionDays, time.Now))
 	if cfg.Kuma.Enabled {
 		r.Use(markKumaEnabled)
 	}
@@ -706,10 +707,10 @@ func New(cfg Config) http.Handler {
 	if cfg.AuthEnabled {
 		throttle := newLoginThrottle()
 		r.Group(func(r chi.Router) {
-			r.Use(limitBody)
+			r.Use(limitLoginBody)
 			r.Use(csrfProtect(cfg.SecureCookies))
 			r.Get("/login", loginForm)
-			r.Post("/login", login(users, sessions, totp, throttle, authEvents, cfg.AuthAuditRetentionDays, cfg.SecureCookies))
+			r.Post("/login", login(users, sessions, totp, throttle, authEvents, cfg.SecureCookies))
 			r.Get("/login/2fa", challenge2FAForm(totp))
 			r.Post("/login/2fa", verify2FA(users, sessions, totp, throttle, authEvents, cfg.SecureCookies))
 		})

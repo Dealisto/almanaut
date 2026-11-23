@@ -5,6 +5,9 @@ import (
 	"strings"
 )
 
+// MaxRackUnits is the largest supported rack capacity and placement value.
+const MaxRackUnits = 60
+
 // Rack is an equipment rack within a Location. LocationID is a soft reference
 // (0 = none). UHeight is the rack's capacity in rack units.
 type Rack struct {
@@ -20,8 +23,8 @@ func (r Rack) Validate() error {
 	if strings.TrimSpace(r.Name) == "" {
 		return fmt.Errorf("name is required")
 	}
-	if r.UHeight < 1 || r.UHeight > 60 {
-		return fmt.Errorf("u_height must be between 1 and 60")
+	if r.UHeight < 1 || r.UHeight > MaxRackUnits {
+		return fmt.Errorf("u_height must be between 1 and %d", MaxRackUnits)
 	}
 	return nil
 }
@@ -33,11 +36,11 @@ func validateRackPlacement(rackID int64, position, uHeight int) error {
 	if rackID == 0 {
 		return nil
 	}
-	if position < 1 {
-		return fmt.Errorf("rack position must be at least 1 when assigned to a rack")
+	if position < 1 || position > MaxRackUnits {
+		return fmt.Errorf("rack position must be between 1 and %d when assigned to a rack", MaxRackUnits)
 	}
-	if uHeight < 1 {
-		return fmt.Errorf("u_height must be at least 1 when assigned to a rack")
+	if uHeight < 1 || uHeight > MaxRackUnits {
+		return fmt.Errorf("u_height must be between 1 and %d when assigned to a rack", MaxRackUnits)
 	}
 	return nil
 }

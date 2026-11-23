@@ -155,10 +155,15 @@ func loginForm(w http.ResponseWriter, r *http.Request) {
 // failed attempts for a username are throttled (see loginThrottle): once a
 // username is locked out the request is refused with 429 before any password
 // verification, so an attacker cannot spend the server's bcrypt budget guessing.
-func login(users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPRepo, throttle *loginThrottle, audit *store.AuthEventRepo, retentionDays int, forceSecure bool) http.HandlerFunc {
+func login(users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPRepo, throttle *loginThrottle, audit *store.AuthEventRepo, forceSecure bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := strings.TrimSpace(r.FormValue("username"))
 		password := r.FormValue("password")
+		// Reject oversized input before bcrypt, throttle bookkeeping or auditing.
+		if len(username) > domain.MaxUsernameBytes || len(password) > domain.MaxPasswordBytes {
+			http.Error(w, "login fields are too long", http.StatusBadRequest)
+			return
+		}
 		next := safeNext(r.FormValue("next"))
 		now := time.Now().UTC()
 
@@ -237,7 +242,6 @@ func login(users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPR
 		_ = sessions.DeleteExpired(nowStr) // opportunistic prune
 		throttle.cleanup(now)              // opportunistic prune of throttle state
 		recordAuth(audit, r, domain.AuthLoginSuccess, u.Username, u.ID, "")
-		pruneAuditOpportunistically(audit, r, now, retentionDays)
 		setSessionCookie(w, r, token, forceSecure)
 		http.Redirect(w, r, next, http.StatusSeeOther)
 	}
@@ -266,6 +270,12 @@ func logout(sessions *store.SessionRepo, audit *store.AuthEventRepo, forceSecure
 func safeNext(raw string) string {
 	if raw == "" || raw[0] != '/' || strings.HasPrefix(raw, "//") || strings.ContainsAny(raw, "\\\r\n") {
 		return "/"
+	}
+	for i := 0; i < len(raw); i++ {
+		// Browsers strip tabs and other URL controls before resolving a host.
+		if raw[i] < 0x20 || raw[i] == 0x7f {
+			return "/"
+		}
 	}
 	return raw
 }

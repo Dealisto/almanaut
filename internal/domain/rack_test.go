@@ -1,6 +1,9 @@
 package domain
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestSiteValidate(t *testing.T) {
 	if err := (Site{Name: "hq"}).Validate(); err != nil {
@@ -60,5 +63,20 @@ func TestHardwareRackPlacement(t *testing.T) {
 	}
 	if err := (Hardware{Name: "hw", RackID: 2, RackPosition: 5, UHeight: 1}).Validate(); err != nil {
 		t.Errorf("valid placed hardware rejected: %v", err)
+	}
+}
+
+func TestRackPlacementBounds(t *testing.T) {
+	for _, value := range []int{-1, 0, MaxRackUnits + 1, math.MaxInt} {
+		for _, placement := range [][2]int{{value, 1}, {1, value}} {
+			host := Host{Name: "host", Type: "physical", RackID: 1, RackPosition: placement[0], UHeight: placement[1]}
+			hardware := Hardware{Name: "hardware", RackID: 1, RackPosition: placement[0], UHeight: placement[1]}
+			if host.Validate() == nil || hardware.Validate() == nil {
+				t.Errorf("invalid placement accepted: %v", placement)
+			}
+		}
+	}
+	if err := (Host{Name: "host", Type: "physical", RackID: 1, RackPosition: MaxRackUnits, UHeight: MaxRackUnits}).Validate(); err != nil {
+		t.Fatal(err)
 	}
 }
