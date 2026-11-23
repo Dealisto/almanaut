@@ -28,8 +28,25 @@ func NewDiscoveryRunRepo(db *sql.DB) *DiscoveryRunRepo { return &DiscoveryRunRep
 
 func (r *DiscoveryRunRepo) WithTx(tx *sql.Tx) *DiscoveryRunRepo { return &DiscoveryRunRepo{db: tx} }
 
-// Record inserts a run and returns its new id.
+// Record inserts a run and prunes history atomically. Keep the most recent 50
+// runs plus each source's latest run and successful comparison baseline.
 func (r *DiscoveryRunRepo) Record(run DiscoveryRun) (int64, error) {
+	if db, ok := r.db.(*sql.DB); ok {
+		var id int64
+		err := WithTx(db, func(tx *sql.Tx) error {
+			var err error
+			id, err = r.WithTx(tx).record(run)
+			return err
+		})
+		if err != nil {
+			return 0, err
+		}
+		return id, nil
+	}
+	return r.record(run)
+}
+
+func (r *DiscoveryRunRepo) record(run DiscoveryRun) (int64, error) {
 	keys, err := json.Marshal(nonNil(run.NewKeys))
 	if err != nil {
 		return 0, fmt.Errorf("marshal new_keys: %w", err)
@@ -43,7 +60,17 @@ func (r *DiscoveryRunRepo) Record(run DiscoveryRun) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("insert discovery run: %w", err)
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("discovery run id: %w", err)
+	}
+	if _, err := r.db.Exec(`DELETE FROM discovery_runs
+		WHERE id NOT IN (SELECT id FROM discovery_runs ORDER BY id DESC LIMIT 50)
+		AND id NOT IN (SELECT MAX(id) FROM discovery_runs GROUP BY source)
+		AND id NOT IN (SELECT MAX(id) FROM discovery_runs WHERE error = '' GROUP BY source)`); err != nil {
+		return 0, fmt.Errorf("prune discovery runs: %w", err)
+	}
+	return id, nil
 }
 
 // Latest returns the most recent run for source, or store.ErrNotFound.

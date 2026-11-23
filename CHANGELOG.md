@@ -10,6 +10,26 @@ details are listed there.
 
 ## [Unreleased]
 
+## [1.1.1]
+
+### Security
+- Limit login request bodies and identity/password lengths before password
+  verification, throttling and auditing. Bound stored authentication audit
+  fields so oversized requests cannot inflate individual audit records.
+- Reject URL control characters in login and theme return paths, preventing
+  tab-obfuscated redirects to external sites.
+- Bound rack placement values and rendering work, including existing records
+  with extreme dimensions or integer overflow. Invalid placements remain
+  visible as warnings without unbounded rendering loops.
+
+### Fixed
+- Enforce authentication audit retention on the first request and at most once
+  per hour afterward, including SSO, API, 2FA and health requests. A retention
+  value of zero still keeps history indefinitely.
+- Prune discovery history atomically when recording a run. Keep the latest
+  50 runs, plus each source's latest run and last successful comparison
+  baseline, so long outages do not make known findings appear new again.
+
 ## [1.1.0]
 
 ### Added
@@ -222,7 +242,8 @@ capabilities that make up v1.0.
 - Versioned releases: pushing a `v*` tag publishes prebuilt binaries with
   checksums (goreleaser) and container tags `:X.Y.Z`, `:X.Y`, and `:latest`.
 
-[Unreleased]: https://github.com/Dealisto/almanaut/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Dealisto/almanaut/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/Dealisto/almanaut/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Dealisto/almanaut/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/Dealisto/almanaut/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/Dealisto/almanaut/compare/v1.0.0...v1.0.1

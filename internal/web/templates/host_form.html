@@ -23,7 +23,7 @@
   </div></fieldset>
   <fieldset class="form-section"><legend>Physical location</legend>
     <label>Rack<select name="rack_id"><option value="0">No rack assigned</option>{{range .Extras.Racks}}<option value="{{.ID}}"{{if eq .ID $.Item.RackID}} selected{{end}}>{{.Name}}</option>{{end}}</select></label>
-    <div class="form-grid"><label>Rack position (U)<input type="number" name="rack_position" min="0" value="{{.Item.RackPosition}}"></label><label>Height (U)<input type="number" name="u_height" min="1" value="{{.Item.UHeight}}"></label></div>
+    <div class="form-grid"><label>Rack position (U)<input type="number" name="rack_position" min="0" max="60" value="{{.Item.RackPosition}}"></label><label>Height (U)<input type="number" name="u_height" min="1" max="60" value="{{.Item.UHeight}}"></label></div>
   </fieldset>
   <label>Notes<textarea name="notes" placeholder="Purpose, maintenance notes, or anything worth remembering…">{{.Item.Notes}}</textarea></label>
   {{template "customFieldsForm" .Extras.customFields}}

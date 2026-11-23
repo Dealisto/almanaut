@@ -70,12 +70,22 @@ const maxRequestBytes = 32 << 20 // 32 MiB
 // 413, and caps the readable body at that size for clients that lie about (or
 // omit) Content-Length, so a chunked upload still cannot read past the ceiling.
 func limitBody(next http.Handler) http.Handler {
+	return limitBodyBytes(maxRequestBytes, next)
+}
+
+// Login forms never need the inventory upload allowance. Apply this before
+// CSRF parsing so even a chunked login request has a small memory ceiling.
+func limitLoginBody(next http.Handler) http.Handler {
+	return limitBodyBytes(8<<10, next)
+}
+
+func limitBodyBytes(limit int64, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.ContentLength > maxRequestBytes {
+		if r.ContentLength > limit {
 			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
 		next.ServeHTTP(w, r)
 	})
 }

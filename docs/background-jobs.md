@@ -80,11 +80,17 @@ and Proxmox requires Proxmox configured; an interval alone is not enough.
 [Discovery](discovery.md) page for you to review and import, exactly like a
 manual scan — the schedule automates the looking, not the writing.
 
-`/discovery/runs` is admin-only and keeps the **last 50 runs**, each with its
+`/discovery/runs` is admin-only and displays the **last 50 runs**, each with its
 source, start and finish time, how many resources were found, how many of those
 were new, and the error if the run failed. It answers the question the discovery
 page cannot: whether the schedule is actually running, and whether it has been
 failing quietly.
+
+Recording a run also prunes stored history in the same transaction. The database
+retains the last 50 runs plus each source's latest run and most recent successful
+run when those fall outside the displayed window. Keeping these small per-source
+baselines preserves the last known status and prevents a long outage from making
+previously discovered resources appear new again.
 
 ---
 

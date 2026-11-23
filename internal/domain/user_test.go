@@ -45,3 +45,20 @@ func TestUserPasswordHashNotSerialised(t *testing.T) {
 		t.Fatalf("password hash leaked into JSON: %s", b)
 	}
 }
+
+func TestIdentityAndPasswordLengthBounds(t *testing.T) {
+	for _, username := range []string{strings.Repeat("x", MaxUsernameBytes+1), strings.Repeat("é", MaxUsernameBytes)} {
+		if err := (User{Username: username, Role: RoleViewer}).Validate(); err == nil {
+			t.Fatal("oversized username accepted")
+		}
+	}
+	if err := (User{Username: strings.Repeat("x", MaxUsernameBytes), Role: RoleViewer}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidatePassword(strings.Repeat("x", MaxPasswordBytes)); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidatePassword(strings.Repeat("x", MaxPasswordBytes+1)); err == nil {
+		t.Fatal("password exceeding bcrypt's limit accepted")
+	}
+}

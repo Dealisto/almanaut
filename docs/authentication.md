@@ -151,8 +151,15 @@ flooding the log. That state is in memory and resets on restart.
 
 Events older than
 [`ALMANAUT_AUTH_AUDIT_RETENTION_DAYS`](configuration.md) (default 90) are pruned
-opportunistically on successful logins, which keeps the table bounded without a
-dedicated job. Set it to `0` to keep events forever.
+on the first request after startup and at most once per hour afterward, without
+a dedicated job. This also covers SSO, API, 2FA and health-check requests; it
+does not require a successful password login. Set it to `0` to keep events forever.
+
+Login identities are limited to 256 bytes, passwords to bcrypt's 72-byte limit,
+and login request bodies to 8 KiB. Oversized login fields are rejected before
+password verification or audit insertion. Audit identity, source and detail
+fields also have byte limits to prevent an oversized event from inflating the
+database.
 
 ---
 

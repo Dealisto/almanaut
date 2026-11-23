@@ -24,8 +24,8 @@
       {{range .Extras.Racks}}<option value="{{.ID}}"{{if eq .ID $.Item.RackID}} selected{{end}}>{{.Name}}</option>{{end}}
     </select>
   </label>
-  <label>Rack position (U)<input type="number" name="rack_position" min="0" value="{{.Item.RackPosition}}"></label>
-  <label>Height (U)<input type="number" name="u_height" min="1" value="{{.Item.UHeight}}"></label>
+  <label>Rack position (U)<input type="number" name="rack_position" min="0" max="60" value="{{.Item.RackPosition}}"></label>
+  <label>Height (U)<input type="number" name="u_height" min="1" max="60" value="{{.Item.UHeight}}"></label>
   {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>

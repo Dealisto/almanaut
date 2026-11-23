@@ -51,9 +51,9 @@ func safeRedirectTarget(r *http.Request) string {
 		return "/"
 	}
 	if u.RawQuery != "" {
-		return u.Path + "?" + u.RawQuery
+		return safeNext(u.Path + "?" + u.RawQuery)
 	}
-	return u.Path
+	return safeNext(u.Path)
 }
 
 // setTheme persists the UI theme choice in a cookie and redirects back. An

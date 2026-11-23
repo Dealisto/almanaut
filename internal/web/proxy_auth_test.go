@@ -31,6 +31,10 @@ func TestParseCIDRList(t *testing.T) {
 }
 
 func newProxyTestHandler(t *testing.T, autoProvision bool) (http.Handler, *sql.DB) {
+	return newProxyTestHandlerWithRetention(t, autoProvision, 0)
+}
+
+func newProxyTestHandlerWithRetention(t *testing.T, autoProvision bool, retentionDays int) (http.Handler, *sql.DB) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := store.Open(dbPath)
@@ -51,6 +55,7 @@ func newProxyTestHandler(t *testing.T, autoProvision bool) (http.Handler, *sql.D
 		Logger: log.New(io.Discard, "", 0),
 		Docker: fakeScanner{}, NetScan: fakeNetworkScanner{}, NetOpts: NetDiscoveryOptions{}, Proxmox: fakeProxmoxScanner{}, PVEOpts: ProxmoxOptions{},
 		AuthEnabled:            true,
+		AuthAuditRetentionDays: retentionDays,
 		ProxyAuthHeader:        "Remote-User",
 		ProxyAuthAllowlist:     "10.0.0.0/8",
 		ProxyAuthAutoProvision: autoProvision,
