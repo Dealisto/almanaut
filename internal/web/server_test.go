@@ -225,8 +225,8 @@ func TestProxmoxImportCreatesHostsAndLinks(t *testing.T) {
 	form.Add("id", "qemu/100")
 	form.Set("link", "on")
 	rec := postForm(t, srv, "/discovery/proxmox/import", form)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("import = %d, want 303", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("import = %d, want 200", rec.Code)
 	}
 
 	// Verify the hosts page now lists both, and the relationships page shows the link.
@@ -261,8 +261,8 @@ func TestProxmoxImportLinksDuplicateGuestNames(t *testing.T) {
 	form.Add("id", "qemu/101")
 	form.Set("link", "on")
 	rec := postForm(t, srv, "/discovery/proxmox/import", form)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("import = %d, want 303", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("import = %d, want 200", rec.Code)
 	}
 
 	allHosts, err := hostRepo.List()
@@ -412,8 +412,8 @@ func TestDiscoveryDockerScan(t *testing.T) {
 	if !strings.Contains(body, `value="c1"`) {
 		t.Error("scan page missing checkbox for new container")
 	}
-	if !strings.Contains(body, "already tracked") {
-		t.Error("existing-svc should be marked already tracked")
+	if !strings.Contains(body, "Existing record: confirm identity") {
+		t.Error("existing-svc should offer identity confirmation")
 	}
 	if !strings.Contains(body, "proxmox") {
 		t.Error("host dropdown should list the host")
@@ -428,7 +428,7 @@ func TestDiscoveryDockerScanSocketError(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /discovery/docker (socket error) = %d, want 200", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "Could not reach the Docker socket") {
+	if !strings.Contains(rec.Body.String(), "Could not reach the Docker / Podman socket") {
 		t.Error("expected a friendly socket-error banner, not a 500")
 	}
 }
@@ -1182,7 +1182,7 @@ func TestExportImport(t *testing.T) {
 		t.Errorf("Content-Type = %q, want application/x-yaml", ct)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "proxmox") || !strings.Contains(body, "version: 2") {
+	if !strings.Contains(body, "proxmox") || !strings.Contains(body, "version: 3") {
 		t.Fatalf("export body unexpected:\n%s", body)
 	}
 
@@ -1496,8 +1496,8 @@ func TestDiscoveryDockerImport(t *testing.T) {
 
 	// Import only c1, attached to host 1.
 	rec := postForm(t, srv, "/discovery/docker/import", url.Values{"id": {"c1"}, "host": {"1"}})
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("POST import = %d, want 303", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST import = %d, want 200", rec.Code)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/services", nil)
@@ -1529,8 +1529,8 @@ func TestDiscoveryDockerImportSkipsAlreadyTracked(t *testing.T) {
 
 	// Attempt to import c1 even though a service named jellyfin already exists.
 	rec := postForm(t, srv, "/discovery/docker/import", url.Values{"id": {"c1"}})
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("POST import = %d, want 303", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST import = %d, want 200", rec.Code)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/services", nil)
@@ -1545,8 +1545,8 @@ func TestDiscoveryDockerImportSkipsNamelessContainer(t *testing.T) {
 	scanner := fakeScanner{containers: []discovery.Container{{ID: "c1", Name: ""}}}
 	srv := newTestServerWithScanner(t, scanner)
 	rec := postForm(t, srv, "/discovery/docker/import", url.Values{"id": {"c1"}})
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("POST import = %d, want 303", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST import = %d, want 200", rec.Code)
 	}
 	// No service should have been created from the nameless container.
 	req := httptest.NewRequest(http.MethodGet, "/services", nil)
@@ -1617,8 +1617,8 @@ func TestNetworkDiscoveryImport(t *testing.T) {
 		"type": {"vm"},
 		"host": {"192.168.1.50|nas.lan|80, 443"},
 	})
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("POST import = %d, want 303", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST import = %d, want 200", rec.Code)
 	}
 	req := httptest.NewRequest(http.MethodGet, "/hosts", nil)
 	rec = httptest.NewRecorder()

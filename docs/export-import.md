@@ -16,21 +16,36 @@ instances, or as a portable copy of your data.
 
 Every entity type, with its relationships, tags, journal entries and custom
 fields (definitions and values), plus the host type catalog and its display
-labels. Records keep their ids, so references between
-them survive the round trip.
+labels. Discovery associations preserve each source key, external resource ID
+and target host/service ID. Records keep their IDs, so references and discovery
+identities survive the round trip.
 
 It does **not** contain anything specific to one instance: users, sessions,
 API tokens and 2FA, webhooks, saved views, the authentication audit log, the
 history (changelog), [attachments](inventory-model.md#attachments), agent
-bindings and reports, Uptime Kuma monitor mappings, and discovery runs. For a
-complete backup, copy the SQLite database file instead.
+bindings and reports, Uptime Kuma monitor mappings, and discovery runs.
+Discovery source configuration and credentials are not included. For a complete
+backup, back up the SQLite database and any separately managed configuration
+and attachment files.
 
-Exports use format version 2 to include `host_types`. Version 1 files remain
-supported; files without a catalog restore the four built-in host types with
-their original labels. Version 2 files must include all four built-in names,
-unique type names, and a catalog entry for every host's type. Invalid catalogs
-are rejected before any inventory is replaced. Older almanaut versions reject
-version 2 exports rather than silently dropping the catalog.
+Exports use **format version 3**, adding `discovery_bindings` to the host type
+catalog introduced in version 2. Version 1 and 2 files remain importable; files
+without discovery associations restore with none. Keep the same configured
+source keys after moving an inventory to another instance so its associations
+still identify the intended sources.
+
+Version 1 files without a catalog restore the four built-in host types with
+their original labels. Version 2 and 3 catalogs must contain all four built-in
+names, unique type names, and an entry for every host's type. Discovery
+associations must have a valid source key, unique source/external-ID pair and
+an existing host or service target. Invalid catalogs or associations reject
+the entire import before any inventory is replaced.
+
+Older Almanaut binaries reject version 3 exports rather than silently losing
+identity metadata. **Keep a pre-upgrade database backup for rollback**; switching
+the binary back does not undo database migrations, and the new export cannot
+be restored by an older importer. Restore that backup together with the older
+binary when rolling back.
 
 ## What import does to the rest
 
@@ -47,6 +62,10 @@ Data outside the file is reconciled with the imported inventory:
   expiry notifications were already sent — is cleared and rebuilt by the
   [background jobs](background-jobs.md) on their next pass. An item already
   notified as expiring may be notified once more.
+- **Discovery associations** are replaced with those in the snapshot, in the
+  same transaction as their host/service targets. Importing an older file with
+  no associations clears the current ones; a later confirmed discovery import
+  can associate matching manual records again.
 - **Agent bindings** are removed with the hosts they belonged to; an agent
   re-binds on its next report.
 - **Uptime Kuma monitors** are reconciled by the next sync, which removes the

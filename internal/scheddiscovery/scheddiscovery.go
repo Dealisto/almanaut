@@ -25,6 +25,9 @@ type NetworkScanner interface {
 type ProxmoxScanner interface {
 	Resources(ctx context.Context) ([]discovery.ProxmoxResource, error)
 }
+type XenOrchestraScanner interface {
+	Resources(ctx context.Context) ([]discovery.XenOrchestraResource, error)
+}
 type ServiceLister interface {
 	List() ([]domain.Service, error)
 }
@@ -33,28 +36,33 @@ type HostLister interface {
 }
 
 type Detector struct {
-	docker   DockerScanner
-	net      NetworkScanner
-	subnet   string
-	proxmox  ProxmoxScanner
-	services ServiceLister
-	hosts    HostLister
-	runs     *store.DiscoveryRunRepo
-	sender   notify.Sender
-	log      *slog.Logger
-	now      func() time.Time
+	docker       DockerScanner
+	net          NetworkScanner
+	subnet       string
+	proxmox      ProxmoxScanner
+	xenOrchestra XenOrchestraScanner
+	services     ServiceLister
+	hosts        HostLister
+	runs         *store.DiscoveryRunRepo
+	sender       notify.Sender
+	log          *slog.Logger
+	now          func() time.Time
 }
 
 func New(docker DockerScanner, net NetworkScanner, subnet string, proxmox ProxmoxScanner,
 	services ServiceLister, hosts HostLister, runs *store.DiscoveryRunRepo,
-	sender notify.Sender, log *slog.Logger, now func() time.Time) *Detector {
+	sender notify.Sender, log *slog.Logger, now func() time.Time, xo ...XenOrchestraScanner) *Detector {
 	if log == nil {
 		log = slog.Default()
 	}
 	if now == nil {
 		now = time.Now
 	}
-	return &Detector{docker, net, subnet, proxmox, services, hosts, runs, sender, log, now}
+	d := &Detector{docker: docker, net: net, subnet: subnet, proxmox: proxmox, services: services, hosts: hosts, runs: runs, sender: sender, log: log, now: now}
+	if len(xo) > 0 {
+		d.xenOrchestra = xo[0]
+	}
+	return d
 }
 
 // FreshKeys returns keys in current not present in prev.
@@ -136,6 +144,32 @@ func (d *Detector) RunProxmox(ctx context.Context) error {
 		}
 	}
 	return d.finish(ctx, "proxmox", start, found, newKeys, scanErr)
+}
+
+// RunXenOrchestra records findings for review; it never imports inventory.
+func (d *Detector) RunXenOrchestra(ctx context.Context) error {
+	start := d.now()
+	var newKeys []string
+	found := 0
+	if d.xenOrchestra == nil {
+		return d.finish(ctx, "xen-orchestra", start, found, newKeys, errors.New("Xen Orchestra discovery is not configured"))
+	}
+	res, scanErr := d.xenOrchestra.Resources(ctx)
+	if scanErr == nil {
+		existing, err := d.hosts.List()
+		if err != nil {
+			scanErr = err
+		} else {
+			props := discovery.ProposeXenOrchestraHosts(res, existing)
+			found = len(props)
+			for _, p := range props {
+				if !p.AlreadyTracked && !p.AmbiguousName {
+					newKeys = append(newKeys, p.ID)
+				}
+			}
+		}
+	}
+	return d.finish(ctx, "xen-orchestra", start, found, newKeys, scanErr)
 }
 
 // finish records the run and, on success with newly-appeared keys, notifies.

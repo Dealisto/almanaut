@@ -35,6 +35,7 @@ type Snapshot struct {
 	Tags           []domain.Tag          `yaml:"tags"`
 	JournalEntries []domain.JournalEntry `yaml:"journal_entries"`
 
+	DiscoveryBindings []domain.DiscoveryBinding    `yaml:"discovery_bindings"`
 	CustomFieldDefs   []domain.CustomFieldDef      `yaml:"custom_field_defs"`
 	CustomFieldValues []domain.CustomFieldValueRow `yaml:"custom_field_values"`
 }
@@ -65,6 +66,7 @@ func Export(db *sql.DB) (Snapshot, error) {
 	var listErr error
 	snap := Snapshot{
 		Version:           snapshotVersion,
+		DiscoveryBindings: exportList(&listErr, NewDiscoveryBindingRepo(db).WithTx(tx).List),
 		HostTypes:         exportList(&listErr, NewHostTypeRepo(db).WithTx(tx).List),
 		Hosts:             exportList(&listErr, NewHostRepo(db).WithTx(tx).List),
 		Services:          exportList(&listErr, NewServiceRepo(db).WithTx(tx).List),
@@ -109,7 +111,7 @@ func exportList[T any](err *error, list func() ([]T, error)) []T {
 }
 
 // snapshotVersion is the Snapshot format Export writes and Import reads.
-const snapshotVersion = 2
+const snapshotVersion = 3
 
 // Import replaces the entire inventory with snap, in a single transaction.
 // It validates every record first (aborting before any delete on the first
@@ -125,6 +127,9 @@ func Import(db *sql.DB, snap Snapshot) error {
 	// Older snapshots predate the catalog and contain only built-in types.
 	if snap.Version < 2 && len(snap.HostTypes) == 0 {
 		snap.HostTypes = domain.DefaultHostTypes()
+	}
+	if err := validateDiscoveryBindings(snap); err != nil {
+		return err
 	}
 	if err := validateHostTypes(snap); err != nil {
 		return err
@@ -177,7 +182,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 		if err := reconcileSideTables(tx); err != nil {
 			return err
 		}
-		n := len(snap.HostTypes) + len(snap.Hosts) + len(snap.Services) + len(snap.Networks) + len(snap.Domains) +
+		n := len(snap.DiscoveryBindings) + len(snap.HostTypes) + len(snap.Hosts) + len(snap.Services) + len(snap.Networks) + len(snap.Domains) +
 			len(snap.Certificates) + len(snap.Backups) + len(snap.Hardware) +
 			len(snap.Subscriptions) + len(snap.Accounts) + len(snap.VLANs) + len(snap.Reservations) + len(snap.Contacts) +
 			len(snap.Sites) + len(snap.Locations) + len(snap.Racks) +
@@ -200,7 +205,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 // Import clears and refills exactly these. TestEveryTableIsClassified fails
 // when a migration adds a table that is in neither this list nor one of the
 // documented exclusions, so a new entity cannot silently miss the export.
-var inventoryTables = []string{"hosts", "host_types", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "nics", "ports", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"}
+var inventoryTables = []string{"discovery_bindings", "hosts", "host_types", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "nics", "ports", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"}
 
 // replaceInventory clears every table and re-inserts snap within tx. It must run
 // inside WithTx, which owns begin/commit/rollback and is panic-safe, so any
@@ -247,6 +252,11 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 			s.ID, s.Name, s.Kind, s.URL, s.Ports, s.Category, s.Notes, s.CheckAddress); err != nil {
 			return err
+		}
+	}
+	for _, b := range snap.DiscoveryBindings {
+		if _, err := tx.Exec(`INSERT INTO discovery_bindings (source, external_id, entity_type, entity_id) VALUES (?, ?, ?, ?)`, b.Source, b.ExternalID, b.EntityType, b.EntityID); err != nil {
+			return fmt.Errorf("insert discovery binding %q: %w", b.ExternalID, err)
 		}
 	}
 	for _, v := range snap.VLANs {
@@ -651,6 +661,34 @@ func validateHostTypes(snap Snapshot) error {
 	for _, h := range snap.Hosts {
 		if !names[h.Type] {
 			return fmt.Errorf("host %d: unknown host type %q", h.ID, h.Type)
+		}
+	}
+	return nil
+}
+
+// validateDiscoveryBindings rejects broken identity metadata instead of silently
+// dropping it and causing an imported resource to be duplicated on discovery.
+func validateDiscoveryBindings(snap Snapshot) error {
+	targets := map[string]map[int64]bool{"host": {}, "service": {}}
+	for _, h := range snap.Hosts {
+		targets["host"][h.ID] = true
+	}
+	for _, s := range snap.Services {
+		targets["service"][s.ID] = true
+	}
+	type key struct{ source, externalID string }
+	seen := map[key]bool{}
+	for _, b := range snap.DiscoveryBindings {
+		if err := b.Validate(); err != nil {
+			return fmt.Errorf("discovery binding: %w", err)
+		}
+		k := key{b.Source, b.ExternalID}
+		if seen[k] {
+			return fmt.Errorf("duplicate discovery identity in source %q", b.Source)
+		}
+		seen[k] = true
+		if !targets[b.EntityType][b.EntityID] {
+			return fmt.Errorf("discovery binding points to missing %s %d", b.EntityType, b.EntityID)
 		}
 	}
 	return nil

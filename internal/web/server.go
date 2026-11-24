@@ -46,18 +46,22 @@ type Config struct {
 	// NICs and Ports back the NIC / port inventory. Nil defaults to
 	// store.NewNICRepo(DB) / store.NewPortRepo(DB) in New, so every existing
 	// Config literal (which already sets DB) keeps working unchanged.
-	NICs          *store.NICRepo
-	Ports         *store.PortRepo
-	DB            *sql.DB
-	Logger        *log.Logger // nil → log.Default()
-	Docker        dockerScanner
-	NetScan       networkScanner
-	NetOpts       NetDiscoveryOptions
-	Proxmox       proxmoxScanner
-	PVEOpts       ProxmoxOptions
-	AuthEnabled   bool   // require login (main.go always sets this true; tests leave it false)
-	SecureCookies bool   // force the Secure flag on cookies (TLS-terminating proxy)
-	Version       string // build version, surfaced at /version (defaults to "dev")
+	NICs         *store.NICRepo
+	Ports        *store.PortRepo
+	DB           *sql.DB
+	Logger       *log.Logger // nil → log.Default()
+	Docker       dockerScanner
+	NetScan      networkScanner
+	NetOpts      NetDiscoveryOptions
+	Proxmox      proxmoxScanner
+	PVEOpts      ProxmoxOptions
+	XenOrchestra xenOrchestraScanner
+	XOOpts       XenOrchestraOptions
+	// DiscoverySources replaces legacy engine configuration when non-nil.
+	DiscoverySources []DiscoverySource
+	AuthEnabled      bool   // require login (main.go always sets this true; tests leave it false)
+	SecureCookies    bool   // force the Secure flag on cookies (TLS-terminating proxy)
+	Version          string // build version, surfaced at /version (defaults to "dev")
 	// Webhooks receives entity-change events for outbound delivery. Nil defaults
 	// to a no-op dispatcher (webhooks disabled).
 	Webhooks webhook.Dispatcher
@@ -117,8 +121,8 @@ func New(cfg Config) http.Handler {
 	relationships, tags, db := cfg.Relationships, cfg.Tags, cfg.DB
 	vlans := cfg.VLANs
 	reservations := cfg.Reservations
-	docker, netscan, netOpts := cfg.Docker, cfg.NetScan, cfg.NetOpts
-	proxmox, pveOpts := cfg.Proxmox, cfg.PVEOpts
+	netscan, netOpts := cfg.NetScan, cfg.NetOpts
+	discoverySources := configuredDiscoverySources(cfg)
 	hostTypes := store.NewHostTypeRepo(db)
 	hostRS := resource[domain.Host]{
 		name: "hosts", sing: "host", title: "Hosts", heading: "Host",
@@ -850,14 +854,22 @@ func New(cfg Config) http.Handler {
 			r.Get("/export", exportData(db))
 			r.Post("/import", importData(db, cat))
 			r.Post("/import-csv", importCSV(cat, deps))
-			r.Get("/discovery", discoveryLanding(netOpts, pveOpts))
-			r.Get("/discovery/docker", scanDocker(docker, services, hosts))
-			r.Post("/discovery/docker/import", importDocker(docker, services, relationships, db))
+			r.Get("/discovery", discoverySourcesLanding(netOpts, discoverySources))
+			for _, source := range discoverySources {
+				if !source.available() {
+					continue
+				}
+				r.Get(source.Path(), scanDiscoverySource(source, db))
+				r.Post(source.Path()+"/import", importDiscoverySource(source, db))
+				canonical := "/discovery/sources/" + source.Kind + "/" + source.ID
+				if canonical != source.Path() {
+					r.Get(canonical, scanDiscoverySource(source, db))
+					r.Post(canonical+"/import", importDiscoverySource(source, db))
+				}
+			}
 			r.Get("/discovery/network", networkForm(netOpts, hostTypes))
 			r.Post("/discovery/network/scan", scanNetwork(netscan, hosts, netOpts, hostTypes))
 			r.Post("/discovery/network/import", importNetwork(hosts, netOpts, db))
-			r.Get("/discovery/proxmox", scanProxmox(proxmox, hosts, pveOpts))
-			r.Post("/discovery/proxmox/import", importProxmox(proxmox, hosts, relationships, pveOpts, db))
 			r.Post("/certificates/{id}/probe", probeCertificate(cat, cfg.CertProber, certificates))
 			r.Post("/ports/generate", generatePorts(portRS, ports, deps))
 			r.Post("/hosts/{id}/agent/unbind", unbindAgent(deps, agents, hosts))

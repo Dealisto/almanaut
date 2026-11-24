@@ -221,7 +221,7 @@ func TestHostTypesDiscoveryOptionsAndImport(t *testing.T) {
 		t.Fatalf("discovery options: %d %s", rec.Code, rec.Body)
 	}
 	rec = postForm(t, srv, "/discovery/network/import", url.Values{"type": {"container"}, "host": {"192.168.1.80|edge|80"}})
-	if rec.Code != http.StatusSeeOther {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("import custom type: %d %s", rec.Code, rec.Body)
 	}
 	rec = postForm(t, srv, "/discovery/network/import", url.Values{"type": {"missing"}, "host": {"192.168.1.81|other|80"}})

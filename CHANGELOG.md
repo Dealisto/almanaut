@@ -10,6 +10,35 @@ details are listed there.
 
 ## [Unreleased]
 
+### Added
+- Discover XCP-ng hosts and VMs through Xen Orchestra, preview and import
+  selected records, and optionally link VMs to their hosts. Scheduled discovery
+  records findings for manual review without overwriting inventory.
+- Document and test Podman discovery through its Docker-compatible socket,
+  including rootless setup and Podman Compose project labels.
+- Configure multiple Docker/Podman engines, Proxmox clusters and Xen Orchestra
+  instances through `ALMANAUT_DISCOVERY_SOURCES_FILE`, each with a stable source
+  key, its own review page, and an optional discovery interval.
+- Persist source/resource identities when importing or confirming a matching
+  manual record. Source and inventory renames retain the association without
+  overwriting manual fields; distinct identities remain separate across sources.
+- Show import results with added, already-present, skipped and host-link counts.
+
+### Changed
+- Label container discovery as Docker / Podman while preserving existing
+  single-source environment settings and default review routes. New scheduled
+  engine runs use `type:id` source keys for independent history and comparisons.
+- Return engine import summaries directly with HTTP 200 instead of redirecting
+  to the inventory list. Repeated imports recognize existing associations.
+- Write YAML export format 3 with discovery associations. Formats 1 and 2 remain
+  importable; invalid associations reject the complete import. Credentials and
+  source configuration are excluded. Older binaries reject format 3, so rollback
+  requires a pre-upgrade database backup.
+
+### Fixed
+- Keep long service tables and their screen-reader labels inside the table's
+  scroll area instead of causing page-level horizontal scrolling.
+
 ## [1.1.1]
 
 ### Security

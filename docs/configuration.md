@@ -2,20 +2,25 @@
 
 # Configuration
 
-All configuration is via environment variables; everything is optional. The
-variables that schedule recurring work — liveness, certificate probing and
-discovery — are covered in more depth in [Background jobs](background-jobs.md).
+Configuration uses environment variables, with an optional JSON file for
+multiple discovery sources. The variables that schedule recurring work —
+liveness, certificate probing and discovery — are covered in more depth in
+[Background jobs](background-jobs.md).
 
 | Variable                      | Default              | Description                                    |
 |-------------------------------|----------------------|------------------------------------------------|
 | `ALMANAUT_ADDR`               | `:8080`              | TCP listen address                             |
 | `ALMANAUT_DATA_DIR`           | `./data`             | Directory for the SQLite database              |
-| `ALMANAUT_DOCKER_SOCKET`      | `/var/run/docker.sock` | Path to the Docker socket for auto-discovery |
+| `ALMANAUT_DISCOVERY_SOURCES_FILE` | (empty) | JSON file defining multiple engine/hypervisor sources; replaces the single-source settings below when set |
+| `ALMANAUT_DOCKER_SOCKET`      | `/var/run/docker.sock` | Path to the Docker or Podman compatibility socket for auto-discovery; see [Podman](podman.md) |
 | `ALMANAUT_ENABLE_NETWORK_SCAN` | `false`              | Enable the opt-in subnet scan                  |
 | `ALMANAUT_SCAN_SUBNET`        | (empty)              | Default subnet (CIDR) pre-filled in the scan form |
 | `ALMANAUT_PROXMOX_URL`        | (empty)              | Proxmox VE API base URL (e.g. `https://pve.lan:8006`); enables Proxmox discovery when set with a token |
 | `ALMANAUT_PROXMOX_TOKEN`      | (empty)              | Proxmox API token (`user@realm!tokenid=secret`) |
 | `ALMANAUT_PROXMOX_INSECURE`   | `false`              | Skip TLS verification for a self-signed Proxmox certificate |
+| `ALMANAUT_XO_URL` | (empty) | Xen Orchestra base URL (e.g. `https://xo.lan`); enables XCP-ng discovery when set with a token |
+| `ALMANAUT_XO_TOKEN` | (empty) | Xen Orchestra authentication token; supports `_FILE` |
+| `ALMANAUT_XO_INSECURE` | `false` | Skip TLS verification for a self-signed Xen Orchestra certificate |
 | `ALMANAUT_AUTH_USER`          | `admin`              | Seeds the username of the initial admin account created on first startup |
 | `ALMANAUT_AUTH_PASS`          | (empty)              | Seeds the password of the initial admin account; a random password is generated and logged once when unset |
 | `ALMANAUT_RESET_ADMIN`        | `false`              | Reset the admin password at startup (lockout recovery) and log the new value; unset it again afterwards |
@@ -43,15 +48,103 @@ discovery — are covered in more depth in [Background jobs](background-jobs.md)
 | `ALMANAUT_CERT_PROBE_ENABLED` | `false`              | Master switch for the scheduled certificate-probing job; the per-cert "Probe now" button works regardless |
 | `ALMANAUT_CERT_PROBE_INTERVAL` | `24h`               | How often the scheduled cert-probe job runs (Go duration) |
 | `ALMANAUT_CERT_PROBE_TIMEOUT` | `10s`                | Per-endpoint TLS dial timeout when probing a certificate (Go duration) |
-| `ALMANAUT_DISCOVERY_DOCKER_INTERVAL` | (unset)       | Interval for scheduled Docker discovery (Go duration, e.g. `1h`); unset/0 disables it. Findings surface as proposals on the Discovery page — nothing is auto-imported |
+| `ALMANAUT_DISCOVERY_DOCKER_INTERVAL` | (unset)       | Interval for scheduled Docker / Podman discovery (Go duration, e.g. `1h`); unset/0 disables it. Findings surface as proposals on the Discovery page — nothing is auto-imported |
 | `ALMANAUT_DISCOVERY_NETWORK_INTERVAL` | (unset)      | Interval for scheduled network discovery (Go duration); also requires the network scan enabled and a subnet set; unset/0 disables it |
 | `ALMANAUT_DISCOVERY_PROXMOX_INTERVAL` | (unset)      | Interval for scheduled Proxmox discovery (Go duration); also requires Proxmox configured; unset/0 disables it |
+| `ALMANAUT_DISCOVERY_XO_INTERVAL` | (unset) | Interval for scheduled Xen Orchestra discovery (Go duration); requires XO URL and token; unset/0 disables it |
 | `ALMANAUT_STALE_AFTER_DAYS`   | `90`                 | Staleness window (days) for the inventory-health stale-entity rule; `0` disables that rule |
+
+## Multiple discovery sources
+
+Set `ALMANAUT_DISCOVERY_SOURCES_FILE` to a JSON file readable by Almanaut:
+
+```bash
+export ALMANAUT_DISCOVERY_SOURCES_FILE=/etc/almanaut/discovery-sources.json
+```
+
+For example:
+
+```json
+[
+  {
+    "id": "rootless",
+    "name": "Application containers",
+    "type": "podman",
+    "socket": "/run/user/1000/podman/podman.sock",
+    "interval": "1h"
+  },
+  {
+    "id": "lab",
+    "name": "Lab Proxmox",
+    "type": "proxmox",
+    "url": "https://pve-lab.example.test:8006",
+    "token_file": "secrets/pve-lab-token",
+    "interval": "6h"
+  },
+  {
+    "id": "office",
+    "name": "Office Proxmox",
+    "type": "proxmox",
+    "url": "https://pve-office.example.test:8006",
+    "token_file": "secrets/pve-office-token"
+  },
+  {
+    "id": "test",
+    "name": "Test Xen Orchestra",
+    "type": "xen-orchestra",
+    "url": "https://xo.example.test",
+    "token_file": "secrets/xo-token",
+    "interval": "6h"
+  }
+]
+```
+
+| Field | Meaning |
+|---|---|
+| `id` | Required stable identifier: 1–64 lowercase letters, digits, underscores or hyphens; starts with a letter or digit |
+| `type` | Required: `docker`, `podman`, `proxmox` or `xen-orchestra` |
+| `name` | Optional display label; defaults to `id` |
+| `socket` | Required absolute Unix-socket path for Docker/Podman, as seen inside Almanaut's filesystem |
+| `url` | Required HTTP(S) base URL for Proxmox/XO; must not contain credentials, query parameters or a fragment |
+| `token_file` | File containing the hypervisor token; relative paths resolve from the source file's directory |
+| `token` | Alternative inline hypervisor token; `token_file` takes precedence when both are set |
+| `insecure` | Optional hypervisor TLS-verification bypass, default `false` |
+| `interval` | Optional Go duration, such as `1h`; omitted or `0` disables scheduled runs while keeping manual discovery available |
+
+Use `token_file` to keep tokens out of the source configuration. Trailing
+newlines are removed from token files. An unreadable file fails startup; it does
+not fall back to an inline token. Docker/Podman sources do not accept URL,
+token or TLS fields; hypervisor sources do not accept a socket.
+
+Each `type:id` pair must be unique. It is the persistent namespace for imported
+resource identities, so **keep `type` and `id` stable** when changing a display
+label, moving an endpoint, or rotating its token. Do not reuse the same key for
+an unrelated engine or cluster. JSON order and `name` do not affect identity.
+Source configuration is loaded at startup; restart Almanaut after changing it.
+Unknown fields, invalid values, duplicate source keys and files larger than
+1 MiB are rejected instead of partially enabling sources.
+
+When this variable is set, the file **replaces** the legacy Docker/Podman,
+Proxmox and XO connection and interval settings. `[]` explicitly disables those
+sources. Network discovery remains controlled by its existing environment
+variables. Without a source file, the legacy settings produce these keys:
+
+| Legacy configuration | Source key | Review route |
+|---|---|---|
+| `ALMANAUT_DOCKER_SOCKET` | `docker:default` | `/discovery/docker` |
+| `ALMANAUT_PROXMOX_URL` plus token | `proxmox:default` | `/discovery/proxmox` |
+| `ALMANAUT_XO_URL` plus token | `xen-orchestra:default` | `/discovery/xen-orchestra` |
+
+When moving an existing single-source setup into a file, retain the matching
+`type` and `id: "default"` to preserve its associations and routes. In particular,
+a Podman engine previously reached through `ALMANAUT_DOCKER_SOCKET` keeps
+`type: "docker"` and `id: "default"`; the connector still speaks Podman's
+compatible API. Other sources use `/discovery/sources/<type>/<id>`.
 
 ## Secrets from files
 
 Sensitive values (`ALMANAUT_AUTH_PASS`, `ALMANAUT_PROXMOX_TOKEN`,
-`ALMANAUT_NTFY_TOKEN`, `ALMANAUT_DISCORD_WEBHOOK_URL`, `ALMANAUT_KUMA_PASS`)
+`ALMANAUT_XO_TOKEN`, `ALMANAUT_NTFY_TOKEN`, `ALMANAUT_DISCORD_WEBHOOK_URL`, `ALMANAUT_KUMA_PASS`)
 can instead be read from a file by appending `_FILE` to the variable name and
 pointing it at the file (`ALMANAUT_AUTH_PASS_FILE=/run/secrets/auth_pass`).
 This keeps the secret out of the process environment, where it would otherwise

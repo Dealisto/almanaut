@@ -11,18 +11,22 @@ import (
 
 // Config holds the runtime configuration for the server.
 type Config struct {
-	Addr               string // TCP listen address, e.g. ":8080"
-	DataDir            string // directory holding the SQLite database and exports
-	DockerSocket       string // path to the Docker Engine socket for discovery
-	NetworkScanEnabled bool   // whether the opt-in subnet scan is exposed
-	ScanSubnet         string // default subnet (CIDR) pre-filled in the scan form
-	ProxmoxURL         string // Proxmox VE API base URL, e.g. https://pve.lan:8006
-	ProxmoxToken       string // Proxmox API token "user@realm!tokenid=secret"
-	ProxmoxInsecure    bool   // skip TLS verification (self-signed Proxmox cert)
-	AuthUser           string // ALMANAUT_AUTH_USER — username for the initial admin seeded at first startup
-	AuthPass           string // ALMANAUT_AUTH_PASS — password for the initial admin (else a random one is logged)
-	SecureCookies      bool   // force the Secure flag on cookies (set behind a TLS-terminating proxy)
-	ResetAdmin         bool   // ALMANAUT_RESET_ADMIN — reset the admin password at startup (lockout recovery)
+	DiscoverySources     []DiscoverySource // engine sources loaded from a file or legacy environment settings
+	Addr                 string            // TCP listen address, e.g. ":8080"
+	DataDir              string            // directory holding the SQLite database and exports
+	DockerSocket         string            // path to the Docker or Podman compatibility socket for discovery
+	NetworkScanEnabled   bool              // whether the opt-in subnet scan is exposed
+	ScanSubnet           string            // default subnet (CIDR) pre-filled in the scan form
+	ProxmoxURL           string            // Proxmox VE API base URL, e.g. https://pve.lan:8006
+	ProxmoxToken         string            // Proxmox API token "user@realm!tokenid=secret"
+	ProxmoxInsecure      bool              // skip TLS verification (self-signed Proxmox cert)
+	XenOrchestraURL      string            // Xen Orchestra base URL; discovery is enabled with a token
+	XenOrchestraToken    string            // authenticationToken cookie value
+	XenOrchestraInsecure bool              // skip TLS verification for a self-signed certificate
+	AuthUser             string            // ALMANAUT_AUTH_USER — username for the initial admin seeded at first startup
+	AuthPass             string            // ALMANAUT_AUTH_PASS — password for the initial admin (else a random one is logged)
+	SecureCookies        bool              // force the Secure flag on cookies (set behind a TLS-terminating proxy)
+	ResetAdmin           bool              // ALMANAUT_RESET_ADMIN — reset the admin password at startup (lockout recovery)
 
 	NtfyURL           string        // ALMANAUT_NTFY_URL — ntfy topic URL; empty disables notifications
 	NtfyToken         string        // ALMANAUT_NTFY_TOKEN — optional bearer for a protected topic
@@ -47,9 +51,10 @@ type Config struct {
 	CertProbeInterval time.Duration // ALMANAUT_CERT_PROBE_INTERVAL — time between scheduled probe passes
 	CertProbeTimeout  time.Duration // ALMANAUT_CERT_PROBE_TIMEOUT — per-endpoint TLS dial timeout
 
-	DiscoveryDockerInterval  time.Duration // ALMANAUT_DISCOVERY_DOCKER_INTERVAL — >0 enables scheduled Docker discovery
-	DiscoveryNetworkInterval time.Duration // ALMANAUT_DISCOVERY_NETWORK_INTERVAL — >0 enables scheduled network discovery (also needs the network scan enabled + a subnet)
-	DiscoveryProxmoxInterval time.Duration // ALMANAUT_DISCOVERY_PROXMOX_INTERVAL — >0 enables scheduled Proxmox discovery (also needs Proxmox configured)
+	DiscoveryDockerInterval       time.Duration // ALMANAUT_DISCOVERY_DOCKER_INTERVAL — >0 enables scheduled Docker / Podman discovery
+	DiscoveryNetworkInterval      time.Duration // ALMANAUT_DISCOVERY_NETWORK_INTERVAL — >0 enables scheduled network discovery (also needs the network scan enabled + a subnet)
+	DiscoveryXenOrchestraInterval time.Duration // ALMANAUT_DISCOVERY_XO_INTERVAL — >0 enables scheduled Xen Orchestra discovery
+	DiscoveryProxmoxInterval      time.Duration // ALMANAUT_DISCOVERY_PROXMOX_INTERVAL — >0 enables scheduled Proxmox discovery (also needs Proxmox configured)
 
 	StaleAfterDays int // ALMANAUT_STALE_AFTER_DAYS — inventory-health staleness window in days (0 disables the stale-entity rule)
 
@@ -62,13 +67,23 @@ type Config struct {
 }
 
 // Load reads configuration from the environment, falling back to defaults. It
-// returns an error only when a secret's *_FILE variant names a file that cannot
-// be read — a misconfiguration that must not degrade to a silently empty secret.
+// rejects unreadable secrets and invalid explicit discovery source files rather
+// than silently disabling or partially configuring integrations.
 func Load() (Config, error) {
-	proxmoxToken, err := secretFromEnv("ALMANAUT_PROXMOX_TOKEN")
-	if err != nil {
-		return Config{}, err
+	sourceFile := os.Getenv("ALMANAUT_DISCOVERY_SOURCES_FILE")
+	var proxmoxToken, xenOrchestraToken string
+	if sourceFile == "" {
+		var err error
+		proxmoxToken, err = secretFromEnv("ALMANAUT_PROXMOX_TOKEN")
+		if err != nil {
+			return Config{}, err
+		}
+		xenOrchestraToken, err = secretFromEnv("ALMANAUT_XO_TOKEN")
+		if err != nil {
+			return Config{}, err
+		}
 	}
+
 	authPass, err := secretFromEnv("ALMANAUT_AUTH_PASS")
 	if err != nil {
 		return Config{}, err
@@ -85,40 +100,44 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	return Config{
-		Addr:                     getenv("ALMANAUT_ADDR", ":8080"),
-		DataDir:                  getenv("ALMANAUT_DATA_DIR", "./data"),
-		DockerSocket:             getenv("ALMANAUT_DOCKER_SOCKET", "/var/run/docker.sock"),
-		NetworkScanEnabled:       getenvBool("ALMANAUT_ENABLE_NETWORK_SCAN", false),
-		ScanSubnet:               getenv("ALMANAUT_SCAN_SUBNET", ""),
-		ProxmoxURL:               getenv("ALMANAUT_PROXMOX_URL", ""),
-		ProxmoxToken:             proxmoxToken,
-		ProxmoxInsecure:          getenvBool("ALMANAUT_PROXMOX_INSECURE", false),
-		AuthUser:                 getenv("ALMANAUT_AUTH_USER", ""),
-		AuthPass:                 authPass,
-		SecureCookies:            getenvBool("ALMANAUT_SECURE_COOKIES", false),
-		ResetAdmin:               getenvBool("ALMANAUT_RESET_ADMIN", false),
-		NtfyURL:                  getenv("ALMANAUT_NTFY_URL", ""),
-		NtfyToken:                ntfyToken,
-		DiscordWebhookURL:        discordWebhookURL,
-		NotifyWithinDays:         getenvInt("ALMANAUT_NOTIFY_WITHIN_DAYS", 30),
-		NotifyInterval:           getenvDuration("ALMANAUT_NOTIFY_INTERVAL", 24*time.Hour),
-		WebhooksEnabled:          getenvBool("ALMANAUT_WEBHOOKS_ENABLED", false),
-		WebhookTimeout:           getenvDuration("ALMANAUT_WEBHOOK_TIMEOUT", 10*time.Second),
-		WebhookMaxAttempts:       getenvInt("ALMANAUT_WEBHOOK_MAX_ATTEMPTS", 5),
-		KumaURL:                  getenv("ALMANAUT_KUMA_URL", ""),
-		KumaUser:                 getenv("ALMANAUT_KUMA_USER", ""),
-		KumaPass:                 kumaPass,
-		KumaInsecure:             getenvBool("ALMANAUT_KUMA_INSECURE", false),
-		LivenessEnabled:          getenvBool("ALMANAUT_LIVENESS_ENABLED", false),
-		LivenessInterval:         getenvDuration("ALMANAUT_LIVENESS_INTERVAL", 60*time.Second),
-		LivenessTimeout:          getenvDuration("ALMANAUT_LIVENESS_TIMEOUT", 5*time.Second),
-		CertProbeEnabled:         getenvBool("ALMANAUT_CERT_PROBE_ENABLED", false),
-		CertProbeInterval:        getenvDuration("ALMANAUT_CERT_PROBE_INTERVAL", 24*time.Hour),
-		CertProbeTimeout:         getenvDuration("ALMANAUT_CERT_PROBE_TIMEOUT", 10*time.Second),
-		DiscoveryDockerInterval:  getenvDuration("ALMANAUT_DISCOVERY_DOCKER_INTERVAL", 0),
-		DiscoveryNetworkInterval: getenvDuration("ALMANAUT_DISCOVERY_NETWORK_INTERVAL", 0),
-		DiscoveryProxmoxInterval: getenvDuration("ALMANAUT_DISCOVERY_PROXMOX_INTERVAL", 0),
+	cfg := Config{
+		Addr:                          getenv("ALMANAUT_ADDR", ":8080"),
+		DataDir:                       getenv("ALMANAUT_DATA_DIR", "./data"),
+		DockerSocket:                  getenv("ALMANAUT_DOCKER_SOCKET", "/var/run/docker.sock"),
+		NetworkScanEnabled:            getenvBool("ALMANAUT_ENABLE_NETWORK_SCAN", false),
+		ScanSubnet:                    getenv("ALMANAUT_SCAN_SUBNET", ""),
+		ProxmoxURL:                    getenv("ALMANAUT_PROXMOX_URL", ""),
+		ProxmoxToken:                  proxmoxToken,
+		XenOrchestraURL:               getenv("ALMANAUT_XO_URL", ""),
+		XenOrchestraToken:             xenOrchestraToken,
+		XenOrchestraInsecure:          getenvBool("ALMANAUT_XO_INSECURE", false),
+		ProxmoxInsecure:               getenvBool("ALMANAUT_PROXMOX_INSECURE", false),
+		AuthUser:                      getenv("ALMANAUT_AUTH_USER", ""),
+		AuthPass:                      authPass,
+		SecureCookies:                 getenvBool("ALMANAUT_SECURE_COOKIES", false),
+		ResetAdmin:                    getenvBool("ALMANAUT_RESET_ADMIN", false),
+		NtfyURL:                       getenv("ALMANAUT_NTFY_URL", ""),
+		NtfyToken:                     ntfyToken,
+		DiscordWebhookURL:             discordWebhookURL,
+		NotifyWithinDays:              getenvInt("ALMANAUT_NOTIFY_WITHIN_DAYS", 30),
+		NotifyInterval:                getenvDuration("ALMANAUT_NOTIFY_INTERVAL", 24*time.Hour),
+		WebhooksEnabled:               getenvBool("ALMANAUT_WEBHOOKS_ENABLED", false),
+		WebhookTimeout:                getenvDuration("ALMANAUT_WEBHOOK_TIMEOUT", 10*time.Second),
+		WebhookMaxAttempts:            getenvInt("ALMANAUT_WEBHOOK_MAX_ATTEMPTS", 5),
+		KumaURL:                       getenv("ALMANAUT_KUMA_URL", ""),
+		KumaUser:                      getenv("ALMANAUT_KUMA_USER", ""),
+		KumaPass:                      kumaPass,
+		KumaInsecure:                  getenvBool("ALMANAUT_KUMA_INSECURE", false),
+		LivenessEnabled:               getenvBool("ALMANAUT_LIVENESS_ENABLED", false),
+		LivenessInterval:              getenvDuration("ALMANAUT_LIVENESS_INTERVAL", 60*time.Second),
+		LivenessTimeout:               getenvDuration("ALMANAUT_LIVENESS_TIMEOUT", 5*time.Second),
+		CertProbeEnabled:              getenvBool("ALMANAUT_CERT_PROBE_ENABLED", false),
+		CertProbeInterval:             getenvDuration("ALMANAUT_CERT_PROBE_INTERVAL", 24*time.Hour),
+		CertProbeTimeout:              getenvDuration("ALMANAUT_CERT_PROBE_TIMEOUT", 10*time.Second),
+		DiscoveryDockerInterval:       getenvDuration("ALMANAUT_DISCOVERY_DOCKER_INTERVAL", 0),
+		DiscoveryNetworkInterval:      getenvDuration("ALMANAUT_DISCOVERY_NETWORK_INTERVAL", 0),
+		DiscoveryXenOrchestraInterval: getenvDuration("ALMANAUT_DISCOVERY_XO_INTERVAL", 0),
+		DiscoveryProxmoxInterval:      getenvDuration("ALMANAUT_DISCOVERY_PROXMOX_INTERVAL", 0),
 
 		StaleAfterDays: getenvInt("ALMANAUT_STALE_AFTER_DAYS", 90),
 
@@ -128,7 +147,12 @@ func Load() (Config, error) {
 		ProxyAuthAllowlist:     getenv("ALMANAUT_PROXY_AUTH_ALLOWLIST", ""),
 		ProxyAuthAutoProvision: getenvBool("ALMANAUT_PROXY_AUTH_AUTOPROVISION", false),
 		ProxyAuthDefaultRole:   getenv("ALMANAUT_PROXY_AUTH_DEFAULT_ROLE", "viewer"),
-	}, nil
+	}
+	cfg.DiscoverySources, err = loadDiscoverySources(sourceFile, cfg)
+	if err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
 func getenv(key, def string) string {

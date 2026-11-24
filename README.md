@@ -58,8 +58,11 @@ server-rendered UI. Back it up by copying one file (or one YAML export).
 
 **Automation & integrations**
 
-- **Auto-discovery** from Docker (via the socket), a network subnet scan, and
-  Proxmox VE — discovery only ever *creates* records, never overwrites yours
+- **Auto-discovery** from Docker / Podman (via the socket), a network subnet scan,
+  Proxmox VE, and XCP-ng via Xen Orchestra — review and import without
+  overwriting manual records
+- **Multiple discovery sources** with independent schedules, persistent source
+  identities that survive renames, and a summary after each engine import
 - **Expiry notifications** via [ntfy](https://ntfy.sh) and/or Discord for
   certificates, warranties, and renewals
 - **Outbound webhooks** — signed HTTP payloads on entity create/update/delete
@@ -122,7 +125,7 @@ The full documentation lives in [`docs/`](docs/README.md):
 | [The inventory model](docs/inventory-model.md) | The 17 entity types, sites/locations/racks, NICs & ports, IPAM, custom fields, attachments, history |
 | [Lists, saved views & bulk editing](docs/lists-and-views.md) | Filtering and sorting, saved views, bulk actions on list pages |
 | [Inventory health](docs/inventory-health.md) | The health report and its audit rules, stale entities, the checks page, impact analysis |
-| [Auto-discovery](docs/discovery.md) | Docker containers, network scan, Proxmox VE |
+| [Auto-discovery](docs/discovery.md) | Docker / Podman containers, network scan, Proxmox VE, XCP-ng via Xen Orchestra |
 | [Inventory agent](docs/agent.md) | Installing `almanaut-agent`, what it reports, conflicts and duplicates |
 | [Background jobs](docs/background-jobs.md) | The scheduled-tasks page, liveness checks, certificate probing, scheduled discovery |
 | [Notifications & integrations](docs/integrations.md) | ntfy & Discord expiry alerts, outbound webhooks, Uptime Kuma sync |

@@ -230,7 +230,7 @@ func TestHealthReportStaleDisabled(t *testing.T) {
 func TestDiscoveryImportRecordsSighting(t *testing.T) {
 	scanner := fakeScanner{containers: []discovery.Container{{ID: "c1", Name: "jellyfin"}}}
 	srv, db := newTestServerDockerDB(t, scanner)
-	if rec := postForm(t, srv, "/discovery/docker/import", url.Values{"id": {"c1"}}); rec.Code != 303 {
+	if rec := postForm(t, srv, "/discovery/docker/import", url.Values{"id": {"c1"}}); rec.Code != 200 {
 		t.Fatalf("docker import = %d", rec.Code)
 	}
 	var n int

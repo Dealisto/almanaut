@@ -1,0 +1,8 @@
+{{define "content"}}
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Discovery</span><h1>Import complete</h1><p class="page-description">{{.Source.Name}}</p></div></div>
+<section class="panel" role="status">
+<dl class="def-grid"><dt>Added</dt><dd data-import-count="added">{{.Added}}</dd><dt>Already present</dt><dd data-import-count="existing">{{.Existing}}</dd><dt>Skipped</dt><dd data-import-count="skipped">{{.Skipped}}</dd><dt>Host links created</dt><dd data-import-count="linked">{{.Linked}}</dd></dl>
+<p class="muted">Existing records were preserved. Skipped selections were missing, invalid, or ambiguous. Counts include only the selected resources.</p>
+<div class="actions"><a class="btn btn-primary" href="{{.InventoryPath}}">View inventory</a> <a class="btn" href="{{.Source.Path}}">Review source again</a> <a class="btn" href="/discovery">All sources</a></div>
+</section>
+{{end}}

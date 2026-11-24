@@ -117,6 +117,27 @@ func main() {
 	// /discovery/runs is mounted even before any per-source job below runs.
 	discoveryRuns := store.NewDiscoveryRunRepo(db)
 
+	// Share configured clients between preview/import and scheduled discovery.
+	webSources := make([]web.DiscoverySource, 0, len(cfg.DiscoverySources))
+	scheduledSources := make([]scheddiscovery.Source, 0, len(cfg.DiscoverySources))
+	for _, source := range cfg.DiscoverySources {
+		ws := web.DiscoverySource{ID: source.ID, Name: source.Name, Kind: source.Kind}
+		ss := scheddiscovery.Source{Key: source.Key(), Kind: source.Kind}
+		switch source.Kind {
+		case "docker", "podman":
+			client := discovery.NewSocketClient(source.Socket)
+			ws.Docker, ss.Docker = client, client
+		case "proxmox":
+			client := discovery.NewProxmoxClient(source.URL, source.Token, source.Insecure)
+			ws.Proxmox, ss.Proxmox = client, client
+		case "xen-orchestra":
+			client := discovery.NewXenOrchestraClient(source.URL, source.Token, source.Insecure)
+			ws.XenOrchestra, ss.XenOrchestra = client, client
+		}
+		webSources = append(webSources, ws)
+		scheduledSources = append(scheduledSources, ss)
+	}
+
 	handler := web.New(web.Config{
 		Hosts:                  store.NewHostRepo(db),
 		Services:               store.NewServiceRepo(db),
@@ -141,11 +162,9 @@ func main() {
 		CertProber:             prober,
 		CertProbes:             certProbes,
 		DB:                     db,
-		Docker:                 discovery.NewSocketClient(cfg.DockerSocket),
+		DiscoverySources:       webSources,
 		NetScan:                discovery.NewNetworkScanner(),
 		NetOpts:                web.NetDiscoveryOptions{Enabled: cfg.NetworkScanEnabled, DefaultSubnet: cfg.ScanSubnet},
-		Proxmox:                discovery.NewProxmoxClient(cfg.ProxmoxURL, cfg.ProxmoxToken, cfg.ProxmoxInsecure),
-		PVEOpts:                web.ProxmoxOptions{Enabled: cfg.ProxmoxURL != "" && cfg.ProxmoxToken != ""},
 		AuthEnabled:            true,
 		SecureCookies:          cfg.SecureCookies,
 		Version:                version,
@@ -250,28 +269,22 @@ func main() {
 	// Scheduled discovery is opt-in per source: each is gated by its own
 	// interval plus that source's availability. Findings are only recorded
 	// and notified here — nothing is auto-imported (see internal/scheddiscovery).
-	detector := scheddiscovery.New(
-		discovery.NewSocketClient(cfg.DockerSocket),
-		discovery.NewNetworkScanner(),
-		cfg.ScanSubnet,
-		discovery.NewProxmoxClient(cfg.ProxmoxURL, cfg.ProxmoxToken, cfg.ProxmoxInsecure),
-		store.NewServiceRepo(db),
-		store.NewHostRepo(db),
-		discoveryRuns,
-		sender,
-		nil, nil,
-	)
-	if cfg.DiscoveryDockerInterval > 0 {
-		runner.Register(job.Definition{Name: "discovery-docker", Title: "Discovery: Docker", Interval: cfg.DiscoveryDockerInterval, Timeout: cfg.DiscoveryDockerInterval, Run: detector.RunDocker})
-		log.Println("scheduled Docker discovery enabled")
+	for i, source := range cfg.DiscoverySources {
+		if source.Interval <= 0 {
+			continue
+		}
+		detector := scheddiscovery.NewSource(scheduledSources[i], store.NewServiceRepo(db), store.NewHostRepo(db), store.NewDiscoveryBindingRepo(db), discoveryRuns, sender)
+		name := "discovery-" + source.Kind
+		if source.ID != "default" {
+			name += "-" + source.ID
+		}
+		runner.Register(job.Definition{Name: name, Title: "Discovery: " + source.Name, Interval: source.Interval, Timeout: source.Interval, Run: detector.Run})
+		log.Printf("scheduled discovery enabled: %s", source.Key())
 	}
 	if cfg.DiscoveryNetworkInterval > 0 && cfg.NetworkScanEnabled && cfg.ScanSubnet != "" {
+		detector := scheddiscovery.New(nil, discovery.NewNetworkScanner(), cfg.ScanSubnet, nil, store.NewServiceRepo(db), store.NewHostRepo(db), discoveryRuns, sender, nil, nil)
 		runner.Register(job.Definition{Name: "discovery-network", Title: "Discovery: network", Interval: cfg.DiscoveryNetworkInterval, Timeout: cfg.DiscoveryNetworkInterval, Run: detector.RunNetwork})
 		log.Println("scheduled network discovery enabled")
-	}
-	if cfg.DiscoveryProxmoxInterval > 0 && cfg.ProxmoxURL != "" && cfg.ProxmoxToken != "" {
-		runner.Register(job.Definition{Name: "discovery-proxmox", Title: "Discovery: Proxmox", Interval: cfg.DiscoveryProxmoxInterval, Timeout: cfg.DiscoveryProxmoxInterval, Run: detector.RunProxmox})
-		log.Println("scheduled Proxmox discovery enabled")
 	}
 
 	background.Go(func() { runner.Start(ctx) })
