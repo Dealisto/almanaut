@@ -3,8 +3,8 @@
 # Auto-discovery
 
 Discovery reads external systems without changing them. You review the results
-and confirm which records to add or associate with existing inventory. Manual
-names and details are never overwritten. Configuration is described in
+and confirm which records to add, associate with existing inventory, or update.
+Names and details are never overwritten automatically. Configuration is described in
 [Configuration](configuration.md); for machines the server cannot reach at all,
 see the [inventory agent](agent.md) instead.
 
@@ -44,6 +44,76 @@ records before importing again.
 Deleting a host or service also removes its discovery association. A later
 import can create it again. [YAML exports](export-import.md) preserve these
 associations but do not contain source credentials or configuration.
+
+## Source health and finding records
+
+**Discover** shows each source's most recent background scan, last successful
+scan, resource count at that success, and estimated next scheduled scan, with
+timestamps in UTC. A failed scan shows its error while preserving the previous
+successful count. Sources without a configured schedule are labelled accordingly.
+Admins can start **Run now** from the source card or open **Scheduled tasks**
+and **Scan history**. Editors and viewers cannot run the admin-only scheduler jobs.
+
+Opening **Review source** fetches current inventory. Filter the table by **New**,
+**Existing record to match**, **Conflicts**, or **Tracked**, and search names,
+addresses, or displayed details. Only visible selected rows are submitted for
+import. Names already matched to local records link directly to those records.
+An empty filtered view is distinct from an empty source or a failed scan.
+
+## Replacing a source identity
+
+Use **Resolve replacements** when a recreated container has a new external ID
+but should keep its existing inventory record. Almanaut proposes replacements
+only within the same configured source, for one unique normalized name and a
+compatible host type or service kind. The previous ID must no longer appear in
+the successful scan, and the replacement ID must not already be associated.
+Duplicate names, multiple associations, or incompatible types require manual
+review before a safe proposal can be offered. A local name that differs from
+the source name also prevents a name-based proposal.
+
+The review displays the old and new IDs and links to the existing record.
+Confirming replaces only the discovery association; the inventory ID, notes,
+manual fields, and relationships remain intact. The source is scanned again
+and the association is checked inside the save transaction. A stale or conflicting
+confirmation is rejected instead of silently changing its target. The previous
+identity's observation timestamp is cleared.
+
+An absent ID is not proof of deletion: Docker and Podman discovery lists running
+containers only. Check the source before confirming a replacement. The workflow
+cannot detect Proxmox VMID reuse when the external ID itself remains unchanged.
+
+## Reviewing field changes and missing resources
+
+**Review changes** compares current source data with already-associated inventory
+records. For each record, choose individual fields and apply only those values:
+
+- Services: name, published ports, and Compose project/category.
+- Hosts: name, CPU, RAM, disk, status, and IP addresses.
+
+No field is selected automatically. Missing source details such as CPU, memory,
+disk, or IP addresses are not proposed as blank replacements for manual values.
+The displayed image difference is informational: images are read from the
+discovery-generated provenance line in service notes, and free-form notes are
+never rewritten. Other unselected fields and relationships remain unchanged.
+
+Applying changes fetches the source again and verifies that the selected local
+and observed values still match the review. If either changed, or the association
+changed, the request is rejected; reopen the review before trying again. A
+successful update is recorded in the inventory change history. Editors and
+admins can apply changes; viewers can inspect the comparison.
+
+An associated resource absent from a successful scan is shown as **Not observed**,
+with its last successful observation when available. This does not mean deleted
+or unreachable. In particular, a stopped Docker or Podman container is absent
+from the running-container list. Failed scans display an error instead of
+marking resources absent. Neither condition deletes inventory records.
+
+Successful source previews, change reviews, and scheduled engine scans update
+observation times for unambiguously associated resources. Filters do not hide
+resources from observation bookkeeping. These timestamps are operational data:
+they are excluded from YAML exports, cleared when inventory is replaced, and
+removed when the corresponding discovery association is removed. New imports
+and restored inventories acquire observations on subsequent scans.
 
 ## Import results
 

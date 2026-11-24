@@ -23,6 +23,16 @@ details are listed there.
   manual record. Source and inventory renames retain the association without
   overwriting manual fields; distinct identities remain separate across sources.
 - Show import results with added, already-present, skipped and host-link counts.
+- Review and explicitly replace a recreated resource's source identity while
+  preserving its existing inventory record, manual details, and relationships.
+  Fresh scans and transactional checks reject ambiguous or stale confirmations.
+- Show source health, last successful resource counts, estimated schedules, and
+  admin-only controls for existing discovery jobs directly on Discover.
+- Filter discovery results by import status or text and open matched inventory
+  records directly. Import selections contain only the visible rows.
+- Review observed field differences before accepting selected updates. Missing
+  resources are labelled not observed, with their last successful observation
+  when available; discovery never automatically removes inventory records.
 
 ### Changed
 - Label container discovery as Docker / Podman while preserving existing

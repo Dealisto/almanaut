@@ -94,11 +94,21 @@ manual scan — the schedule automates the looking, not the writing. It also
 never confirms a manual record's source identity; that association is saved only
 by an explicit import. Renaming a bound resource does not make it a new finding.
 
+A successful engine scan also records when each unambiguously associated
+resource was last observed. Failed scans and resources missing from a successful
+scan leave their previous observation times intact. These are operational
+timestamps, not edits to inventory fields, and they are excluded from YAML
+exports. Source review pages also record successful observations independently
+of the schedule.
+
 `/discovery/runs` is admin-only and displays the **last 50 runs**, each with its
 source, start and finish time, how many resources were found, how many of those
-were new, and the error if the run failed. It answers the question the discovery
-page cannot: whether the schedule is actually running, and whether it has been
-failing quietly.
+were new, and the error if the run failed. **Discover** shows a compact summary
+on each source card: last attempt, last success, the resource count at that
+success, and the estimated next scheduled scan. A later failure retains the
+previous successful count. Admins can start the existing job from that card or
+open its full history; scheduler controls remain admin-only. Reviewing a source
+fetches current data without creating a background-run history entry.
 
 Recording a run also prunes stored history in the same transaction. The database
 retains the last 50 runs plus each source's latest run and most recent successful

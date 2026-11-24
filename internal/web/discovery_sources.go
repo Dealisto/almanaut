@@ -3,13 +3,16 @@ package web
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Dealisto/almanaut/internal/discovery"
 	"github.com/Dealisto/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/job"
 	"github.com/Dealisto/almanaut/internal/store"
 )
 
@@ -115,6 +118,7 @@ func (s DiscoverySource) candidates(ctx context.Context) ([]discovery.Candidate,
 type discoverySourceRow struct {
 	discovery.Match
 	Name, Type, Status, CPU, RAM, Disk, Ports, Category, IPs, ParentName string
+	InventoryPath, ImportStatus                                          string
 }
 type discoverySourcePage struct {
 	Title      string
@@ -123,6 +127,9 @@ type discoverySourcePage struct {
 	Hosts      []domain.Host
 	Error      string
 	Selectable int
+	Total      int
+	Filter     string
+	Query      string
 }
 type discoveryImportResult struct {
 	Title                            string
@@ -131,77 +138,157 @@ type discoveryImportResult struct {
 	InventoryPath                    string
 }
 
-func discoverySourcesLanding(opts NetDiscoveryOptions, sources []DiscoverySource) http.HandlerFunc {
+type discoverySourceHealth struct {
+	DiscoverySource
+	Latest, Successful *store.DiscoveryRun
+	Task               *job.Status
+}
+
+func discoverySourcesLanding(opts NetDiscoveryOptions, sources []DiscoverySource, runs *store.DiscoveryRunRepo, runner jobRunner) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		visible := make([]DiscoverySource, 0, len(sources))
-		for _, s := range sources {
-			if s.available() {
-				visible = append(visible, s)
+		jobs := make(map[string]job.Status)
+		if runner != nil {
+			for _, status := range runner.Statuses() {
+				jobs[status.Name] = status
 			}
+		}
+		visible := make([]discoverySourceHealth, 0, len(sources))
+		for _, s := range sources {
+			if !s.available() {
+				continue
+			}
+			health := discoverySourceHealth{DiscoverySource: s}
+			if runs != nil {
+				latest, err := runs.Latest(s.Key())
+				if err != nil && !errors.Is(err, store.ErrNotFound) {
+					serverError(w, req, err)
+					return
+				}
+				if err == nil {
+					health.Latest = &latest
+				}
+				successful, err := runs.LatestSuccessful(s.Key())
+				if err != nil && !errors.Is(err, store.ErrNotFound) {
+					serverError(w, req, err)
+					return
+				}
+				if err == nil {
+					health.Successful = &successful
+				}
+			}
+			jobName := "discovery-" + s.Kind
+			if s.ID != "default" {
+				jobName += "-" + s.ID
+			}
+			if status, ok := jobs[jobName]; ok {
+				health.Task = &status
+			}
+			visible = append(visible, health)
 		}
 		render(w, req, "discovery.html", struct {
 			Title          string
 			NetworkEnabled bool
-			Sources        []DiscoverySource
-		}{"Discover", opts.Enabled, visible})
+			Sources        []discoverySourceHealth
+			TasksEnabled   bool
+			HistoryEnabled bool
+		}{"Discover", opts.Enabled, visible, runner != nil, runs != nil})
 	}
 }
 
-func scanDiscoverySource(source DiscoverySource, db *sql.DB) http.HandlerFunc {
+func scanDiscoverySource(source DiscoverySource, db *sql.DB, cat entityCatalog) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if !source.available() {
 			http.NotFound(w, req)
 			return
 		}
-		data := discoverySourcePage{Title: source.Name + " discovery", Source: source}
+		filter := req.URL.Query().Get("status")
+		switch filter {
+		case "", "all":
+			filter = "all"
+		case "new", "matched", "conflict", "tracked":
+		default:
+			http.Error(w, "invalid discovery status filter", http.StatusBadRequest)
+			return
+		}
+		data := discoverySourcePage{Title: source.Name + " discovery", Source: source, Filter: filter, Query: strings.TrimSpace(req.URL.Query().Get("q"))}
+		scannedAt := time.Now().UTC()
 		candidates, err := source.candidates(req.Context())
 		if err != nil {
 			data.Error = source.errorPrefix() + err.Error()
 			render(w, req, "discovery_source.html", data)
 			return
 		}
-		hosts, err := store.NewHostRepo(db).List()
+		err = store.WithTx(db, func(tx *sql.Tx) error {
+			hosts, err := store.NewHostRepo(db).WithTx(tx).List()
+			if err != nil {
+				return err
+			}
+			services, err := store.NewServiceRepo(db).WithTx(tx).List()
+			if err != nil {
+				return err
+			}
+			bindings, err := store.NewDiscoveryBindingRepo(db).WithTx(tx).List()
+			if err != nil {
+				return err
+			}
+			data.Hosts = hosts
+			parents := make(map[string]string)
+			for _, c := range candidates {
+				if c.EntityType == "host" && c.Host.Type == "physical" {
+					parents[c.ID] = c.Host.Name
+				}
+			}
+			var observed []string
+			for _, m := range discovery.MatchCandidates(source.Key(), candidates, hosts, services, bindings) {
+				if m.Bound && !m.Ambiguous {
+					observed = append(observed, m.ID)
+				}
+				row := discoverySourceRow{Match: m, ParentName: parents[m.ParentID]}
+				if m.EntityType == "host" {
+					row.Name = m.Host.Name
+					row.Type = m.Host.Type
+					row.Status = m.Host.Status
+					row.CPU = m.Host.CPU
+					row.RAM = m.Host.RAM
+					row.Disk = m.Host.Disk
+					row.IPs = strings.Join(m.Host.IPs, ", ")
+				} else {
+					row.Name = m.Service.Name
+					row.Type = m.Service.Kind
+					row.Ports = m.Service.Ports
+					row.Category = m.Service.Category
+				}
+				switch {
+				case m.Ambiguous:
+					row.ImportStatus = "conflict"
+				case m.Bound:
+					row.ImportStatus = "tracked"
+				case m.ExistingID > 0:
+					row.ImportStatus = "matched"
+				default:
+					row.ImportStatus = "new"
+				}
+				if m.ExistingID > 0 {
+					row.InventoryPath = cat.path(m.EntityType, m.ExistingID)
+				}
+				data.Total++
+				if data.Filter != "all" && data.Filter != row.ImportStatus {
+					continue
+				}
+				searchable := strings.Join([]string{row.Name, row.Type, row.ParentName, row.IPs, row.Ports, row.Category}, " ")
+				if data.Query != "" && !strings.Contains(strings.ToLower(searchable), strings.ToLower(data.Query)) {
+					continue
+				}
+				if !m.Bound && !m.Ambiguous {
+					data.Selectable++
+				}
+				data.Rows = append(data.Rows, row)
+			}
+			return store.NewDiscoveryObservationRepo(db).WithTx(tx).RecordBound(source.Key(), observed, scannedAt)
+		})
 		if err != nil {
 			serverError(w, req, err)
 			return
-		}
-		services, err := store.NewServiceRepo(db).List()
-		if err != nil {
-			serverError(w, req, err)
-			return
-		}
-		bindings, err := store.NewDiscoveryBindingRepo(db).List()
-		if err != nil {
-			serverError(w, req, err)
-			return
-		}
-		data.Hosts = hosts
-		parents := make(map[string]string)
-		for _, c := range candidates {
-			if c.EntityType == "host" && c.Host.Type == "physical" {
-				parents[c.ID] = c.Host.Name
-			}
-		}
-		for _, m := range discovery.MatchCandidates(source.Key(), candidates, hosts, services, bindings) {
-			row := discoverySourceRow{Match: m, ParentName: parents[m.ParentID]}
-			if m.EntityType == "host" {
-				row.Name = m.Host.Name
-				row.Type = m.Host.Type
-				row.Status = m.Host.Status
-				row.CPU = m.Host.CPU
-				row.RAM = m.Host.RAM
-				row.Disk = m.Host.Disk
-				row.IPs = strings.Join(m.Host.IPs, ", ")
-			} else {
-				row.Name = m.Service.Name
-				row.Type = m.Service.Kind
-				row.Ports = m.Service.Ports
-				row.Category = m.Service.Category
-			}
-			if !m.Bound && !m.Ambiguous {
-				data.Selectable++
-			}
-			data.Rows = append(data.Rows, row)
 		}
 		render(w, req, "discovery_source.html", data)
 	}

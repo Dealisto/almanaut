@@ -273,7 +273,7 @@ func main() {
 		if source.Interval <= 0 {
 			continue
 		}
-		detector := scheddiscovery.NewSource(scheduledSources[i], store.NewServiceRepo(db), store.NewHostRepo(db), store.NewDiscoveryBindingRepo(db), discoveryRuns, sender)
+		detector := scheddiscovery.NewSource(scheduledSources[i], store.NewServiceRepo(db), store.NewHostRepo(db), store.NewDiscoveryBindingRepo(db), discoveryRuns, sender, store.NewDiscoveryObservationRepo(db))
 		name := "discovery-" + source.Kind
 		if source.ID != "default" {
 			name += "-" + source.ID

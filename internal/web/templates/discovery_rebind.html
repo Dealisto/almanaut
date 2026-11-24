@@ -1,0 +1,18 @@
+{{define "content"}}
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Discovery · {{.Source.Name}}</span><h1>Review replacement identities</h1><p class="page-description">Reconnect a recreated resource to its existing inventory record.</p></div></div>
+<section class="panel">
+<p>The previous identity was not observed in the current scan. This does not prove that the resource was deleted: stopped containers may be absent. Confirm only when you know this is the same resource recreated.</p>
+<p>Replacing the identity keeps the inventory record, manual details and relationships. Only unique matching names and compatible types within this source are offered.</p>
+{{range .Options}}
+<form method="post" action="{{$.Source.Path}}/rebind">
+{{csrfField}}
+<h2><a href="{{.EntityPath}}">{{.Name}}</a></h2>
+<dl><dt>Previous identity</dt><dd><code class="discovery-identity">{{.Old.ExternalID}}</code></dd><dt>Observed replacement</dt><dd><code class="discovery-identity">{{.NewID}}</code></dd></dl>
+{{if canWrite}}<input type="hidden" name="old_id" value="{{.Old.ExternalID}}"><input type="hidden" name="new_id" value="{{.NewID}}"><input type="hidden" name="entity_type" value="{{.Old.EntityType}}"><input type="hidden" name="entity_id" value="{{.Old.EntityID}}">
+<label><input type="checkbox" name="confirm" value="replace" required> I confirm that this new identity replaces the previous resource.</label>
+<div class="actions"><button class="btn btn-primary" type="submit">Replace identity</button></div>{{end}}
+</form>
+{{else}}<div class="empty">No unambiguous replacements are available. Refresh discovery after checking the source and inventory names.</div>{{end}}
+<div class="actions"><a class="btn" href="{{.Source.Path}}">Back to discovery</a></div>
+</section>
+{{end}}
