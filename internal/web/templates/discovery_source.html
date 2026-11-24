@@ -1,6 +1,13 @@
 {{define "content"}}
 <div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Discovery</span><h1>{{.Source.Name}}</h1><p class="page-description">Review this source before adding records to your inventory.</p></div></div>
+<div class="toolbar"><a class="btn" href="/discovery">All sources</a><a class="btn" href="{{.Source.Path}}/changes">Review changes</a>{{if canWrite}}<a class="btn" href="{{.Source.Path}}/rebind">Resolve replacements</a>{{end}}</div>
 {{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
+<form class="list-controls" method="get" action="{{.Source.Path}}">
+  <label class="lc-field filter-query">Find in this source<input type="search" name="q" value="{{.Query}}" placeholder="Name, address, or another detail…"></label>
+  <label class="lc-field">Import status<select name="status"><option value="all"{{if eq .Filter "all"}} selected{{end}}>All</option><option value="new"{{if eq .Filter "new"}} selected{{end}}>New</option><option value="matched"{{if eq .Filter "matched"}} selected{{end}}>Existing record to match</option><option value="conflict"{{if eq .Filter "conflict"}} selected{{end}}>Conflicts</option><option value="tracked"{{if eq .Filter "tracked"}} selected{{end}}>Tracked</option></select></label>
+  <button class="btn btn-primary" type="submit">Apply filters</button>{{if or .Query (ne .Filter "all")}}<a class="btn" href="{{.Source.Path}}">Clear filters</a>{{end}}
+</form>
+{{if not .Error}}<p class="muted" role="status">Showing {{len .Rows}} of {{.Total}} resources.</p>{{end}}
 {{if .Rows}}
 <section class="panel"><form method="post" action="{{.Source.Path}}/import">
 {{csrfField}}
@@ -8,11 +15,11 @@
 {{if .Source.Containers}}<label>Host these containers run on <select name="host"><option value="">— none —</option>{{range .Hosts}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></label>
 {{else}}<label><input type="checkbox" name="link" value="on" checked> Link imported VMs and containers to their host when it is present in the inventory</label>{{end}}
 {{end}}
-<p class="muted">Existing records keep their names and manual details. Confirm matching records to remember their source identity. A conflicting name or changed source identity requires review before importing.</p>
-<div class="table-wrap"><table><thead><tr><th scope="col"><span class="sr-only">Selection</span></th><th scope="col">Name</th><th scope="col">Type</th>{{if .Source.Containers}}<th scope="col">Ports</th><th scope="col">Category</th>{{else}}<th scope="col">Host</th><th scope="col">Status</th><th scope="col">CPU</th><th scope="col">RAM</th><th scope="col">Disk</th><th scope="col">IP addresses</th>{{end}}<th scope="col">Import status</th></tr></thead><tbody>
-{{range .Rows}}<tr><td>{{if canWrite}}{{if and (not .Bound) (not .Ambiguous)}}<input type="checkbox" name="id" value="{{.ID}}" aria-label="Import {{.Name}}" checked>{{end}}{{end}}</td><td>{{.Name}}</td><td>{{.Type}}</td>{{if $.Source.Containers}}<td>{{.Ports}}</td><td>{{.Category}}</td>{{else}}<td>{{.ParentName}}</td><td>{{.Status}}</td><td>{{.CPU}}</td><td>{{.RAM}}</td><td>{{.Disk}}</td><td>{{.IPs}}</td>{{end}}<td>{{if .Ambiguous}}Name or identity conflict{{else if .Bound}}Already tracked{{else if .ExistingID}}Existing record: confirm identity{{else}}New{{end}}</td></tr>{{end}}
+<p class="muted">Existing records keep their names and manual details. Confirm matching records to remember their source identity. A conflicting name or changed source identity requires review before importing. Only the visible selected rows will be imported.</p>
+<div class="table-wrap"><table><caption class="sr-only">Resources from {{.Source.Name}} matching the current filters</caption><thead><tr><th scope="col"><span class="sr-only">Selection</span></th><th scope="col">Name</th><th scope="col">Type</th>{{if .Source.Containers}}<th scope="col">Ports</th><th scope="col">Category</th>{{else}}<th scope="col">Host</th><th scope="col">Status</th><th scope="col">CPU</th><th scope="col">RAM</th><th scope="col">Disk</th><th scope="col">IP addresses</th>{{end}}<th scope="col">Import status</th></tr></thead><tbody>
+{{range .Rows}}<tr data-discovery-status="{{.ImportStatus}}"><td>{{if canWrite}}{{if and (not .Bound) (not .Ambiguous)}}<input type="checkbox" name="id" value="{{.ID}}" aria-label="Import {{.Name}}" checked>{{end}}{{end}}</td><td>{{if .InventoryPath}}<a href="{{.InventoryPath}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</td><td>{{.Type}}</td>{{if $.Source.Containers}}<td>{{.Ports}}</td><td>{{.Category}}</td>{{else}}<td>{{.ParentName}}</td><td>{{.Status}}</td><td>{{.CPU}}</td><td>{{.RAM}}</td><td>{{.Disk}}</td><td>{{.IPs}}</td>{{end}}<td>{{if .Ambiguous}}Name or identity conflict{{else if .Bound}}Already tracked{{else if .ExistingID}}Existing record: confirm identity{{else}}New{{end}}</td></tr>{{end}}
 </tbody></table></div>
 {{if canWrite}}<div class="actions"><button class="btn btn-primary" type="submit"{{if not .Selectable}} disabled{{end}}>Import selected</button></div>{{end}}
 </form></section>
-{{else if not .Error}}<section class="panel"><div class="empty">{{if .Source.Containers}}No running containers found.{{else}}No nodes, VMs, or containers found.{{end}}</div></section>{{end}}
+{{else if not .Error}}<section class="panel"><div class="empty">{{if .Total}}<strong>No matching resources.</strong><p>Try another search or clear your filters.</p><a class="btn" href="{{.Source.Path}}">Clear filters</a>{{else}}{{if .Source.Containers}}No running containers found.{{else}}No nodes, VMs, or containers found.{{end}}{{end}}</div></section>{{end}}
 {{end}}

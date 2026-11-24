@@ -1,0 +1,27 @@
+{{define "content"}}
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Discovery</span><h1>Review changes</h1><p class="page-description">{{.Source.Name}}</p></div></div>
+<div class="actions"><a class="btn" href="{{.Source.Path}}">Review source</a> <a class="btn" href="/discovery">All sources</a></div>
+{{if .Error}}<div class="error" role="alert">{{.Error}}</div><p class="muted">The source could not be read. No resources were marked missing and no inventory fields were changed.</p>
+{{else if .Applied}}<section class="panel" role="status"><p><strong data-changes-applied="{{.Applied}}">{{.Applied}} field(s) updated.</strong> Unselected fields, notes and relationships were preserved.</p><a class="btn btn-primary" href="{{.Source.Path}}/changes">Review changes again</a></section>
+{{else}}
+<p class="muted">Compare the current source with your saved inventory. Select only the fields you want to replace. Notes and relationships are preserved. Container images are informational because they are stored in free-form notes. Unavailable resource values are not offered for replacement.</p>
+{{range .Rows}}
+<section class="panel" data-discovery-resource="{{.ExternalID}}">
+<h2><a href="{{.Path}}">{{.Name}}</a></h2>
+<p class="muted">{{.EntityType}} · <code class="discovery-identity">{{.ExternalID}}</code>{{if .LastSeen}} · Last observed {{displayTime .LastSeen}}{{end}}</p>
+{{if .Missing}}<p><strong>Not observed</strong> in this successful scan. This does not mean the resource was deleted. Container discovery lists running containers only. The inventory record is preserved.</p>
+{{else if .Conflict}}<p><strong>Identity conflict</strong>. Review the source before changing this record.</p>
+{{else if .Fields}}
+<form method="post" action="{{$.Source.Path}}/changes">
+{{csrfField}}
+<input type="hidden" name="external_id" value="{{.ExternalID}}"><input type="hidden" name="entity_type" value="{{.EntityType}}"><input type="hidden" name="entity_id" value="{{.EntityID}}">
+<div class="table-wrap"><table><thead><tr><th scope="col">Apply</th><th scope="col">Field</th><th scope="col">Saved inventory</th><th scope="col">Observed source</th></tr></thead><tbody>
+{{range .Fields}}<tr><td>{{if and .Editable canWrite}}<input type="checkbox" name="field" value="{{.Name}}" aria-label="Apply {{.Label}}"><input type="hidden" name="expected_{{.Name}}" value="{{.Expected}}">{{else}}—{{end}}</td><th scope="row">{{.Label}}</th><td>{{if .Current}}{{.Current}}{{else}}—{{end}}</td><td>{{if .Observed}}{{.Observed}}{{else}}—{{end}}</td></tr>{{end}}
+</tbody></table></div>
+{{if and .Editable canWrite}}<button class="btn btn-primary" type="submit">Apply selected fields</button>{{end}}
+</form>
+{{else}}<p>No available field changes.</p>{{end}}
+</section>
+{{else}}<section class="panel"><p>No tracked resources for this source. Import or confirm existing records first.</p></section>{{end}}
+{{end}}
+{{end}}

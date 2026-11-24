@@ -60,3 +60,40 @@ func (r *DiscoveryBindingRepo) Create(b domain.DiscoveryBinding) error {
 	}
 	return nil
 }
+
+// Replace changes only a resource identity after the caller has reviewed its
+// replacement. The full old binding is a compare-and-swap guard against stale
+// confirmations. The source and inventory entity can never change here.
+func (r *DiscoveryBindingRepo) Replace(old domain.DiscoveryBinding, externalID string) error {
+	if err := old.Validate(); err != nil {
+		return &ConstraintError{Reason: err.Error()}
+	}
+	next := old
+	next.ExternalID = externalID
+	if err := next.Validate(); err != nil {
+		return &ConstraintError{Reason: err.Error()}
+	}
+	if old.ExternalID == externalID {
+		return &ConstraintError{Reason: "replacement identity must differ"}
+	}
+	if db, ok := r.db.(*sql.DB); ok {
+		return WithTx(db, func(tx *sql.Tx) error { return r.WithTx(tx).Replace(old, externalID) })
+	}
+	var exists bool
+	if err := r.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM discovery_bindings WHERE source = ? AND external_id = ? AND entity_type = ? AND entity_id = ?)`, old.Source, old.ExternalID, old.EntityType, old.EntityID).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return ErrNotFound
+	}
+	// The replacement is a new source identity: do not carry the old resource's
+	// last observation across it. Both operations roll back on a conflict.
+	if _, err := r.db.Exec(`DELETE FROM discovery_observations WHERE source = ? AND external_id = ?`, old.Source, old.ExternalID); err != nil {
+		return fmt.Errorf("clear replaced discovery observation: %w", err)
+	}
+	result, err := r.db.Exec(`UPDATE discovery_bindings SET external_id = ? WHERE source = ? AND external_id = ? AND entity_type = ? AND entity_id = ?`, externalID, old.Source, old.ExternalID, old.EntityType, old.EntityID)
+	if err != nil {
+		return fmt.Errorf("replace discovery binding: %w", err)
+	}
+	return rowsAffectedOrNotFound(result)
+}

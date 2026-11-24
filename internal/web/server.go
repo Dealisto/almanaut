@@ -854,17 +854,25 @@ func New(cfg Config) http.Handler {
 			r.Get("/export", exportData(db))
 			r.Post("/import", importData(db, cat))
 			r.Post("/import-csv", importCSV(cat, deps))
-			r.Get("/discovery", discoverySourcesLanding(netOpts, discoverySources))
+			r.Get("/discovery", discoverySourcesLanding(netOpts, discoverySources, cfg.DiscoveryRuns, cfg.Tasks))
 			for _, source := range discoverySources {
 				if !source.available() {
 					continue
 				}
-				r.Get(source.Path(), scanDiscoverySource(source, db))
+				r.Get(source.Path(), scanDiscoverySource(source, db, cat))
 				r.Post(source.Path()+"/import", importDiscoverySource(source, db))
+				r.Get(source.Path()+"/rebind", reviewDiscoveryRebind(source, db, cat))
+				r.Post(source.Path()+"/rebind", replaceDiscoveryBinding(source, db, cat))
+				r.Get(source.Path()+"/changes", reviewDiscoveryChanges(source, db, cat))
+				r.Post(source.Path()+"/changes", applyDiscoveryChanges(source, db, cat))
 				canonical := "/discovery/sources/" + source.Kind + "/" + source.ID
 				if canonical != source.Path() {
-					r.Get(canonical, scanDiscoverySource(source, db))
+					r.Get(canonical, scanDiscoverySource(source, db, cat))
 					r.Post(canonical+"/import", importDiscoverySource(source, db))
+					r.Get(canonical+"/rebind", reviewDiscoveryRebind(source, db, cat))
+					r.Post(canonical+"/rebind", replaceDiscoveryBinding(source, db, cat))
+					r.Get(canonical+"/changes", reviewDiscoveryChanges(source, db, cat))
+					r.Post(canonical+"/changes", applyDiscoveryChanges(source, db, cat))
 				}
 			}
 			r.Get("/discovery/network", networkForm(netOpts, hostTypes))

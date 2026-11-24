@@ -1,8 +1,23 @@
 {{define "content"}}
 <div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Discovery</span><h1>Let your homelab introduce itself.</h1><p class="page-description">Choose a source. Review what was found. Add only what you need.</p></div></div>
+{{if isAdmin}}<div class="toolbar">{{if .TasksEnabled}}<a class="btn" href="/tasks">Scheduled tasks</a>{{end}}{{if .HistoryEnabled}}<a class="btn" href="/discovery/runs">Scan history</a>{{end}}</div>{{end}}
 <div class="source-grid">
-  {{range .Sources}}<a class="source-card" href="{{.Path}}">{{icon "server"}}<h2>{{.Name}}</h2><p>{{if .Containers}}Import running containers as services.{{else}}Import physical hosts and their virtual machines.{{end}}</p><span class="text-link">Review source {{icon "arrow"}}</span></a>{{end}}
+  {{range .Sources}}
+  <article class="source-card" data-discovery-source="{{.Key}}">
+    {{icon "server"}}<h2><a href="{{.Path}}">{{.Name}}</a></h2>
+    <p>{{if .Containers}}Import running containers as services.{{else}}Import physical hosts and their virtual machines.{{end}}</p>
+    {{if and .Task .Task.Running}}<span class="badge badge-pending">Scanning</span>{{else if .Latest}}{{if .Latest.Error}}<span class="badge badge-warn">Last scan failed</span>{{else}}<span class="badge badge-ok">Last scan succeeded</span>{{end}}{{else}}<span class="badge">Not scanned yet</span>{{end}}
+    <dl>
+      <dt>Last attempt (UTC)</dt><dd>{{if .Latest}}{{.Latest.FinishedAt.UTC.Format "2006-01-02 15:04:05"}}{{else}}Not recorded{{end}}</dd>
+      <dt>Last success (UTC)</dt><dd>{{if .Successful}}{{.Successful.FinishedAt.UTC.Format "2006-01-02 15:04:05"}}{{else}}Not recorded{{end}}</dd>
+      <dt>Resources at last success</dt><dd>{{if .Successful}}{{.Successful.FoundCount}}{{else}}Unknown{{end}}</dd>
+      <dt>Next scheduled scan (UTC, estimated)</dt><dd>{{if .Task}}{{if .Task.NextRun.IsZero}}Waiting for schedule{{else}}{{.Task.NextRun.UTC.Format "2006-01-02 15:04:05"}}{{end}}{{else}}Automatic scans not scheduled{{end}}</dd>
+    </dl>
+    {{if .Latest}}{{if .Latest.Error}}<p class="task-error">{{.Latest.Error}}</p>{{end}}{{end}}
+    <div class="actions"><a class="btn" href="{{.Path}}">Review source<span class="sr-only">: {{.Name}}</span></a>{{if isAdmin}}{{if .Task}}<form method="post" action="/tasks/{{.Task.Name}}/run">{{csrfField}}<button class="btn" type="submit"{{if .Task.Running}} disabled{{end}}>Run now<span class="sr-only">: {{.Name}}</span></button></form>{{end}}{{end}}</div>
+  </article>
+  {{end}}
   {{if .NetworkEnabled}}<a class="source-card" href="/discovery/network">{{icon "network"}}<h2>Network scan</h2><p>Find live hosts in a subnet and review their IP addresses before importing.</p><span class="text-link">Scan a network {{icon "arrow"}}</span></a>{{end}}
 </div>
-<section class="panel"><h2>You stay in control.</h2><p class="muted">Discovery proposes; you confirm. Manual data is never overwritten. Only enabled sources are shown here.</p></section>
+<section class="panel"><h2>You stay in control.</h2><p class="muted">Discovery proposes; you confirm. Manual data is never overwritten automatically. Only enabled sources are shown here. Source health reflects recorded background scans; reviewing a source fetches its current inventory.</p></section>
 {{end}}

@@ -3,6 +3,7 @@ package scheddiscovery
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/Dealisto/almanaut/internal/discovery"
 	"github.com/Dealisto/almanaut/internal/domain"
@@ -22,22 +23,31 @@ type BindingLister interface {
 	List() ([]domain.DiscoveryBinding, error)
 }
 
+type ObservationRecorder interface {
+	RecordBound(source string, ids []string, observedAt time.Time) error
+}
+
 // SourceDetector shares matching rules with manual imports and stores a separate
 // history baseline for every source. Scheduled runs never create bindings.
 type SourceDetector struct {
-	source   Source
-	detector *Detector
-	bindings BindingLister
+	source       Source
+	detector     *Detector
+	bindings     BindingLister
+	observations ObservationRecorder
 }
 
-func NewSource(source Source, services ServiceLister, hosts HostLister, bindings BindingLister, runs *store.DiscoveryRunRepo, sender notify.Sender) *SourceDetector {
-	return &SourceDetector{source: source, detector: New(nil, nil, "", nil, services, hosts, runs, sender, nil, nil), bindings: bindings}
+func NewSource(source Source, services ServiceLister, hosts HostLister, bindings BindingLister, runs *store.DiscoveryRunRepo, sender notify.Sender, observations ...ObservationRecorder) *SourceDetector {
+	detector := &SourceDetector{source: source, detector: New(nil, nil, "", nil, services, hosts, runs, sender, nil, nil), bindings: bindings}
+	if len(observations) > 0 {
+		detector.observations = observations[0]
+	}
+	return detector
 }
 
 func (s *SourceDetector) Run(ctx context.Context) error {
 	start := s.detector.now()
 	candidates, err := s.candidates(ctx)
-	var newKeys []string
+	var newKeys, observedIDs []string
 	found := len(candidates)
 	if err == nil {
 		var hosts []domain.Host
@@ -52,12 +62,18 @@ func (s *SourceDetector) Run(ctx context.Context) error {
 			bindings, err = s.bindings.List()
 			if err == nil {
 				for _, m := range discovery.MatchCandidates(s.source.Key, candidates, hosts, services, bindings) {
+					if m.Bound && !m.Ambiguous {
+						observedIDs = append(observedIDs, m.ID)
+					}
 					if !m.Ambiguous && m.ExistingID == 0 {
 						newKeys = append(newKeys, m.ID)
 					}
 				}
 			}
 		}
+	}
+	if err == nil && s.observations != nil {
+		err = s.observations.RecordBound(s.source.Key, observedIDs, start)
 	}
 	return s.detector.finish(ctx, s.source.Key, start, found, newKeys, err)
 }

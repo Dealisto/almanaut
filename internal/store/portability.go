@@ -432,7 +432,7 @@ var entityTables = map[string]string{
 // may describe whatever entity used to have that id, and a stale "down" status
 // or probe result on the new one is worse than none. Clearing never causes a
 // spurious alert: liveness only notifies on a change from a known status.
-var derivedStateTables = []string{"liveness_state", "cert_probe_state", "notification_state"}
+var derivedStateTables = []string{"liveness_state", "cert_probe_state", "notification_state", "discovery_observations"}
 
 // reconcileSideTables brings the tables that are keyed by entity id but not
 // part of a Snapshot in line with the inventory Import just wrote, inside its

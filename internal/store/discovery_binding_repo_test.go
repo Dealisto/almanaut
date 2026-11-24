@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 	"gopkg.in/yaml.v3"
@@ -249,5 +250,81 @@ func TestLegacySnapshotClearsDiscoveryBindings(t *testing.T) {
 				t.Fatalf("old identities attached to replacement inventory: %+v, %v", got, err)
 			}
 		})
+	}
+}
+
+func TestDiscoveryBindingReplaceIsAtomicAndSourceScoped(t *testing.T) {
+	db := newTestDB(t)
+	id, err := NewServiceRepo(db).Create(domain.Service{Name: "manual", Kind: "container", Notes: "Preserve"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewDiscoveryBindingRepo(db)
+	old := domain.DiscoveryBinding{Source: "podman:lab", ExternalID: "old", EntityType: "service", EntityID: id}
+	other := old
+	other.Source = "podman:other"
+	taken := old
+	taken.ExternalID = "taken"
+	for _, b := range []domain.DiscoveryBinding{old, other, taken} {
+		if err := repo.Create(b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	observations := NewDiscoveryObservationRepo(db)
+	if err := observations.RecordBound(old.Source, []string{old.ExternalID}, time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Replace(old, "taken"); err == nil {
+		t.Fatal("accepted occupied identity")
+	}
+	seen, err := observations.ListSource(old.Source)
+	if err != nil || seen[old.ExternalID] == "" {
+		t.Fatalf("conflicting replacement removed observation: %v %v", seen, err)
+	}
+	got, _ := repo.List()
+	if len(got) != 3 {
+		t.Fatal("conflict lost bindings")
+	}
+	stale := old
+	stale.EntityID++
+	if err := repo.Replace(stale, "new"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("stale replace: %v", err)
+	}
+	if err := repo.Replace(old, "new"); err != nil {
+		t.Fatal(err)
+	}
+	seen, err = observations.ListSource(old.Source)
+	if err != nil || len(seen) != 0 {
+		t.Fatalf("replacement inherited old observation: %v %v", seen, err)
+	}
+	if err := repo.Replace(old, "newer"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("repeat accepted: %v", err)
+	}
+	got, err = repo.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []domain.DiscoveryBinding{old, taken, other}
+	want[0].ExternalID = "new"
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("wrong identity replacements: %+v", got)
+	}
+	service, err := NewServiceRepo(db).Get(id)
+	if err != nil || service.Name != "manual" || service.Notes != "Preserve" {
+		t.Fatalf("record altered: %+v %v", service, err)
+	}
+	sentinel := errors.New("rollback")
+	err = WithTx(db, func(tx *sql.Tx) error {
+		if e := repo.WithTx(tx).Replace(want[0], "rolled-back"); e != nil {
+			return e
+		}
+		return sentinel
+	})
+	if !errors.Is(err, sentinel) {
+		t.Fatal(err)
+	}
+	again, _ := repo.List()
+	if !reflect.DeepEqual(got, again) {
+		t.Fatal("replacement survived rollback")
 	}
 }
