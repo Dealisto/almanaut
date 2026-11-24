@@ -10,7 +10,8 @@
 | [The inventory model](inventory-model.md) | The 17 entity types, sites/locations/racks, NICs & ports, IPAM, custom fields, attachments, history |
 | [Lists, saved views & bulk editing](lists-and-views.md) | Filtering and sorting, saved views, bulk actions on list pages |
 | [Inventory health](inventory-health.md) | The health report and its audit rules, stale entities, the checks page, impact analysis |
-| [Auto-discovery](discovery.md) | Docker containers, network scan, Proxmox VE |
+| [Auto-discovery](discovery.md) | Docker / Podman containers, network scan, Proxmox VE, XCP-ng via Xen Orchestra |
+| [Podman discovery](podman.md) | Rootful/rootless sockets and container setup |
 | [Inventory agent](agent.md) | Installing `almanaut-agent`, what it reports, conflicts and duplicates |
 | [Background jobs](background-jobs.md) | The scheduled-tasks page, liveness checks, certificate probing, scheduled discovery |
 | [Notifications & integrations](integrations.md) | ntfy & Discord expiry alerts, outbound webhooks, Uptime Kuma sync |

@@ -135,7 +135,8 @@ main:focus{outline:none}
 .actions{margin-top:20px}
 
 /* Tables and reusable list controls. */
-.table-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
+/* Keep absolutely positioned screen-reader labels inside the table's scroll area. */
+.table-wrap{position:relative;overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
 table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}
 th,td{padding:14px 17px;text-align:left;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap}
 th{font-size:11px;letter-spacing:.5px;font-weight:600;color:var(--muted);background:var(--surface-2)}

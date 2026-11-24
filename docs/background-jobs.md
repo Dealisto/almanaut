@@ -32,9 +32,11 @@ whether your ntfy topic works, trigger the job and read the outcome.
 | Expiry notifications | `ALMANAUT_NTFY_URL` and/or `ALMANAUT_DISCORD_WEBHOOK_URL` | Pushes alerts for certificates, warranties and renewals falling due — see [Notifications & integrations](integrations.md) |
 | Liveness checks | `ALMANAUT_LIVENESS_ENABLED` | TCP-dials every host and service that has a check address |
 | Certificate probing | `ALMANAUT_CERT_PROBE_ENABLED` | Reads expiry from the live TLS endpoint |
-| Discovery: Docker | `ALMANAUT_DISCOVERY_DOCKER_INTERVAL` | Scheduled [Docker discovery](discovery.md#docker-containers) |
+| Discovery: Docker / Podman | `ALMANAUT_DISCOVERY_DOCKER_INTERVAL` | Scheduled [container discovery](discovery.md#docker-containers) |
 | Discovery: network | `ALMANAUT_DISCOVERY_NETWORK_INTERVAL` | Scheduled [network scan](discovery.md#network-scan) |
 | Discovery: Proxmox | `ALMANAUT_DISCOVERY_PROXMOX_INTERVAL` | Scheduled [Proxmox discovery](discovery.md#proxmox-ve) |
+| Discovery: Xen Orchestra | `ALMANAUT_DISCOVERY_XO_INTERVAL` | Scheduled [XCP-ng discovery](discovery.md#xcp-ng-via-xen-orchestra) |
+| Discovery: configured source name | Positive `interval` in the discovery source file | One independent job per configured Docker, Podman, Proxmox or XO source |
 
 ## Liveness checks
 
@@ -72,13 +74,25 @@ viewer sees the last probe's result but cannot trigger a new one.
 
 ## Scheduled discovery & the run history (`/discovery/runs`)
 
-Scheduled discovery is opt-in per source, each with its own interval variable.
-The network scan additionally requires the scan itself enabled and a subnet set,
-and Proxmox requires Proxmox configured; an interval alone is not enough.
+Scheduled discovery is opt-in per source. Without a source file, the interval
+variables above control the default integrations. With
+`ALMANAUT_DISCOVERY_SOURCES_FILE`, each entry's positive `interval` enables its
+own job, labelled with the source's display name. The file replaces the legacy
+engine intervals as well as their connection settings. The network scan remains
+separate and additionally requires the scan enabled and a subnet set.
+
+Engine run history and notification comparisons are isolated by the stable
+`type:id` source key, such as `proxmox:lab` or `docker:default`. Two sources can
+report the same external identifier without sharing their comparison baseline.
+Older history rows retain their original source labels; new engine runs use the
+namespaced keys. Resource matching uses the same persistent identities and
+manual-record matching rules as the import preview.
 
 **A scheduled run never imports anything.** Findings surface as proposals on the
 [Discovery](discovery.md) page for you to review and import, exactly like a
-manual scan — the schedule automates the looking, not the writing.
+manual scan — the schedule automates the looking, not the writing. It also
+never confirms a manual record's source identity; that association is saved only
+by an explicit import. Renaming a bound resource does not make it a new finding.
 
 `/discovery/runs` is admin-only and displays the **last 50 runs**, each with its
 source, start and finish time, how many resources were found, how many of those

@@ -1,5 +1,5 @@
 // Package discovery proposes entities discovered from external sources (e.g. a
-// Docker socket) for the user to confirm. It never mutates the source.
+// Docker or Podman socket) for the user to confirm. It never mutates the source.
 package discovery
 
 import (
@@ -21,7 +21,8 @@ type Port struct {
 	Proto   string
 }
 
-// Container is a running Docker container discovered via the Engine API.
+// Container is a running Docker or Podman container discovered via the
+// Docker-compatible API.
 type Container struct {
 	ID             string
 	Name           string
@@ -31,7 +32,8 @@ type Container struct {
 	Ports          []Port
 }
 
-// DockerClient queries the Docker Engine API. httpClient and baseURL are
+// DockerClient queries the Docker Engine API or Podman's compatibility API.
+// httpClient and baseURL are
 // unexported but settable within the package so tests can target an
 // httptest.Server instead of a real unix socket.
 type DockerClient struct {
@@ -39,7 +41,8 @@ type DockerClient struct {
 	baseURL    string
 }
 
-// NewSocketClient returns a DockerClient that dials the unix socket at path.
+// NewSocketClient returns a DockerClient that dials the Docker or Podman Unix
+// socket at path. The caller explicitly selects which engine to inventory.
 func NewSocketClient(path string) *DockerClient {
 	return &DockerClient{
 		httpClient: &http.Client{
@@ -81,11 +84,11 @@ func (c *DockerClient) Containers(ctx context.Context) ([]Container, error) {
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("docker request: %w", err)
+		return nil, fmt.Errorf("container API request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, statusError("docker", resp)
+		return nil, statusError("container", resp)
 	}
 	var raw []apiContainer
 	// Cap the response so a hostile or malfunctioning endpoint cannot exhaust
@@ -96,12 +99,16 @@ func (c *DockerClient) Containers(ctx context.Context) ([]Container, error) {
 	}
 	out := make([]Container, 0, len(raw))
 	for _, rc := range raw {
+		project := rc.Labels["com.docker.compose.project"]
+		if project == "" {
+			project = rc.Labels["io.podman.compose.project"]
+		}
 		out = append(out, Container{
 			ID:             rc.ID,
 			Name:           containerName(rc.Names),
 			Image:          rc.Image,
 			State:          rc.State,
-			ComposeProject: rc.Labels["com.docker.compose.project"],
+			ComposeProject: project,
 			Ports:          publishedPorts(rc.Ports),
 		})
 	}

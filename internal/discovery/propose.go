@@ -61,9 +61,9 @@ func formatPorts(ports []Port) string {
 
 func provenance(image string) string {
 	if image == "" {
-		return "Discovered from Docker."
+		return "Discovered from a Docker-compatible API."
 	}
-	return "Discovered from Docker. Image: " + image
+	return "Discovered from a Docker-compatible API. Image: " + image
 }
 
 // NormalizeName canonicalizes an entity name for case-insensitive,
