@@ -152,7 +152,7 @@ func (d *Detector) RunXenOrchestra(ctx context.Context) error {
 	var newKeys []string
 	found := 0
 	if d.xenOrchestra == nil {
-		return d.finish(ctx, "xen-orchestra", start, found, newKeys, errors.New("Xen Orchestra discovery is not configured"))
+		return d.finish(ctx, "xen-orchestra", start, found, newKeys, errors.New("xen orchestra discovery is not configured"))
 	}
 	res, scanErr := d.xenOrchestra.Resources(ctx)
 	if scanErr == nil {
