@@ -8,7 +8,7 @@
 {{if canWrite}}<details class="disclosure"{{if or (eq $.EditName .Name) (eq $.DeleteName .Name)}} open{{end}}><summary>Edit type<span class="sr-only"> {{.Label}}</span></summary>
 <form class="inline-editor" method="post" action="/host-types/{{.Name}}">{{csrfField}}<label>Display label<input name="label" value="{{if eq $.EditName .Name}}{{$.EditLabel}}{{else}}{{.Label}}{{end}}" maxlength="100" required aria-label="Display label for {{.Name}}"></label><button class="btn" type="submit">Save label</button></form>
 {{if .Builtin}}<p class="muted">This built-in type can be renamed but cannot be deleted.</p>{{else}}
-<form class="destructive-action" method="post" action="/host-types/{{.Name}}/delete" onsubmit="return confirm('Delete this type and reassign its hosts if a replacement is selected?');">{{csrfField}}
+<form class="destructive-action" method="post" action="/host-types/{{.Name}}/delete" data-confirm="Delete this type and reassign its hosts if a replacement is selected?">{{csrfField}}
 <p class="muted">If hosts use this type, choose a replacement. Their other details will be kept.</p>
 <label>Replacement type<select name="replacement"><option value="">Delete only if unused</option>{{$name := .Name}}{{range $.Types}}{{if ne .Name $name}}<option value="{{.Name}}"{{if and (eq $.DeleteName $name) (eq $.Replacement .Name)}} selected{{end}}>{{.Label}}</option>{{end}}{{end}}</select></label>
 <button class="btn btn-danger" type="submit">Delete type<span class="sr-only"> {{.Label}}</span></button></form>{{end}}

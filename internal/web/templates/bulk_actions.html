@@ -12,7 +12,7 @@
     <label>Value<input name="value" placeholder="New value" aria-label="Field value"></label>
     <button class="btn" name="action" value="set-field" type="submit">Set field</button>
     {{end}}
-    <button class="btn btn-danger" name="action" value="delete" type="submit" onclick="return confirm('Delete the selected items? This cannot be undone.');">Delete selected</button>
+    <button class="btn btn-danger" name="action" value="delete" type="submit" data-confirm="Delete the selected items? This cannot be undone.">Delete selected</button>
   </form>
 </details>
 {{end}}

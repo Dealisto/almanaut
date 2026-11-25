@@ -12,6 +12,10 @@
   <h1 class="brand"><span class="brand-mark" aria-hidden="true">a.</span>almanaut<span class="brand-dot">.</span></h1>
   <p class="login-intro">Your homelab, in focus.<br>Sign in to your workspace.</p>
   {{if .Error}}<div class="error" id="sign-in-error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
+  {{if .SSOEnabled}}
+  <a class="btn login-sso" href="/login/sso?next={{.Next}}">Sign in with SSO</a>
+  <div class="login-divider"><span>or use your password</span></div>
+  {{end}}
   <form{{if .Error}} aria-describedby="sign-in-error"{{end}} class="stack" method="post" action="/login">
     {{ csrfField }}
     <input type="hidden" name="next" value="{{.Next}}">

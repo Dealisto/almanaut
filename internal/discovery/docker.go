@@ -4,9 +4,7 @@ package discovery
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"sort"
@@ -91,11 +89,11 @@ func (c *DockerClient) Containers(ctx context.Context) ([]Container, error) {
 		return nil, statusError("container", resp)
 	}
 	var raw []apiContainer
-	// Cap the response so a hostile or malfunctioning endpoint cannot exhaust
-	// memory; a real container list is far below this (matches the Proxmox cap).
-	const maxBody = 16 << 20 // 16 MiB
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&raw); err != nil {
+	if err := decodeInventory(resp.Body, &raw); err != nil {
 		return nil, fmt.Errorf("decode containers: %w", err)
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("container response must be a JSON array")
 	}
 	out := make([]Container, 0, len(raw))
 	for _, rc := range raw {
@@ -140,7 +138,10 @@ func publishedPorts(ports []apiPort) []Port {
 		if out[i].Public != out[j].Public {
 			return out[i].Public < out[j].Public
 		}
-		return out[i].Private < out[j].Private
+		if out[i].Private != out[j].Private {
+			return out[i].Private < out[j].Private
+		}
+		return out[i].Proto < out[j].Proto
 	})
 	return out
 }

@@ -25,6 +25,8 @@ Each user changes their own password at `/account/password`.
 A password change ends the user's other sessions, so a session stolen before
 the change does not survive it; the session you changed it from stays signed
 in. An admin resetting someone's password signs that user out everywhere.
+Both actions invalidate pending second-factor challenges, so a login that
+verified the previous password must start again with the new password.
 [API tokens](api.md#api-tokens) are separate credentials and are not revoked
 by a password change — delete them at `/account/tokens` if they may be
 compromised too.
@@ -55,6 +57,11 @@ oldest admin (the oldest account when no admin is left); it is given the admin
 role back if it had lost it. **Unset
 `ALMANAUT_RESET_ADMIN` afterwards**, or every restart will reset the password
 again.
+
+The recovery reset also revokes the account's sessions and pending second-factor
+challenges in the same transaction as the password and role changes. Enrolled
+2FA and API tokens remain unchanged; this option recovers a password, not a lost
+authenticator.
 
 Note that `ALMANAUT_AUTH_USER` / `ALMANAUT_AUTH_PASS` only seed the *initial*
 admin (or feed `ALMANAUT_RESET_ADMIN`); they are **not** HTTP Basic auth
@@ -104,6 +111,18 @@ settings below are in the [configuration table](configuration.md):
   an unknown identity arrives (off by default).
 - `ALMANAUT_PROXY_AUTH_DEFAULT_ROLE` — the role such an account gets
   (`viewer` by default).
+
+With proxy authentication configured, the login page displays **Sign in with
+SSO** alongside password login. The button opens `/login/sso` and returns to the
+originally requested page after the trusted proxy supplies a recognized identity.
+Configure the proxy to require authentication for `/login/sso` and the application
+routes; if you exempt `/login` for local password access, do not extend that
+exception to `/login/sso`. The proxy handles the identity-provider redirect and
+sign-in flow. Almanaut does not initiate an OIDC or SAML flow itself.
+
+If the request reaches Almanaut without an accepted proxy identity, it shows a
+login error with SSO retry and password sign-in available. SSO continues to use
+the proxy identity on subsequent requests rather than creating a local session.
 
 **The allowlist is the security boundary, and it is checked against the request's
 direct peer**, not against any forwarded-for header. A client that is not the

@@ -28,8 +28,8 @@ func MatchCandidates(source string, candidates []Candidate, hosts []domain.Host,
 		id   int64
 	}
 	type localRecord struct {
-		id       int64
-		hostType string
+		id  int64
+		typ string
 	}
 	bound := make(map[entityKey]bool)
 	boundHere := make(map[entityKey]bool)
@@ -63,7 +63,7 @@ func MatchCandidates(source string, candidates []Candidate, hosts []domain.Host,
 		}
 		if !bound[k] {
 			key := "service:" + NormalizeName(s.Name)
-			names[key] = append(names[key], localRecord{id: s.ID})
+			names[key] = append(names[key], localRecord{s.ID, s.Kind})
 		}
 	}
 	candidateName := func(c Candidate) string {
@@ -95,7 +95,11 @@ func MatchCandidates(source string, candidates []Candidate, hosts []domain.Host,
 			if boundNames[key] || (nameCounts[key] > 1 && len(matches) > 0) || len(matches) > 1 {
 				m.Ambiguous = true
 			} else if len(matches) == 1 {
-				if c.EntityType != "host" || matches[0].hostType == c.Host.Type {
+				typ := c.Service.Kind
+				if c.EntityType == "host" {
+					typ = c.Host.Type
+				}
+				if matches[0].typ == typ {
 					m.ExistingID = matches[0].id
 				} else {
 					m.Ambiguous = true

@@ -141,21 +141,24 @@ func sessionAuth(sessions *store.SessionRepo) func(http.Handler) http.Handler {
 }
 
 type loginData struct {
-	Title string
-	Next  string
-	Error string
+	Title      string
+	Next       string
+	Error      string
+	SSOEnabled bool
 }
 
 // loginForm renders the standalone login page.
-func loginForm(w http.ResponseWriter, r *http.Request) {
-	render(w, r, "login.html", loginData{Title: "Sign in", Next: safeNext(r.URL.Query().Get("next"))})
+func loginForm(ssoEnabled bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		render(w, r, "login.html", loginData{Title: "Sign in", Next: safeNext(r.URL.Query().Get("next")), SSOEnabled: ssoEnabled})
+	}
 }
 
 // login verifies credentials, creates a session, and sets the cookie. Repeated
 // failed attempts for a username are throttled (see loginThrottle): once a
 // username is locked out the request is refused with 429 before any password
 // verification, so an attacker cannot spend the server's bcrypt budget guessing.
-func login(users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPRepo, throttle *loginThrottle, audit *store.AuthEventRepo, forceSecure bool) http.HandlerFunc {
+func login(users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPRepo, throttle *loginThrottle, audit *store.AuthEventRepo, forceSecure, ssoEnabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := strings.TrimSpace(r.FormValue("username"))
 		password := r.FormValue("password")
@@ -174,7 +177,7 @@ func login(users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPR
 			w.Header().Set("Retry-After", strconv.Itoa(secs))
 			w.WriteHeader(http.StatusTooManyRequests)
 			render(w, r, "login.html", loginData{
-				Title: "Sign in", Next: next,
+				Title: "Sign in", Next: next, SSOEnabled: ssoEnabled,
 				Error: fmt.Sprintf("too many attempts — try again in %d minute(s)", mins),
 			})
 			return
@@ -197,7 +200,7 @@ func login(users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPR
 			throttle.cleanup(now)
 			recordAuth(audit, r, domain.AuthLoginFailure, username, 0, "")
 			w.WriteHeader(http.StatusUnauthorized)
-			render(w, r, "login.html", loginData{Title: "Sign in", Next: next, Error: "invalid username or password"})
+			render(w, r, "login.html", loginData{Title: "Sign in", Next: next, Error: "invalid username or password", SSOEnabled: ssoEnabled})
 			return
 		}
 

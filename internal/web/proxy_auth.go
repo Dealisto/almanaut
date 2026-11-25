@@ -89,6 +89,22 @@ func proxyAuth(header string, allow []*net.IPNet, autoProvision bool, defaultRol
 	}
 }
 
+// ssoLogin is reached through the proxy's authentication policy. Only
+// proxyAuth runs before it: a local session cannot stand in for an SSO identity.
+func ssoLogin(w http.ResponseWriter, r *http.Request) {
+	next := safeNext(r.URL.Query().Get("next"))
+	if _, ok := userFrom(r.Context()); !ok {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnauthorized)
+		render(w, r, "login.html", loginData{
+			Title: "Sign in", Next: next, SSOEnabled: true,
+			Error: "SSO sign-in could not be completed. Try again or sign in with your username and password. If the problem persists, contact your administrator.",
+		})
+		return
+	}
+	http.Redirect(w, r, next, http.StatusSeeOther)
+}
+
 // provisionProxyUser creates a local account for a proxy-asserted identity with
 // an unusable password (the user authenticates only via the proxy). It tolerates
 // a concurrent create by re-fetching on a duplicate.

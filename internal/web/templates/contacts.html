@@ -25,7 +25,7 @@
         <details class="row-menu"><summary>Actions</summary>
         <a class="btn" href="/contacts/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/contacts/{{.ID}}/delete"
-              onsubmit="return confirm('Delete this contact?');">
+              data-confirm="Delete this contact?">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>

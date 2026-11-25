@@ -7,7 +7,7 @@
 {{if .Defs}}<ul class="record-list">{{range .Defs}}<li><div class="record-heading"><span class="entity-icon">{{icon "settings"}}</span><div class="record-identity"><h3>{{.Label}}</h3><p>{{.EntityType}} · {{.Kind}} · <code>{{.Name}}</code></p></div></div>
 {{if canWrite}}<details class="disclosure"><summary>Edit field<span class="sr-only"> {{.Label}}</span></summary>
   <form class="inline-editor" method="post" action="/custom-fields/{{.ID}}">{{ csrfField }}<label>Display label<input name="label" value="{{.Label}}" aria-label="Display label for {{.Name}}" required></label><button class="btn" type="submit">Save label</button></form>
-  <form class="destructive-action" method="post" action="/custom-fields/{{.ID}}/delete" onsubmit="return confirm('Delete this field and all its values?');">{{ csrfField }}<p class="muted">Deleting this field also removes its values from every record.</p><button class="btn btn-danger" type="submit">Delete field<span class="sr-only"> {{.Label}}</span></button></form>
+  <form class="destructive-action" method="post" action="/custom-fields/{{.ID}}/delete" data-confirm="Delete this field and all its values?">{{ csrfField }}<p class="muted">Deleting this field also removes its values from every record.</p><button class="btn btn-danger" type="submit">Delete field<span class="sr-only"> {{.Label}}</span></button></form>
 </details>{{end}}</li>{{end}}</ul>
 {{else}}<div class="empty">{{icon "settings"}}<strong>No custom fields defined yet.</strong><p>Add a field to make it available on records of the selected type.</p>{{if canWrite}}<a class="btn" href="#add-field">Add your first field</a>{{end}}</div>{{end}}
 </section>

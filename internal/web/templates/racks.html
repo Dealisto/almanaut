@@ -24,7 +24,7 @@
         <details class="row-menu"><summary>Actions</summary>
         <a class="btn" href="/racks/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/racks/{{.ID}}/delete"
-              onsubmit="return confirm('Delete this rack?');">
+              data-confirm="Delete this rack?">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>

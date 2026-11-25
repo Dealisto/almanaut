@@ -106,7 +106,7 @@ func submit2FA(t *testing.T, h http.Handler, pending *http.Cookie, body string) 
 func totpTestHandler(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
 	db := rbacDB(t)
-	if err := BootstrapAdmin(store.NewUserRepo(db), testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	return newAuthedTestHandler(t, db), db
@@ -356,5 +356,166 @@ func TestTOTPAdminResetUnknownUserIs404(t *testing.T) {
 	admin := loginAs(t, h, "admin", "password123")
 	if rec := postCSRF(t, h, admin, "/users/999/2fa/reset", ""); rec.Code != http.StatusNotFound {
 		t.Fatalf("reset unknown user = %d, want 404", rec.Code)
+	}
+}
+
+func TestTOTPConfirmEnabledFactorDoesNotExposeSecretsOrReplaceRecovery(t *testing.T) {
+	h, db := totpTestHandler(t)
+	session := loginAs(t, h, "admin", "password123")
+	secret, recovery := enroll2FA(t, h, db, session, 1)
+	usedStep := lastUsedStep(t, db, 1)
+	for _, body := range []string{"code=invalid", "code=" + codeAtStep(t, secret, usedStep)} {
+		rec := postCSRF(t, h, session, "/account/2fa/confirm", body)
+		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/account/2fa" {
+			t.Errorf("repeat confirmation = %d, want redirect to account 2FA", rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), secret) || strings.Contains(rec.Body.String(), "otpauth:") || strings.Contains(rec.Body.String(), "<code>") {
+			t.Error("repeat confirmation exposed factor or recovery secrets")
+		}
+	}
+	if lastUsedStep(t, db, 1) != usedStep {
+		t.Error("repeat confirmation changed the replay marker")
+	}
+	for _, code := range recovery {
+		ok, err := store.NewTOTPRepo(db).UseRecoveryCode(1, hashToken(domain.NormalizeRecoveryCode(code)))
+		if err != nil || !ok {
+			t.Fatalf("original recovery code was replaced: accepted=%v err=%v", ok, err)
+		}
+	}
+}
+
+func TestTOTPConcurrentConfirmationReturnsRecoveryCodesOnce(t *testing.T) {
+	h, db := totpTestHandler(t)
+	session := loginAs(t, h, "admin", "password123")
+	if rec := postCSRF(t, h, session, "/account/2fa/setup", ""); rec.Code != http.StatusSeeOther {
+		t.Fatalf("setup = %d", rec.Code)
+	}
+	totp := store.NewTOTPRepo(db)
+	pending, err := totp.Get(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, err := domain.TOTPCode(pending.Secret, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := confirm2FA(totp, db)
+	start := make(chan struct{})
+	results := make(chan *httptest.ResponseRecorder, 2)
+	for range 2 {
+		go func() {
+			req := httptest.NewRequest(http.MethodPost, "/account/2fa/confirm", strings.NewReader("code="+code))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req = req.WithContext(withUser(req.Context(), domain.User{ID: 1, Username: "admin", Role: domain.RoleAdmin}))
+			rec := httptest.NewRecorder()
+			<-start
+			handler.ServeHTTP(rec, req)
+			results <- rec
+		}()
+	}
+	close(start)
+	statuses := map[int]int{}
+	for range 2 {
+		rec := <-results
+		statuses[rec.Code]++
+		if rec.Code == http.StatusOK {
+			matches := regexp.MustCompile(`<code>([a-z2-7]{5}-[a-z2-7]{5})</code>`).FindAllStringSubmatch(rec.Body.String(), -1)
+			if len(matches) != recoveryCodeCount {
+				t.Fatalf("returned %d recovery codes", len(matches))
+			}
+			for _, match := range matches {
+				ok, err := totp.UseRecoveryCode(1, hashToken(domain.NormalizeRecoveryCode(match[1])))
+				if err != nil || !ok {
+					t.Fatalf("returned recovery code was replaced: accepted=%v err=%v", ok, err)
+				}
+			}
+		}
+	}
+	if statuses[http.StatusOK] != 1 || statuses[http.StatusSeeOther] != 1 {
+		t.Fatalf("concurrent confirmation statuses = %v", statuses)
+	}
+}
+
+func TestTOTPLoginRollsBackOnPersistenceFailure(t *testing.T) {
+	for _, table := range []string{"sessions", "totp_pending"} {
+		t.Run(table, func(t *testing.T) {
+			h, db := totpTestHandler(t)
+			session := loginAs(t, h, "admin", "password123")
+			_, recovery := enroll2FA(t, h, db, session, 1)
+			pending := cookieNamed(passwordLogin(t, h, "admin", "password123").Result().Cookies(), pending2FACookieName)
+			operation := "INSERT"
+			if table == "totp_pending" {
+				operation = "DELETE"
+			}
+			if _, err := db.Exec("CREATE TRIGGER fail_login BEFORE " + operation + " ON " + table + " BEGIN SELECT RAISE(ABORT, 'injected failure'); END"); err != nil {
+				t.Fatal(err)
+			}
+			rec := submit2FA(t, h, pending, "recovery="+recovery[0])
+			if rec.Code != http.StatusInternalServerError || cookieValue(rec, sessionCookieName) != "" {
+				t.Errorf("failed login = %d, session=%q", rec.Code, cookieValue(rec, sessionCookieName))
+			}
+			if left, err := store.NewTOTPRepo(db).CountUnusedRecovery(1); err != nil || left != recoveryCodeCount {
+				t.Errorf("failed login consumed recovery code: remaining=%d err=%v", left, err)
+			}
+			if _, err := store.NewTOTPRepo(db).PendingUser(hashToken(pending.Value), nowRFC3339()); err != nil {
+				t.Errorf("failed login consumed challenge: %v", err)
+			}
+			var count int
+			if err := db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&count); err != nil || count != 1 {
+				t.Errorf("failed login created session: count=%d err=%v", count, err)
+			}
+			if _, err := db.Exec("DROP TRIGGER fail_login"); err != nil {
+				t.Fatal(err)
+			}
+			rec = submit2FA(t, h, pending, "recovery="+recovery[0])
+			if rec.Code != http.StatusSeeOther || cookieValue(rec, sessionCookieName) == "" {
+				t.Fatalf("retry after persistence recovery failed: %d %s", rec.Code, rec.Body)
+			}
+		})
+	}
+}
+
+func TestTOTPConcurrentLoginConsumesChallengeOnce(t *testing.T) {
+	h, db := totpTestHandler(t)
+	session := loginAs(t, h, "admin", "password123")
+	_, recovery := enroll2FA(t, h, db, session, 1)
+	pending := cookieNamed(passwordLogin(t, h, "admin", "password123").Result().Cookies(), pending2FACookieName)
+	start := make(chan struct{})
+	results := make(chan *httptest.ResponseRecorder, 2)
+	for i := range 2 {
+		go func() {
+			body := "recovery=" + recovery[i] + "&" + csrfFieldName + "=concurrent-test"
+			req := httptest.NewRequest(http.MethodPost, "/login/2fa", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.AddCookie(pending)
+			req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: "concurrent-test"})
+			rec := httptest.NewRecorder()
+			<-start
+			h.ServeHTTP(rec, req)
+			results <- rec
+		}()
+	}
+	close(start)
+	locations := map[string]int{}
+	sessionCookies := 0
+	for range 2 {
+		rec := <-results
+		if rec.Code != http.StatusSeeOther {
+			t.Errorf("concurrent login = %d: %s", rec.Code, rec.Body)
+		}
+		locations[rec.Header().Get("Location")]++
+		if cookieValue(rec, sessionCookieName) != "" {
+			sessionCookies++
+		}
+	}
+	if locations["/"] != 1 || locations["/login"] != 1 || sessionCookies != 1 {
+		t.Fatalf("challenge reused: locations=%v session cookies=%d", locations, sessionCookies)
+	}
+	if left, err := store.NewTOTPRepo(db).CountUnusedRecovery(1); err != nil || left != recoveryCodeCount-1 {
+		t.Fatalf("expected only one recovery code consumed: remaining=%d err=%v", left, err)
+	}
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&count); err != nil || count != 2 {
+		t.Fatalf("expected original session and one new session: count=%d err=%v", count, err)
 	}
 }

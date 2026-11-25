@@ -11,6 +11,9 @@ details are listed there.
 ## [Unreleased]
 
 ### Added
+- Add a **Sign in with SSO** button when reverse-proxy authentication is
+  configured, with a dedicated `/login/sso` entry point, safe return paths and
+  an accessible fallback to password login when SSO cannot complete.
 - Discover XCP-ng hosts and VMs through Xen Orchestra, preview and import
   selected records, and optionally link VMs to their hosts. Scheduled discovery
   records findings for manual review without overwriting inventory.
@@ -48,6 +51,45 @@ details are listed there.
 ### Fixed
 - Keep long service tables and their screen-reader labels inside the table's
   scroll area instead of causing page-level horizontal scrolling.
+- Reject empty, unversioned, misspelled, or multi-document YAML imports before
+  replacing inventory, and require positive, unique record IDs.
+- Preserve concurrent certificate edits during TLS probes and discard results
+  for targets that changed or certificates that were deleted during the probe.
+- Count usable IPAM capacity consistently with next-free suggestions: gateways
+  are reserved once, subnet endpoints are not subtracted twice, and duplicate
+  IPs on one host do not create false conflicts.
+- Reject incorrectly typed API custom fields before writing a record, and
+  preserve full int64 precision when serializing entity identifiers.
+- Require compatible service kinds when adopting discovered containers and
+  sort published TCP/UDP ports consistently to avoid false change proposals.
+- Reject incomplete, null, trailing, or oversized discovery API responses;
+  propagate cancelled network scans instead of treating partial results as a
+  successful comparison baseline. Reject oversized subnets before allocation.
+- Surface discovery persistence and notification failures in scheduled-task
+  status while preserving the scan history and notification attempts.
+- Bound agent response reads, validate returned host IDs and server URLs, and
+  publish one stable agent identity across concurrent initial starts.
+- Support Space activation of detail tabs, preserve the selected panel when
+  using the skip link, and transfer focus when a link hides its current panel.
+- Clarify complete SQLite backups, WAL consistency, and the inventory-only
+  scope of YAML exports.
+
+### Security
+- Make 2FA enrollment confirmation atomic; repeated confirmation cannot expose
+  an active secret or replace recovery codes, and setup cannot disable an
+  already active factor.
+- Complete second-factor login in one transaction so database failures do not
+  consume a recovery code or challenge without creating a session. Concurrent
+  requests cannot use one challenge to create multiple sessions.
+- Revoke pending second-factor challenges when changing or resetting a user's
+  password. The startup administrator reset also revokes sessions atomically
+  with the password and role changes, preserving enrolled 2FA and API tokens.
+- Prevent caching of dynamic pages and API responses, including tokens, TOTP
+  secrets and recovery codes, while keeping static asset revalidation.
+- Move destructive-action confirmations into the external script and remove
+  inline script permission from the Content Security Policy.
+- Keep Proxmox response bodies and reflected authentication secrets out of
+  user-visible errors and logs.
 
 ## [1.1.1]
 

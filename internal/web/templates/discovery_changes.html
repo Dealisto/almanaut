@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Discovery</span><h1>Review changes</h1><p class="page-description">{{.Source.Name}}</p></div></div>
 <div class="actions"><a class="btn" href="{{.Source.Path}}">Review source</a> <a class="btn" href="/discovery">All sources</a></div>
-{{if .Error}}<div class="error" role="alert">{{.Error}}</div><p class="muted">The source could not be read. No resources were marked missing and no inventory fields were changed.</p>
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div><p class="muted">The source could not be read. No resources were marked missing and no inventory fields were changed.</p>
 {{else if .Applied}}<section class="panel" role="status"><p><strong data-changes-applied="{{.Applied}}">{{.Applied}} field(s) updated.</strong> Unselected fields, notes and relationships were preserved.</p><a class="btn btn-primary" href="{{.Source.Path}}/changes">Review changes again</a></section>
 {{else}}
 <p class="muted">Compare the current source with your saved inventory. Select only the fields you want to replace. Notes and relationships are preserved. Container images are informational because they are stored in free-form notes. Unavailable resource values are not offered for replacement.</p>

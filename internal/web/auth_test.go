@@ -124,8 +124,7 @@ func authTestServer(t *testing.T) (http.Handler, *http.Cookie) {
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	h := newAuthedTestHandler(t, db)
@@ -221,8 +220,7 @@ func TestLoginThrottleLocksOutAfterRepeatedFailures(t *testing.T) {
 	if err := store.Migrate(db, dbPath); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
-	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	h := newAuthedTestHandler(t, db)

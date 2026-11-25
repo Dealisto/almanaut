@@ -207,6 +207,9 @@ form.stack textarea{min-height:110px;resize:vertical}
 .login-card .stack{padding:0;border:0;box-shadow:none;background:none;max-width:none}
 .login-card .btn-primary{width:100%;min-height:42px}
 .login-intro{text-align:center;color:var(--muted);font-size:13px;margin-bottom:28px}
+.login-sso{width:100%;min-height:42px}
+.login-divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:var(--muted);font-size:12px}
+.login-divider::before,.login-divider::after{content:"";flex:1;border-top:1px solid var(--border)}
 
 /* Panels, badges and dashboard. */
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);padding:23px;margin-bottom:24px;min-width:0}

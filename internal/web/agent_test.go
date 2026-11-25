@@ -47,7 +47,7 @@ func agentServerLogging(t *testing.T, scope domain.Scope, logger *log.Logger) (h
 		t.Fatalf("Migrate: %v", err)
 	}
 	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "alice", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "alice", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	u, err := users.GetByUsername("alice")

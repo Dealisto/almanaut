@@ -2,6 +2,12 @@
    Every form and inventory page remains usable without JavaScript. */
 "use strict";
 (() => {
+  // Use the submitter so mixed-action forms confirm only destructive actions,
+  // including submissions triggered by the keyboard or requestSubmit().
+  document.addEventListener("submit", (event) => {
+    const message = event.submitter?.dataset.confirm || event.target.dataset.confirm;
+    if (message && !window.confirm(message)) event.preventDefault();
+  });
   document.documentElement.classList.add("js");
   const toggle = document.getElementById("nav-toggle");
   const sidebar = document.getElementById("sidebar");
@@ -79,7 +85,12 @@
       panel.tabIndex = 0;
     }
     function activate() {
-      const current = tabs.find((tab) => tab.hash === location.hash) || tabs[0];
+      let target;
+      try { target = document.getElementById(decodeURIComponent(location.hash.slice(1))); } catch { /* Ignore malformed fragments. */ }
+      const panel = target?.closest("[data-detail-panel]");
+      const current = tabs.find((tab) => tab.hash === location.hash || tab.hash === "#" + panel?.id)
+        || (location.hash && tabs.find((tab) => tab.getAttribute("aria-selected") === "true")) || tabs[0];
+      const previousFocus = document.activeElement;
       for (const tab of tabs) {
         const selected = tab === current;
         tab.setAttribute("aria-selected", String(selected));
@@ -87,6 +98,11 @@
         tab.classList.toggle("active", selected);
       }
       for (const panel of panels) panel.hidden = "#" + panel.id !== current.hash;
+      // A section link inside the old panel must not leave keyboard focus in
+      // content that has just become hidden.
+      if (previousFocus.closest("[data-detail-panel]")?.hidden) {
+        document.getElementById(current.hash.slice(1)).focus({preventScroll: true});
+      }
       updateTables();
     }
     for (const tab of tabs) tab.addEventListener("click", (event) => {
@@ -97,6 +113,11 @@
     tablist.addEventListener("keydown", (event) => {
       const current = tabs.indexOf(document.activeElement);
       if (current < 0) return;
+      if (event.key === " ") {
+        event.preventDefault();
+        tabs[current].click();
+        return;
+      }
       let index;
       if (event.key === "ArrowRight") index = (current + 1) % tabs.length;
       else if (event.key === "ArrowLeft") index = (current + tabs.length - 1) % tabs.length;

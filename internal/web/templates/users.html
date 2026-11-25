@@ -23,7 +23,7 @@
               <button class="btn" type="submit">Reset password</button>
             </form>
           </div>
-          <form method="post" action="/users/{{.ID}}/delete" class="destructive-action" onsubmit="return confirm('Delete this user and revoke their access?');">
+          <form method="post" action="/users/{{.ID}}/delete" class="destructive-action" data-confirm="Delete this user and revoke their access?">
             {{ csrfField }}<p class="muted">Remove this account and its access to Almanaut.</p><button class="btn btn-danger" type="submit">Delete user<span class="sr-only"> {{.Username}}</span></button>
           </form>
         </details>

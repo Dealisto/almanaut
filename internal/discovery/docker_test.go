@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -51,5 +52,15 @@ func TestContainersErrorStatus(t *testing.T) {
 	c := &DockerClient{httpClient: ts.Client(), baseURL: ts.URL}
 	if _, err := c.Containers(context.Background()); err == nil {
 		t.Fatal("expected an error on non-200 status")
+	}
+}
+
+func TestPublishedPortsHaveStableProtocolOrder(t *testing.T) {
+	tcp := apiPort{PublicPort: 53, PrivatePort: 53, Type: "tcp"}
+	udp := apiPort{PublicPort: 53, PrivatePort: 53, Type: "udp"}
+	first := publishedPorts([]apiPort{tcp, udp})
+	second := publishedPorts([]apiPort{udp, tcp, udp})
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("API ordering changed the proposed ports: %+v versus %+v", first, second)
 	}
 }

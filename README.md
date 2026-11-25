@@ -20,8 +20,9 @@ networks, certificates, backups, subscriptions, and how they all relate — in
 one place, with the operational extras that usually require three more tools:
 IPAM, expiry alerts, auto-discovery, a JSON API, and Prometheus metrics.
 
-It is deliberately small: a single binary, a single SQLite file, and a
-server-rendered UI. Back it up by copying one file (or one YAML export).
+It is deliberately small: a single binary, SQLite storage, and a server-rendered
+UI. Export the inventory as YAML, or stop the server and copy the database for a
+complete backup; see the [backup guide](docs/export-import.md#complete-backups).
 
 > **Status:** stable — **v1.1.0** is released. The NetBox-parity and
 > automation/quality/security roadmap (M1–M9) is complete: RBAC, TOTP 2FA,

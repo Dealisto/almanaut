@@ -20,12 +20,14 @@ func NewTOTPRepo(db *sql.DB) *TOTPRepo { return &TOTPRepo{db: db} }
 func (r *TOTPRepo) WithTx(tx *sql.Tx) *TOTPRepo { return &TOTPRepo{db: tx} }
 
 // SetSecret starts (or restarts) enrollment: it stores a new secret for userID
-// with enabled=0, replacing any prior pending or active secret. The replay
-// marker resets too: steps accepted for the old secret say nothing about it.
+// with enabled=0, replacing only a pending secret. Active factors are left
+// untouched, including when setup races with confirmation. The replay marker
+// resets too: steps accepted for the old secret say nothing about it.
 func (r *TOTPRepo) SetSecret(userID int64, secret, createdAt string) error {
 	if _, err := r.db.Exec(
 		`INSERT INTO user_totp (user_id, secret, enabled, created_at) VALUES (?, ?, 0, ?)
-		 ON CONFLICT(user_id) DO UPDATE SET secret = excluded.secret, enabled = 0, created_at = excluded.created_at, last_used_step = 0`,
+		 ON CONFLICT(user_id) DO UPDATE SET secret = excluded.secret, enabled = 0, created_at = excluded.created_at, last_used_step = 0
+		 WHERE user_totp.enabled = 0`,
 		userID, secret, createdAt,
 	); err != nil {
 		return fmt.Errorf("set totp secret: %w", err)
@@ -162,6 +164,15 @@ func (r *TOTPRepo) PendingUser(tokenHash, now string) (int64, error) {
 func (r *TOTPRepo) DeletePending(tokenHash string) error {
 	if _, err := r.db.Exec(`DELETE FROM totp_pending WHERE token_hash = ?`, tokenHash); err != nil {
 		return fmt.Errorf("delete pending 2fa: %w", err)
+	}
+	return nil
+}
+
+// DeletePendingByUser invalidates every password-verified challenge for userID.
+// Call inside the transaction that changes the user's credentials.
+func (r *TOTPRepo) DeletePendingByUser(userID int64) error {
+	if _, err := r.db.Exec(`DELETE FROM totp_pending WHERE user_id = ?`, userID); err != nil {
+		return fmt.Errorf("delete user pending 2fa: %w", err)
 	}
 	return nil
 }

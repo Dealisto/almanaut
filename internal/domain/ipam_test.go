@@ -19,8 +19,8 @@ func TestBuildIPAMOccupancy(t *testing.T) {
 	if u.UsedCount != 2 {
 		t.Errorf("UsedCount = %d, want 2", u.UsedCount)
 	}
-	if u.FreeCount != 252 {
-		t.Errorf("FreeCount = %d, want 252", u.FreeCount)
+	if u.FreeCount != 251 {
+		t.Errorf("FreeCount = %d, want 251 (gateway is reserved)", u.FreeCount)
 	}
 	if len(u.Used) != 2 || u.Used[0].IP != "192.168.1.5" || u.Used[1].IP != "192.168.1.10" {
 		t.Errorf("Used = %+v, want sorted [.5 .10]", u.Used)
@@ -290,10 +290,11 @@ func TestBuildIPAMReservationStartingBelowNetwork(t *testing.T) {
 	res := []Reservation{{ID: 1, NetworkID: 1, Name: "r", StartIP: "9.255.0.0", EndIP: "10.0.0.5"}}
 	u := BuildIPAM(networks, nil, res).Networks[0]
 	// The walk is clamped to start at the network base (10.0.0.0), so the in-network
-	// portion 10.0.0.0..10.0.0.5 (6 addresses) is reserved. Before the fix, the bounded
+	// usable portion 10.0.0.1..10.0.0.5 (5 addresses) is reserved. The network
+	// address is already excluded from capacity. Before the fix, the bounded
 	// walk (limit = 256 increments) starting at 9.255.0.0 never got within 256 addresses
 	// of 10.0.0.0, so it never reached the network at all and ReservedCount was 0.
-	if u.ReservedCount != 6 {
-		t.Fatalf("ReservedCount = %d, want 6 (in-network part of a reservation starting below the base)", u.ReservedCount)
+	if u.ReservedCount != 5 {
+		t.Fatalf("ReservedCount = %d, want 5 (usable part of a reservation starting below the base)", u.ReservedCount)
 	}
 }

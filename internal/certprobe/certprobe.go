@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -94,8 +95,6 @@ func (p *Prober) Run(ctx context.Context) error {
 // leaves the certificate row unchanged. Returns a non-nil error only on a
 // storage failure.
 func (p *Prober) ProbeOne(ctx context.Context, cert domain.Certificate) error {
-	prev := p.priorState(cert.ID)
-
 	dialCtx, cancel := context.WithTimeout(ctx, p.timeout)
 	leaf, probeErr := p.dial(dialCtx, cert.ProbeTarget)
 	cancel()
@@ -103,40 +102,49 @@ func (p *Prober) ProbeOne(ctx context.Context, cert domain.Certificate) error {
 		return nil // parent ended mid-dial; don't record a spurious result (the #90 lesson)
 	}
 
-	now := p.now()
-	if probeErr != nil {
-		st := domain.CertProbeStatus{ProbedAt: now, Success: false, LastError: probeErr.Error()}
-		if prev != nil { // carry last-known metadata so the UI keeps showing it
-			st.Serial, st.Issuer, st.SANs, st.NotAfter = prev.Serial, prev.Issuer, prev.SANs, prev.NotAfter
-		}
-		return p.state.Upsert(cert.ID, st)
-	}
-
-	serial := fmt.Sprintf("%x", leaf.SerialNumber)
-	issuer := leaf.Issuer.String()
-	sans := leaf.DNSNames
-	notAfter := leaf.NotAfter.UTC().Format(domain.DateLayout)
-	mismatches := domain.ComputeCertMismatches(cert.Subject, prev, serial, issuer, sans)
-
 	return store.WithTx(p.db, func(tx *sql.Tx) error {
-		cert.ExpiresOn = notAfter
-		cert.Issuer = issuer
-		if err := p.certs.WithTx(tx).Update(cert); err != nil {
+		// Network I/O runs outside the transaction. Re-read before writing so
+		// an in-flight probe cannot undo an edit or update a different target.
+		certs := p.certs.WithTx(tx)
+		current, err := certs.Get(cert.ID)
+		if errors.Is(err, store.ErrNotFound) {
+			return nil // deleted while the probe was in flight
+		}
+		if err != nil {
 			return err
 		}
-		return p.state.WithTx(tx).Upsert(cert.ID, domain.CertProbeStatus{
+		if current.ProbeTarget != cert.ProbeTarget || ctx.Err() != nil {
+			return nil
+		}
+		state := p.state.WithTx(tx)
+		var prev *domain.CertProbeStatus
+		previous, err := state.Get(cert.ID)
+		if err == nil {
+			prev = &previous
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return err
+		}
+		now := p.now()
+		if probeErr != nil {
+			st := domain.CertProbeStatus{ProbedAt: now, Success: false, LastError: probeErr.Error()}
+			if prev != nil {
+				st.Serial, st.Issuer, st.SANs, st.NotAfter = prev.Serial, prev.Issuer, prev.SANs, prev.NotAfter
+			}
+			return state.Upsert(cert.ID, st)
+		}
+		serial := fmt.Sprintf("%x", leaf.SerialNumber)
+		issuer := leaf.Issuer.String()
+		sans := leaf.DNSNames
+		notAfter := leaf.NotAfter.UTC().Format(domain.DateLayout)
+		mismatches := domain.ComputeCertMismatches(current.Subject, prev, serial, issuer, sans)
+		current.ExpiresOn = notAfter
+		current.Issuer = issuer
+		if err := certs.Update(current); err != nil {
+			return err
+		}
+		return state.Upsert(cert.ID, domain.CertProbeStatus{
 			ProbedAt: now, Success: true, Serial: serial, Issuer: issuer,
 			SANs: sans, NotAfter: notAfter, Mismatches: mismatches,
 		})
 	})
-}
-
-// priorState returns the previously stored probe status for certID, or nil if
-// none exists yet (first probe) or it can't be read.
-func (p *Prober) priorState(certID int64) *domain.CertProbeStatus {
-	prev, err := p.state.Get(certID)
-	if err != nil {
-		return nil // store.ErrNotFound (or unreadable) => treat as first probe
-	}
-	return &prev
 }

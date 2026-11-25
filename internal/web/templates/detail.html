@@ -163,7 +163,7 @@
   {{end}}
   {{if canWrite}}
   <form class="form-inline" method="post" action="{{$.ListURL}}/{{$.EntityID}}/agent/unbind"
-        onsubmit="return confirm('Unbind this agent? The host record will stay, but a new report will be needed to re-link it.');">
+        data-confirm="Unbind this agent? The host record will stay, but a new report will be needed to re-link it.">
     {{ csrfField }}
     <button class="btn" type="submit">Unbind agent</button>
   </form>
@@ -264,7 +264,7 @@
       <span class="muted">{{.Size}} · {{.UploadedAt}}</span>
       {{if canWrite}}
       <form class="form-inline" method="post" action="/attachments/{{.ID}}/delete"
-            onsubmit="return confirm('Delete this attachment?');">
+            data-confirm="Delete this attachment?">
         {{ csrfField }}
         <input type="hidden" name="return_section" value="activity">
         <button class="tag-x" type="submit" aria-label="Delete attachment {{.Filename}}">&times;</button>
@@ -297,7 +297,7 @@
       <div class="journal-body">{{.BodyHTML}}</div>
       <time datetime="{{.CreatedAt}}" title="{{.CreatedAt}}">{{displayTime .CreatedAt}}</time>
       {{if canWrite}}
-      <form class="form-inline" method="post" action="/journal/{{.ID}}/delete">
+      <form class="form-inline" method="post" action="/journal/{{.ID}}/delete" data-confirm="Delete this journal entry?">
         {{ csrfField }}
         <input type="hidden" name="return_section" value="activity">
         <button class="tag-x" type="submit" aria-label="Delete journal entry">&times;</button>

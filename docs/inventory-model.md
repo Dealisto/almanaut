@@ -98,6 +98,11 @@ kept for switches). Reserved addresses show on the network's IPAM view, are
 skipped by the "next free" suggestion, and are subtracted from the
 free-address count.
 
+The gateway also consumes one usable address unless a host or reservation
+already occupies it. Overlapping reservations count once. IPv4 network and
+broadcast addresses are excluded from usable capacity, except on /31 and /32
+networks; they are not subtracted again when a reservation includes them.
+
 ## Tags
 
 Tags are free-form labels on any entity. Each name is normalized before it is

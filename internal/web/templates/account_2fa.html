@@ -7,7 +7,7 @@
 {{if .Enabled}}
   <div class="panel-head"><h2>Your account is protected</h2><span class="badge badge-ok">Enabled</span></div><p>You sign in with your password and a code from your authenticator app.</p><p class="muted">{{.RecoveryLeft}} recovery code(s) remaining.</p>
   <details class="disclosure"{{if .Error}} open{{end}}><summary>Turn off two-factor authentication</summary><p id="disable-help">Enter either a current authenticator code or one unused recovery code.</p>
-    <form method="post" action="/account/2fa/disable" class="stack" onsubmit="return confirm('Disable two-factor authentication?');">{{ csrfField }}
+    <form method="post" action="/account/2fa/disable" class="stack" data-confirm="Disable two-factor authentication?">{{ csrfField }}
       <label>Authenticator code<input name="code"{{if .Error}} aria-invalid="true" aria-describedby="two-factor-error"{{end}} inputmode="numeric" autocomplete="one-time-code" placeholder="123456"></label>
       <label>Or a recovery code<input name="recovery" autocomplete="off" spellcheck="false"></label>
       <div class="actions"><button class="btn btn-danger" type="submit">Disable 2FA</button></div>

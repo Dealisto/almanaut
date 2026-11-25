@@ -35,7 +35,7 @@
         <details class="row-menu"><summary>Actions</summary>
         <a class="btn" href="/services/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/services/{{.ID}}/delete"
-              onsubmit="return confirm('Delete this service?');">
+              data-confirm="Delete this service?">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>

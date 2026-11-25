@@ -25,8 +25,27 @@ API tokens and 2FA, webhooks, saved views, the authentication audit log, the
 history (changelog), [attachments](inventory-model.md#attachments), agent
 bindings and reports, Uptime Kuma monitor mappings, and discovery runs.
 Discovery source configuration and credentials are not included. For a complete
-backup, back up the SQLite database and any separately managed configuration
-and attachment files.
+backup, preserve the SQLite database and separately managed configuration and
+secret files. Attachment contents are stored inside the database.
+
+## Complete backups
+
+For a simple complete backup, stop the Almanaut process or container cleanly,
+then copy its data directory and configuration before restarting it. Protect
+these copies as credentials: the database includes users, API token hashes,
+TOTP secrets, and integration settings.
+
+Do not copy only `almanaut.db` while the server is running. SQLite uses WAL mode,
+so recent committed data may still be in `almanaut.db-wal`; copying the live
+database and WAL separately also does not guarantee a consistent backup. Use a
+SQLite online backup operation for a live full backup, or stop the server first.
+YAML export is safe while running but includes only the inventory described above.
+
+Restore a full backup with the server stopped and use the matching configuration.
+Check a restored copy before relying on it, including attachments and access to
+the administrator account.
+
+## Export format compatibility
 
 Exports use **format version 3**, adding `discovery_bindings` to the host type
 catalog introduced in version 2. Version 1 and 2 files remain importable; files
@@ -80,6 +99,12 @@ port only is completed on the other. Two ports connected to the same port, or
 a port on another host's NIC, fail the import.
 Tag names are normalised the way the UI stores them (`#Prod` → `prod`). A
 file written by a newer almanaut, with a higher `version`, is refused.
+
+Uploads must contain exactly one YAML document with an explicit supported
+`version`. Empty files, unknown field names (including misspelled record fields),
+and additional documents are rejected before any data is replaced. Record IDs
+must be positive and unique within each record type. To deliberately restore
+an empty inventory, use a valid versioned export containing no records.
 
 ## Additive CSV import
 

@@ -41,7 +41,7 @@
       <td>
         {{if canWrite}}
         <form class="form-inline" method="post" action="/relationships/{{.ID}}/delete"
-              onsubmit="return confirm('Delete this relationship?');">
+              data-confirm="Delete this relationship?">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>

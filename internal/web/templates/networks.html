@@ -25,7 +25,7 @@
         <details class="row-menu"><summary>Actions</summary>
         <a class="btn" href="/networks/{{.ID}}/edit">Edit</a>
         <form class="form-inline" method="post" action="/networks/{{.ID}}/delete"
-              onsubmit="return confirm('Delete this network?');">
+              data-confirm="Delete this network?">
           {{ csrfField }}
           <button class="btn btn-danger" type="submit">Delete</button>
         </form>
