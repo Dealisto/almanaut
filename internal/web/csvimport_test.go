@@ -1,7 +1,6 @@
 package web
 
 import (
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,15 +15,7 @@ import (
 // importCSV/createEntityTx/updateEntityTx touch (db, changelog, webhooks).
 func hostResourceForTest(t *testing.T) (resource[domain.Host], handlerDeps) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 
 	hosts := store.NewHostRepo(db)
 	rs := resource[domain.Host]{

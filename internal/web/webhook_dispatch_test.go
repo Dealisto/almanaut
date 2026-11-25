@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"sync"
 	"testing"
 
@@ -40,15 +39,7 @@ func newTestServerWH(t *testing.T) (http.Handler, *recordingDispatcher) {
 
 func newTestServerWHDB(t *testing.T) (http.Handler, *sql.DB, *recordingDispatcher) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	rec := &recordingDispatcher{}
 	srv := New(Config{
 		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),

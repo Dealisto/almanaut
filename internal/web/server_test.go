@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -51,15 +50,7 @@ func newTestServer(t *testing.T) http.Handler {
 // expose through its own routes.
 func newTestServerDB(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	srv := New(Config{
 		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
 		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
@@ -110,15 +101,7 @@ func newTestServerNet(t *testing.T, netscan networkScanner, opts NetDiscoveryOpt
 
 func newTestServerFull(t *testing.T, docker dockerScanner, netscan networkScanner, opts NetDiscoveryOptions) http.Handler {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	return New(Config{
 		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
 		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
@@ -150,15 +133,7 @@ func newTestServerProxmox(t *testing.T, pve proxmoxScanner, opts ProxmoxOptions)
 // host and relationship repos so a test can assert persisted state directly.
 func newTestServerProxmoxRepos(t *testing.T, pve proxmoxScanner, opts ProxmoxOptions) (http.Handler, *store.HostRepo, *store.RelationshipRepo) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	hosts := store.NewHostRepo(db)
 	rels := store.NewRelationshipRepo(db)
 	srv := New(Config{
@@ -1561,15 +1536,7 @@ func TestDiscoveryDockerImportSkipsNamelessContainer(t *testing.T) {
 // underlying *sql.DB so a test can force a mid-import write failure.
 func newTestServerDockerDB(t *testing.T, scanner dockerScanner) (http.Handler, *sql.DB) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	srv := New(Config{
 		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
 		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),
@@ -2034,15 +2001,7 @@ func TestHostDetailWithoutAnAgentStillRenders(t *testing.T) {
 func TestHostDetailAgentStatusUnavailableIsHonest(t *testing.T) {
 	db := rbacDB(t)
 
-	agentDBPath := filepath.Join(t.TempDir(), "agents.db")
-	agentDB, err := store.Open(agentDBPath)
-	if err != nil {
-		t.Fatalf("open agent db: %v", err)
-	}
-	t.Cleanup(func() { agentDB.Close() })
-	if err := store.Migrate(agentDB, agentDBPath); err != nil {
-		t.Fatalf("migrate agent db: %v", err)
-	}
+	agentDB := newWebTestDB(t)
 
 	h := New(Config{
 		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),

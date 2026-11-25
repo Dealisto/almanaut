@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -37,15 +36,7 @@ func agentServer(t *testing.T, scope domain.Scope) (http.Handler, *sql.DB, strin
 // behavior (routes, auth, storage) is identical.
 func agentServerLogging(t *testing.T, scope domain.Scope, logger *log.Logger) (http.Handler, *sql.DB, string) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	users := store.NewUserRepo(db)
 	if err := BootstrapAdmin(db, testLogger(), "alice", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
@@ -660,15 +651,7 @@ func (f fakeAgentRepo) RecordConflict(agentID, hostname, at string) error {
 // createHost call writes and still answer 409 — the hosts/host_agents counts
 // below are what would catch that; the status code and body alone would not.
 func TestAgentReportRollsBackHostOnAgentIDConflict(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 
 	hosts := store.NewHostRepo(db)
 	hostRS := resource[domain.Host]{
@@ -745,15 +728,7 @@ func TestAgentReportRollsBackHostOnAgentIDConflict(t *testing.T) {
 // the retry tests below can vary just the fake's contention behavior.
 func agentDepsWithFake(t *testing.T, fake fakeAgentRepo) (agentDeps, *sql.DB, *recordingDispatcher) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 
 	hosts := store.NewHostRepo(db)
 	hostRS := resource[domain.Host]{

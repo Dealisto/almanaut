@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -17,15 +16,7 @@ import (
 // the handler, the db, and a valid raw API token for that user.
 func apiAuthServer(t *testing.T) (http.Handler, *store.TokenRepo, string) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	users := store.NewUserRepo(db)
 	if err := BootstrapAdmin(db, testLogger(), "alice", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
@@ -182,15 +173,7 @@ func TestAPICreateValidationAndBadJSON(t *testing.T) {
 }
 
 func TestAPIWriteAttributedToTokenUser(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	users := store.NewUserRepo(db)
 	if err := BootstrapAdmin(db, testLogger(), "alice", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)

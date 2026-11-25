@@ -100,15 +100,7 @@ func TestResetUserPassword(t *testing.T) {
 // domain.User.Validate and the create silently re-rendered the form with an
 // error instead of creating the account.
 func TestCreateUserDefaultsToViewer(t *testing.T) {
-	dbPath := t.TempDir() + "/test.db"
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	users := store.NewUserRepo(db)
 	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)

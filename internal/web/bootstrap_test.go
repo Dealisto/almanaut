@@ -2,7 +2,6 @@ package web
 
 import (
 	"database/sql"
-	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -12,15 +11,7 @@ import (
 
 func bootstrapRepo(t *testing.T) (*sql.DB, *store.UserRepo) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	return db, store.NewUserRepo(db)
 }
 
@@ -64,15 +55,7 @@ func TestBootstrapIdempotentWhenUsersExist(t *testing.T) {
 }
 
 func TestBootstrapAdminSeedsAdminRole(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	users := store.NewUserRepo(db)
 	if err := BootstrapAdmin(db, testLogger(), "root", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
