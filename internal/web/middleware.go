@@ -10,19 +10,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-// statusRecorder remembers the status code written to the response so the
-// request logger can report it. Status defaults to 200 (the value net/http
-// uses when a handler writes a body without calling WriteHeader).
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func (s *statusRecorder) WriteHeader(code int) {
-	s.status = code
-	s.ResponseWriter.WriteHeader(code)
-}
-
 // requestLogger returns middleware that logs one line per request
 // ("<method> <path> <status> <duration>") through the given logger, and copies
 // the chi request ID from context into the X-Request-Id response header.
@@ -34,10 +21,16 @@ func requestLogger(logger *log.Logger) func(http.Handler) http.Handler {
 			if id := middleware.GetReqID(r.Context()); id != "" {
 				w.Header().Set("X-Request-Id", id)
 			}
-			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+			// Preserve optional interfaces (including flushing) and record the
+			// first final status, including implicit 200 responses from Write.
+			rec := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			start := time.Now()
 			next.ServeHTTP(rec, r)
-			logger.Printf("%s %s %d %s", r.Method, r.URL.Path, rec.status, time.Since(start))
+			status := rec.Status()
+			if status == 0 {
+				status = http.StatusOK // An empty handler still sends 200.
+			}
+			logger.Printf("%s %s %d %s", r.Method, r.URL.Path, status, time.Since(start))
 		})
 	}
 }

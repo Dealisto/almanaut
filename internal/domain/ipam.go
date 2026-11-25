@@ -2,6 +2,7 @@ package domain
 
 import (
 	"bytes"
+	"encoding/binary"
 	"net"
 	"sort"
 	"strings"
@@ -189,10 +190,13 @@ func buildUsage(n Network, used []Allocation, reservations []Reservation) Networ
 		if gw := net.ParseIP(strings.TrimSpace(n.Gateway)); gw != nil && ipn.Contains(gw) {
 			taken[gw.String()] = true
 		}
-		// Reserved ranges are skipped by next-free and subtracted from free.
-		reserved := reservedAddrs(ipn, reservations)
-		for ip := range reserved {
-			taken[ip] = true
+		// Count merged ranges instead of expanding every reserved address. Even
+		// a /2 can then report accurate capacity using space proportional to
+		// the number of reservations, not the size of the subnet.
+		reserved := reservationRanges(ipn, reservations)
+		reservedCount := 0
+		for _, span := range reserved {
+			reservedCount += int(binary.BigEndian.Uint32(span.end[12:])-binary.BigEndian.Uint32(span.start[12:])) + 1
 		}
 		// These addresses are already excluded from TotalUsable. Keep any host
 		// allocations visible, but do not subtract subnet endpoints twice.
@@ -206,14 +210,18 @@ func buildUsage(n Network, used []Allocation, reservations []Reservation) Networ
 			delete(taken, broadcast.String())
 		}
 		for ip := range taken {
+			if reserved.contains(net.ParseIP(ip)) {
+				reservedCount-- // a host or gateway already accounts for it
+			}
 			if _, isUsed := byIP[ip]; !isUsed {
 				u.ReservedCount++
 			}
 		}
-		if u.FreeCount = u.TotalUsable - len(taken); u.FreeCount < 0 {
+		u.ReservedCount += reservedCount
+		if u.FreeCount = u.TotalUsable - len(taken) - reservedCount; u.FreeCount < 0 {
 			u.FreeCount = 0
 		}
-		u.NextFree = nextFree(ipn, taken)
+		u.NextFree = nextFree(ipn, taken, reserved)
 	}
 	return u
 }
@@ -232,7 +240,7 @@ func reservesEnds(ones, bits int) bool {
 // walks addresses in place rather than materializing the whole range, so a large
 // (but enumerable) subnet does not allocate one net.IP per address just to find
 // the first hole.
-func nextFree(ipn *net.IPNet, taken map[string]bool) string {
+func nextFree(ipn *net.IPNet, taken map[string]bool, reserved ipRanges) string {
 	ones, bits := ipn.Mask.Size()
 	if bits-ones > maxEnumerableHostBits {
 		return ""
@@ -255,7 +263,7 @@ func nextFree(ipn *net.IPNet, taken map[string]bool) string {
 		if excludeEnds && cur.Equal(broadcast) {
 			break // reached the reserved broadcast address
 		}
-		if !taken[cur.String()] {
+		if !taken[cur.String()] && !reserved.contains(cur) {
 			return cur.String()
 		}
 		incIP(cur)
@@ -263,46 +271,70 @@ func nextFree(ipn *net.IPNet, taken map[string]bool) string {
 	return ""
 }
 
-// reservedAddrs enumerates the addresses covered by reservations that fall
-// within ipn, as a set. It is bounded by the same enumerable-size cap as
-// nextFree: a network too large to enumerate yields an empty set (its
-// reservations are still listed, just not counted). Each reservation's range is
-// walked from start to end inclusive; out-of-network and reversed ranges are
-// ignored.
-func reservedAddrs(ipn *net.IPNet, reservations []Reservation) map[string]bool {
+// ipRanges contains sorted, non-overlapping inclusive address ranges. All
+// endpoints use 16 bytes so comparisons work for both IPv4 and IPv6.
+type ipRange struct{ start, end net.IP }
+type ipRanges []ipRange
+
+func (ranges ipRanges) contains(ip net.IP) bool {
+	ip = ip.To16()
+	i := sort.Search(len(ranges), func(i int) bool {
+		return bytes.Compare(ranges[i].end, ip) >= 0
+	})
+	return i < len(ranges) && bytes.Compare(ranges[i].start, ip) <= 0
+}
+
+// reservationRanges clips reservations to the usable part of a bounded subnet
+// and merges overlaps. Counting each range needs only its low 32 bits because
+// buildUsage calls this for subnets with at most 30 host bits.
+func reservationRanges(ipn *net.IPNet, reservations []Reservation) ipRanges {
 	ones, bits := ipn.Mask.Size()
-	if bits-ones > maxEnumerableHostBits {
-		return nil
+	base := ipn.IP.Mask(ipn.Mask)
+	last := make(net.IP, len(base))
+	for i := range base {
+		last[i] = base[i] | ^ipn.Mask[i]
 	}
-	limit := 1 << uint(bits-ones) // network size caps any single range walk
-	set := map[string]bool{}
+	first, last := append(net.IP(nil), base.To16()...), last.To16()
+	if reservesEnds(ones, bits) {
+		incIP(first)
+		// An IPv4 broadcast address always ends in at least two set bits.
+		last[len(last)-1]--
+	}
+	var ranges ipRanges
 	for _, r := range reservations {
 		start := net.ParseIP(strings.TrimSpace(r.StartIP))
 		end := net.ParseIP(strings.TrimSpace(r.EndIP))
 		if start == nil || end == nil {
 			continue
 		}
-		cur := make(net.IP, 16)
-		copy(cur, start.To16())
-		base := ipn.IP.Mask(ipn.Mask).To16()
-		if bytes.Compare(cur, base) < 0 {
-			copy(cur, base)
+		// Match the network's effective family, including IPv4-mapped IPv6
+		// CIDRs whose 128-bit masks still contain ordinary IPv4 addresses.
+		if (start.To4() == nil) != (base.To4() == nil) || (end.To4() == nil) != (base.To4() == nil) {
+			continue
 		}
-		endB := end.To16()
-		if bytes.Compare(cur, endB) > 0 {
-			continue // range ends below the network (or reversed)
+		start, end = start.To16(), end.To16()
+		if bytes.Compare(start, first) < 0 {
+			start = first
 		}
-		for i := 0; i <= limit; i++ {
-			if ipn.Contains(cur) {
-				set[cur.String()] = true
-			}
-			if bytes.Compare(cur, endB) >= 0 {
-				break
-			}
-			incIP(cur)
+		if bytes.Compare(end, last) > 0 {
+			end = last
+		}
+		if bytes.Compare(start, end) <= 0 {
+			ranges = append(ranges, ipRange{start, end})
 		}
 	}
-	return set
+	sort.Slice(ranges, func(i, j int) bool {
+		return bytes.Compare(ranges[i].start, ranges[j].start) < 0
+	})
+	merged := ranges[:0]
+	for _, span := range ranges {
+		if len(merged) == 0 || bytes.Compare(span.start, merged[len(merged)-1].end) > 0 {
+			merged = append(merged, span)
+		} else if bytes.Compare(span.end, merged[len(merged)-1].end) > 0 {
+			merged[len(merged)-1].end = span.end
+		}
+	}
+	return merged
 }
 
 // incIP increments an IP address in place (big-endian).

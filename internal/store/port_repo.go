@@ -37,9 +37,20 @@ func (r *PortRepo) Count() (int, error) {
 const portColumns = `id, owner_type, owner_id, nic_id, name, mac, mgmt_only, peer_port_id, notes`
 
 // Create inserts v and, when v.PeerPortID is set, connects it to that port.
-// The connection reads and writes other rows, so callers outside tests use the
-// tx-bound CreateTx.
+// The row and both sides of the connection are committed atomically.
 func (r *PortRepo) Create(v domain.Port) (int64, error) {
+	if db, ok := r.db.(*sql.DB); ok {
+		var id int64
+		err := WithTx(db, func(tx *sql.Tx) error {
+			var err error
+			id, err = r.CreateTx(tx, v)
+			return err
+		})
+		if err != nil {
+			return 0, err
+		}
+		return id, nil
+	}
 	if err := r.checkNIC(v); err != nil {
 		return 0, err
 	}
@@ -125,8 +136,11 @@ func (r *PortRepo) ForNIC(id int64) ([]domain.Port, error) {
 }
 
 // Update overwrites the port and connects it to v.PeerPortID (0 disconnects
-// it). Like Create, it touches other rows; callers use the tx-bound UpdateTx.
+// it). The changes to all affected ports share one transaction.
 func (r *PortRepo) Update(v domain.Port) error {
+	if db, ok := r.db.(*sql.DB); ok {
+		return WithTx(db, func(tx *sql.Tx) error { return r.UpdateTx(tx, v) })
+	}
 	if err := r.checkNIC(v); err != nil {
 		return err
 	}
@@ -207,6 +221,9 @@ func (r *PortRepo) connect(id, peer int64) error {
 // Delete removes the port and clears its peer's pointer back to it, so no
 // dangling link survives.
 func (r *PortRepo) Delete(id int64) error {
+	if db, ok := r.db.(*sql.DB); ok {
+		return WithTx(db, func(tx *sql.Tx) error { return r.DeleteTx(tx, id) })
+	}
 	if _, err := r.db.Exec(`UPDATE ports SET peer_port_id = 0 WHERE peer_port_id = ?`, id); err != nil {
 		return fmt.Errorf("clear peer refs: %w", err)
 	}
@@ -222,15 +239,46 @@ func (r *PortRepo) decorate(items []domain.Port) ([]domain.Port, error) {
 	if len(items) == 0 {
 		return items, nil
 	}
-	hosts, err := entityNames(r.db, "hosts")
+	var peerIDs, hostIDs, hardwareIDs, nicIDs []int64
+	for _, p := range items {
+		peerIDs = append(peerIDs, p.PeerPortID)
+		nicIDs = append(nicIDs, p.NICID)
+	}
+	byID := make(map[int64]domain.Port)
+	if err := eachIDBatch(peerIDs, func(placeholders string, args []any) error {
+		peers, err := r.queryRaw(`SELECT `+portColumns+` FROM ports WHERE id IN (`+placeholders+`)`, args...)
+		if err != nil {
+			return err
+		}
+		for _, peer := range peers {
+			byID[peer.ID] = peer
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	addOwner := func(p domain.Port) {
+		if p.OwnerType == "hardware" {
+			hardwareIDs = append(hardwareIDs, p.OwnerID)
+		} else {
+			hostIDs = append(hostIDs, p.OwnerID)
+		}
+	}
+	for _, p := range items {
+		addOwner(p)
+	}
+	for _, p := range byID {
+		addOwner(p)
+	}
+	hosts, err := entityNames(r.db, "hosts", hostIDs)
 	if err != nil {
 		return nil, err
 	}
-	hardware, err := entityNames(r.db, "hardware")
+	hardware, err := entityNames(r.db, "hardware", hardwareIDs)
 	if err != nil {
 		return nil, err
 	}
-	nics, err := entityNames(r.db, "nics")
+	nics, err := entityNames(r.db, "nics", nicIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -243,17 +291,6 @@ func (r *PortRepo) decorate(items []domain.Port) ([]domain.Port, error) {
 			return name
 		}
 		return fmt.Sprintf("%s:%d (deleted)", ownerType, ownerID)
-	}
-
-	// A peer can belong to any owner, so the label needs every port, not just
-	// the slice being decorated.
-	all, err := r.listRaw()
-	if err != nil {
-		return nil, err
-	}
-	byID := make(map[int64]domain.Port, len(all))
-	for _, p := range all {
-		byID[p.ID] = p
 	}
 
 	for i := range items {

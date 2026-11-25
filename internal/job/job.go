@@ -23,7 +23,7 @@ type RunFunc func(ctx context.Context) error
 type Definition struct {
 	Name     string        // stable identifier, unique within a runner
 	Title    string        // human-readable label for the admin page
-	Interval time.Duration // time between passes; <=0 => runs only at startup and on manual trigger
+	Interval time.Duration // delay after a completed pass; <=0 => runs only at startup and on manual trigger
 	Timeout  time.Duration // per-pass bound; <=0 => defaultTimeout
 	Run      RunFunc
 }
@@ -119,8 +119,9 @@ func (r *Runner) Trigger(name string) bool {
 	return false
 }
 
-// Start runs one immediate pass of every job, then a pass on each interval tick
-// and each manual trigger, until ctx is cancelled. Call it in a goroutine; it
+// Start runs one immediate pass of every job, then waits its interval after
+// each completed pass. Manual triggers run early and restart that delay. Runs
+// continue until ctx is cancelled. Call it in a goroutine; it
 // blocks until ctx ends and all job loops have stopped.
 func (r *Runner) Start(ctx context.Context) {
 	r.mu.Lock()
@@ -139,23 +140,25 @@ func (r *Runner) Start(ctx context.Context) {
 }
 
 func (r *Runner) loop(ctx context.Context, j *job) {
-	r.pass(ctx, j)
-	// A <=0 interval leaves tick nil, which blocks forever in select: the job
-	// then runs only at startup and on manual triggers.
-	var tick <-chan time.Time
-	if j.def.Interval > 0 {
-		t := time.NewTicker(j.def.Interval)
-		defer t.Stop()
-		tick = t.C
-	}
-	for {
+	defer func() { j.mu.Lock(); j.nextRun = time.Time{}; j.mu.Unlock() }()
+	for ctx.Err() == nil {
+		r.pass(ctx, j)
+		if ctx.Err() != nil {
+			return
+		}
+		var timer *time.Timer
+		var tick <-chan time.Time
+		if j.def.Interval > 0 {
+			timer = time.NewTimer(time.Until(j.status().NextRun))
+			tick = timer.C
+		}
 		select {
 		case <-ctx.Done():
-			return
 		case <-tick:
-			r.pass(ctx, j)
 		case <-j.trigger:
-			r.pass(ctx, j)
+		}
+		if timer != nil {
+			timer.Stop()
 		}
 	}
 }
@@ -179,6 +182,7 @@ func (r *Runner) runSafely(ctx context.Context, j *job) (err error) {
 func (r *Runner) pass(ctx context.Context, j *job) {
 	j.mu.Lock()
 	j.running = true
+	j.nextRun = time.Time{}
 	j.mu.Unlock()
 
 	start := time.Now()
@@ -191,7 +195,7 @@ func (r *Runner) pass(ctx context.Context, j *job) {
 	j.runs++
 	j.lastRun = start
 	j.lastDur = time.Since(start)
-	if j.def.Interval > 0 {
+	if j.def.Interval > 0 && ctx.Err() == nil {
 		j.nextRun = time.Now().Add(j.def.Interval)
 	}
 	if err != nil {

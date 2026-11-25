@@ -8,6 +8,7 @@
   <input type="search" name="q" value="{{.Query}}" placeholder="Search…" aria-label="Search" autofocus>
   <button class="btn btn-primary" type="submit">Search</button>
 </form>
+{{template "pagination" .Pagination}}
 <section class="panel search-results">
 {{if .Query}}
   {{if .Groups}}
@@ -23,4 +24,5 @@
   <p class="muted">Type a query in the search box.</p>
 {{end}}
 </section>
+{{template "pagination" .Pagination}}
 {{end}}

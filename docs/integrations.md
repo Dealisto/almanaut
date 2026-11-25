@@ -18,6 +18,10 @@ date beyond the window) re-arms it for next time. The check runs at startup
 and every `ALMANAUT_NOTIFY_INTERVAL`. Leave both URLs unset to disable
 notifications entirely.
 
+Expiry windows and day labels use calendar dates in the server's timezone.
+Failed deliveries appear as errors on **Scheduled tasks** without preventing
+other items from being attempted; failed items remain eligible for the next pass.
+
 Notification URLs must point directly to their final ntfy or Discord endpoint.
 HTTP redirects are treated as failed deliveries, including redirects that
 preserve the POST method; this prevents a redirected request from being mistaken

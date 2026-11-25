@@ -9,10 +9,36 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/Dealisto/almanaut/internal/agentapi"
 )
+
+func TestRunRejectsNonPositiveTimeout(t *testing.T) {
+	for _, timeout := range []string{"0s", "-1s"} {
+		var out, errOut bytes.Buffer
+		if code := run(context.Background(), []string{"-timeout", timeout}, &out, &errOut); code != exitUsage || !strings.Contains(errOut.String(), "timeout must be positive") {
+			t.Fatalf("timeout %s: code=%d stderr=%s", timeout, code, errOut.String())
+		}
+	}
+}
+
+func TestRunCanceledCollectionNeverSendsReport(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+	}))
+	defer srv.Close()
+	cfg, state := agentEnv(t, srv.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var out, errOut bytes.Buffer
+	code := run(ctx, []string{"-config", cfg, "-state-dir", state}, &out, &errOut)
+	if code != exitUnreachable || requests.Load() != 0 || !strings.Contains(errOut.String(), "collect host facts") {
+		t.Fatalf("canceled report: code=%d requests=%d stderr=%s", code, requests.Load(), errOut.String())
+	}
+}
 
 // agentEnv writes a config pointing at srv and returns the config path and a
 // fresh state dir.

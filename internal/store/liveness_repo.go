@@ -49,8 +49,8 @@ func (r *LivenessRepo) recordCheck(entityType string, entityID int64, address st
 	default:
 		return nil, false, fmt.Errorf("invalid liveness entity type %q", entityType)
 	}
-	var currentAddress string
-	err := r.db.QueryRow(`SELECT check_address FROM `+table+` WHERE id = ?`, entityID).Scan(&currentAddress)
+	var currentAddress, label string
+	err := r.db.QueryRow(`SELECT check_address, name FROM `+table+` WHERE id = ?`, entityID).Scan(&currentAddress, &label)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil // deleted while the dial was in flight
 	}
@@ -76,6 +76,11 @@ func (r *LivenessRepo) recordCheck(entityType string, entityID int64, address st
 	}
 	if err := r.Upsert(entityType, entityID, s); err != nil {
 		return nil, false, err
+	}
+	if previous != nil && previous.Status != s.Status {
+		if _, err := r.db.Exec(`INSERT INTO liveness_notifications (entity_type, entity_id, label, address, status, last_error, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, entityType, entityID, label, address, s.Status, s.LastError, s.CheckedAt.UTC().Format(rfc3339)); err != nil {
+			return nil, false, fmt.Errorf("enqueue liveness transition: %w", err)
+		}
 	}
 	return previous, true, nil
 }

@@ -141,7 +141,7 @@
   function updateSelection() {
     const selected = checks.filter((checkbox) => checkbox.checked).length;
     const count = document.querySelector("[data-selection-count]");
-    if (count) count.textContent = selected ? `${selected} selected` : "Select rows to apply an action";
+    if (count) count.textContent = selected ? `${selected} selected` : "Select rows on this page to apply an action";
     if (bulk) bulk.querySelectorAll('button[type="submit"]').forEach((button) => { button.disabled = selected === 0; });
     if (selectAll) {
       selectAll.checked = selected > 0 && selected === checks.length;

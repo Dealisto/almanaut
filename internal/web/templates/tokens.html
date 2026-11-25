@@ -1,17 +1,41 @@
+{{define "tokenexpiry"}}
+<label>Lifetime<select name="expiry_days"><option value="7">7 days</option><option value="30">30 days</option><option value="90" selected>90 days</option><option value="365">365 days</option><option value="0">No expiration</option></select></label>
+{{end}}
 {{define "content"}}
 <div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Your account</span><h1>API tokens</h1><p class="page-description">Connect scripts and agents to your inventory with a token for each integration.</p></div></div>
 {{template "accountnav" .}}
 {{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
-{{if .NewToken}}<section class="notice" aria-labelledby="new-token-heading"><h2 id="new-token-heading">Your token is ready</h2><p>Copy it now. It will not be shown again.</p><code class="token secret-value" id="new-token">{{.NewToken}}</code><div class="copy-control"><button class="btn js-only" type="button" data-copy-target="new-token">Copy token</button><span role="status" data-copy-status></span></div></section>{{end}}
+{{if .NewToken}}<section class="notice" aria-labelledby="new-token-heading"><h2 id="new-token-heading">Your token is ready</h2><p>Copy it now. It will not be shown again. For a replacement, update your integration and verify it works before retiring the original token below.</p><code class="token secret-value" id="new-token">{{.NewToken}}</code><div class="copy-control"><button class="btn js-only" type="button" data-copy-target="new-token">Copy token</button><span role="status" data-copy-status></span></div></section>{{end}}
 <div class="settings-grid">
-  <section class="panel" aria-labelledby="tokens-heading"><div class="panel-head"><h2 id="tokens-heading">Your tokens</h2><span class="badge">{{len .Tokens}} active</span></div>
-  {{if .Tokens}}<ul class="record-list">{{range .Tokens}}<li><div class="record-heading"><span class="entity-icon">{{icon "shield"}}</span><div class="record-identity"><h3>{{.Label}}</h3><p><span class="badge">{{.Scope}}</span> Created <time datetime="{{.CreatedAt}}">{{displayTime .CreatedAt}}</time></p></div><form method="post" action="/account/tokens/{{.ID}}/delete" data-confirm="Revoke this token? Integrations using it will lose access immediately.">{{ csrfField }}<button class="btn btn-danger" type="submit">Revoke<span class="sr-only"> {{.Label}}</span></button></form></div></li>{{end}}</ul>
+  <section class="panel" aria-labelledby="tokens-heading"><div class="panel-head"><h2 id="tokens-heading">Your tokens</h2><span class="badge">{{.ActiveCount}} active</span></div>
+  {{if .Tokens}}<ul class="record-list">{{range .Tokens}}
+    <li id="token-{{.ID}}">
+      <div class="record-heading"><span class="entity-icon">{{icon "shield"}}</span><div class="record-identity">
+        <h3>{{.Label}} <small>#{{.ID}}</small></h3>
+        <p><span class="badge">{{.Scope}}</span>{{if .Expired}} <span class="badge badge-warn">Expired</span>{{end}} Created <time datetime="{{.CreatedAt}}">{{displayTime .CreatedAt}}</time></p>
+        <p>{{if .ExpiresAt}}Expires <time datetime="{{.ExpiresAt}}">{{displayTime .ExpiresAt}}</time>{{else}}No expiration{{end}}</p>
+        <p>{{if .LastUsedAt}}Last used <time datetime="{{.LastUsedAt}}">{{displayTime .LastUsedAt}}</time>{{else}}Not used yet{{end}}</p>
+      </div>
+      <form method="post" action="/account/tokens/{{.ID}}/delete" data-confirm="Revoke this token? Integrations using it will lose access immediately.">{{ csrfField }}<button class="btn btn-danger" type="submit">Revoke<span class="sr-only"> {{.Label}}</span></button></form></div>
+      {{if .RotatedFromID}}
+      <p>This replaces token #{{.RotatedFromID}}. Both tokens remain valid until their expiration or revocation. Deploy this replacement, verify the integration, then retire the original.</p>
+      <form method="post" action="/account/tokens/{{.ID}}/finish-rotation" data-confirm="Retire the original token? Confirm that every integration using it has switched to this replacement.">{{ csrfField }}<button class="btn" type="submit"{{if or .Expired (not .LastUsedAt)}} disabled{{end}}>Retire original token #{{.RotatedFromID}}</button></form>
+      {{if not .LastUsedAt}}<p class="muted">This action becomes available after the replacement authenticates its first request.</p>{{end}}
+      {{else if .ReplacementID}}
+      <p>Rotation in progress: <a href="#token-{{.ReplacementID}}">replacement token #{{.ReplacementID}}</a> is ready. Update your integration before retiring this original.</p>
+      {{else}}
+      <details><summary>Rotate token #{{.ID}}</summary><p>Create a replacement with the same label and scope. This token keeps working until you explicitly retire it. Choose a new lifetime for the replacement.</p>
+      <form class="list-controls" method="post" action="/account/tokens/{{.ID}}/rotate">{{ csrfField }}{{template "tokenexpiry" .}}<button class="btn" type="submit">Prepare replacement</button></form></details>
+      {{end}}
+    </li>
+  {{end}}</ul>
   {{else}}<div class="empty">{{icon "shield"}}<strong>No API tokens yet.</strong><p>Create a token when you are ready to connect an integration.</p><a class="btn" href="#new-token-form">Create your first token</a></div>{{end}}
   </section>
   <aside class="settings-aside"><section class="panel" id="new-token-form"><h2>New token</h2><form class="stack" method="post" action="/account/tokens">{{ csrfField }}
     <label>Label<input name="label" placeholder="e.g. Nightly inventory export" required></label>
     <label>Scope<select name="scope" aria-describedby="scope-help">{{range .Scopes}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
+    {{template "tokenexpiry" .}}
     <div class="actions"><button class="btn btn-primary" type="submit">Create token</button></div>
-  </form></section><section class="help-card" id="scope-help"><h2>Choose a scope</h2><dl class="help-definitions"><dt>read-only</dt><dd>Read inventory data.</dd><dt>read-write</dt><dd>Read and change inventory within your account's permissions.</dd><dt>agent</dt><dd>Send host reports through the agent endpoint.</dd></dl></section></aside>
+  </form></section><section class="help-card" id="scope-help"><h2>Choose a scope</h2><dl class="help-definitions"><dt>read-only</dt><dd>Read inventory data.</dd><dt>read-write</dt><dd>Read and change inventory within your account's permissions.</dd><dt>agent</dt><dd>Send host reports through the agent endpoint.</dd></dl><p>Last-used times are updated at most every five minutes. A newly used token appears immediately.</p></section></aside>
 </div>
 {{end}}

@@ -33,6 +33,12 @@ compromised too.
 
 ## Sessions & login throttling
 
+Password verification, password changes, account creation, and SSO provisioning
+share a budget of four concurrent password operations per server. Extra work is
+rejected immediately with HTTP `503` and `Retry-After: 1`, without recording a
+failed password attempt. This bounds CPU work even when requests use different
+usernames; the username-based failure limit below still applies independently.
+
 Sessions are server-side (stored in SQLite), cookie-based, and last 30 days;
 use the **Logout** button to end one early. Failed logins are throttled
 per-username: after 5 consecutive failures, further attempts for that username

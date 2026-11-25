@@ -161,6 +161,11 @@ func loginForm(ssoEnabled bool) http.HandlerFunc {
 // verification, so an attacker cannot spend the server's bcrypt budget guessing.
 func login(db *sql.DB, users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPRepo, throttle *loginThrottle, audit *store.AuthEventRepo, forceSecure, ssoEnabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		release, ok := acquirePasswordWork(w, r)
+		if !ok {
+			return
+		}
+		defer release()
 		username := strings.TrimSpace(r.FormValue("username"))
 		password := r.FormValue("password")
 		// Reject oversized input before bcrypt, throttle bookkeeping or auditing.
@@ -277,7 +282,10 @@ func issuePasswordLogin(db *sql.DB, users *store.UserRepo, sessions *store.Sessi
 func logout(sessions *store.SessionRepo, audit *store.AuthEventRepo, forceSecure bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
-			_ = sessions.DeleteByToken(hashToken(c.Value))
+			if err := sessions.DeleteByToken(hashToken(c.Value)); err != nil {
+				serverError(w, r, err)
+				return
+			}
 		}
 		var username string
 		var uid int64

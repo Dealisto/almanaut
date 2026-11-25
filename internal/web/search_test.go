@@ -1,20 +1,29 @@
 package web
 
-import "testing"
+import (
+	"encoding/json"
+	"net/http/httptest"
+	"net/url"
+	"testing"
 
-func TestMatchesQuery(t *testing.T) {
-	fields := []string{"proxmox", "Ubuntu 24.04", "runs the media stack", "10.0.0.5"}
+	"github.com/Dealisto/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/store"
+)
 
-	cases := map[string]bool{
-		"proxmox": true,  // name
-		"media":   true,  // note substring
-		"10.0.0":  true,  // ip substring
-		"UBUNTU":  true,  // case-insensitive
-		"zzz":     false, // no match
+func TestSearchMatchesCatalogFields(t *testing.T) {
+	h, db := newTestServerDB(t)
+	if _, err := store.NewHostRepo(db).Create(domain.Host{Name: "proxmox", Type: "physical", OS: "Ubuntu 24.04", Notes: "runs the media stack", IPs: []string{"10.0.0.5"}}); err != nil {
+		t.Fatal(err)
 	}
-	for q, want := range cases {
-		if got := matchesQuery(fields, q); got != want {
-			t.Errorf("matchesQuery(_, %q) = %v, want %v", q, got, want)
+	for query, want := range map[string]int{"proxmox": 1, "media": 1, "10.0.0": 1, "UBUNTU": 1, "zzz": 0} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/search?q="+url.QueryEscape(query), nil))
+		var hits []searchEntry
+		if err := json.Unmarshal(rec.Body.Bytes(), &hits); err != nil {
+			t.Fatal(err)
+		}
+		if rec.Code != 200 || len(hits) != want {
+			t.Errorf("query %q status=%d hits=%v", query, rec.Code, hits)
 		}
 	}
 }

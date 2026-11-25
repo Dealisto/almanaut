@@ -1,7 +1,7 @@
 {{define "bulkactions"}}
 {{if canWrite}}
 <details class="bulk-panel">
-  <summary>Bulk actions <span class="bulk-hint" data-selection-count role="status">Select rows to apply an action</span></summary>
+  <summary>Bulk actions <span class="bulk-hint" data-selection-count role="status">Select rows on this page to apply an action</span></summary>
   <form id="bulkform" class="bulk-actions" method="post" action="{{.BasePath}}/bulk">
     {{ csrfField }}
     <label>Tag<input name="tag" placeholder="Tag name" aria-label="Tag name"></label>

@@ -24,8 +24,8 @@ var version = "dev"
 const (
 	exitOK          = 0
 	exitUsage       = 1 // bad flags, or unreadable/incomplete config
-	exitRejected    = 2 // 4xx — a bad token or an unsupported schema
-	exitUnreachable = 3 // transport failure or 5xx — retry next hour
+	exitRejected    = 2 // permanent rejection, such as a bad token or unsupported schema
+	exitUnreachable = 3 // transport failure, 408, 429 or 5xx — retry next hour
 	exitConflict    = 4 // 409 — a human must run reset-id on the clone
 )
 
@@ -47,6 +47,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	switch cmd := fs.Arg(0); cmd {
 	case "", "report":
+		if *timeout <= 0 {
+			fmt.Fprintln(stderr, "almanaut-agent: timeout must be positive")
+			return exitUsage
+		}
 		return doReport(ctx, *configPath, *stateDir, *timeout, stdout, stderr)
 	case "reset-id":
 		// Deliberately independent of the config: an operator runs this on a
@@ -89,7 +93,7 @@ func doReport(ctx context.Context, configPath, stateDir string, timeout time.Dur
 	defer cancel()
 
 	root := agent.SystemRoot()
-	rep := agent.Collect(agent.CollectOptions{
+	rep, err := agent.CollectContext(ctx, agent.CollectOptions{
 		Root:         root,
 		AgentID:      id,
 		AgentVersion: version,
@@ -97,6 +101,10 @@ func doReport(ctx context.Context, configPath, stateDir string, timeout time.Dur
 		Interfaces:   agent.SystemInterfaces,
 		Usage:        agent.SystemDiskUsage,
 	})
+	if err != nil {
+		fmt.Fprintf(stderr, "almanaut-agent: collect host facts: %v\n", err)
+		return exitUnreachable
+	}
 
 	res, err := agent.Send(ctx, &http.Client{Timeout: timeout}, cfg.ServerURL, cfg.Token, rep)
 	switch {

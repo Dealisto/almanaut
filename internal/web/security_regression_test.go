@@ -25,7 +25,7 @@ func TestLoginRejectsOversizedFieldsBeforeAuditing(t *testing.T) {
 		{"username", strings.Repeat("x", domain.MaxUsernameBytes+1), "wrong", false, 400},
 		{"password", "admin", strings.Repeat("x", domain.MaxPasswordBytes+1), false, 400},
 		{"body", strings.Repeat("x", 100000), "wrong", false, 413},
-		{"chunked body", strings.Repeat("x", 100000), "wrong", true, 403},
+		{"chunked body", strings.Repeat("x", 100000), "wrong", true, 413},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			form := url.Values{"username": {tc.username}, "password": {tc.password}, csrfFieldName: {"csrf-test"}}

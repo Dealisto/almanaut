@@ -21,19 +21,20 @@ import (
 // marshals as a bare {"$ref": …} and all other fields are ignored, matching the
 // JSON-Schema reference rule.
 type oaSchema struct {
-	Ref                  string
-	Type                 string
-	Format               string
-	Nullable             bool
-	Items                *oaSchema
-	Properties           *oaProps
-	AdditionalProperties *oaSchema // non-nil marks a free-form/typed object map; empty node → `true`
-	Description          string
+	Ref                       string
+	Type                      string
+	Format                    string
+	Nullable                  bool
+	Items                     *oaSchema
+	Properties                *oaProps
+	AdditionalProperties      *oaSchema // non-nil marks a free-form/typed object map; empty node → `true`
+	Description               string
+	Minimum, Maximum, Default *int
 }
 
 func (s *oaSchema) isEmpty() bool {
 	return s.Ref == "" && s.Type == "" && s.Format == "" && !s.Nullable &&
-		s.Items == nil && s.Properties == nil && s.AdditionalProperties == nil && s.Description == ""
+		s.Items == nil && s.Properties == nil && s.AdditionalProperties == nil && s.Description == "" && s.Minimum == nil && s.Maximum == nil && s.Default == nil
 }
 
 func (s *oaSchema) MarshalJSON() ([]byte, error) {
@@ -65,6 +66,15 @@ func (s *oaSchema) MarshalJSON() ([]byte, error) {
 	}
 	if s.Description != "" {
 		m["description"] = s.Description
+	}
+	if s.Minimum != nil {
+		m["minimum"] = *s.Minimum
+	}
+	if s.Maximum != nil {
+		m["maximum"] = *s.Maximum
+	}
+	if s.Default != nil {
+		m["default"] = *s.Default
 	}
 	return json.Marshal(m)
 }
@@ -283,6 +293,12 @@ type oaMediaType struct {
 type oaResponse struct {
 	Description string                 `json:"description"`
 	Content     map[string]oaMediaType `json:"content,omitempty"`
+	Headers     map[string]oaHeader    `json:"headers,omitempty"`
+}
+
+type oaHeader struct {
+	Description string    `json:"description"`
+	Schema      *oaSchema `json:"schema"`
 }
 
 func jsonBody(ref string) *oaRequestBody {
@@ -351,8 +367,9 @@ func buildOpenAPIDoc(resources []mountable, version string) *openAPIDoc {
 
 		doc.Paths[info.Base] = &oaPathItem{
 			Get: &oaOperation{
-				Tags: []string{tag}, Summary: "List all " + info.Title,
-				Responses: map[string]oaResponse{"200": jsonArrayResp("A JSON array of "+info.Singular+" objects", info.SchemaName)},
+				Tags: []string{tag}, Summary: "List a page of " + info.Title,
+				Parameters: inventoryParameters(),
+				Responses:  map[string]oaResponse{"200": paginatedArrayResp("A page of "+info.Singular+" objects", info.SchemaName), "400": errorResp("Invalid pagination parameters")},
 			},
 			Post: &oaOperation{
 				Tags: []string{tag}, Summary: "Create a " + info.Singular,
@@ -398,8 +415,8 @@ func buildOpenAPIDoc(resources []mountable, version string) *openAPIDoc {
 	// Cross-entity endpoints, tagged "General".
 	doc.Paths["/api/search"] = &oaPathItem{Get: &oaOperation{
 		Tags: []string{"General"}, Summary: "Search entities by free-text query",
-		Parameters: []oaParameter{{Name: "q", In: "query", Required: true, Schema: &oaSchema{Type: "string"}, Description: "Case-insensitive search term"}},
-		Responses:  map[string]oaResponse{"200": jsonArrayResp("Matching entities", "SearchResult")},
+		Parameters: append(pagingParameters(), oaParameter{Name: "q", In: "query", Required: true, Schema: &oaSchema{Type: "string"}, Description: "Unicode case-insensitive search across entity fields, custom values and tags"}),
+		Responses:  map[string]oaResponse{"200": paginatedArrayResp("A page of matching entities", "SearchResult"), "400": errorResp("Invalid pagination parameters")},
 	}}
 	doc.Paths["/api/relationships"] = &oaPathItem{Get: &oaOperation{
 		Tags: []string{"General"}, Summary: "List all relationships",
@@ -437,6 +454,7 @@ func buildOpenAPIDoc(resources []mountable, version string) *openAPIDoc {
 				"401": errorResp("Missing or invalid bearer token"),
 				"403": errorResp("Token scope is not agent"),
 				"409": errorResp("agent_id is already bound to a different machine"),
+				"422": errorResp("multiple unbound hosts match the reported hostname or IP addresses; resolve inventory ambiguity before retrying"),
 			},
 		},
 	}
@@ -522,7 +540,7 @@ func buildAPIDocs(resources []mountable, version string) apiDocsData {
 		data.Sections = append(data.Sections, apiDocSection{
 			Name: info.Title,
 			Endpoints: []apiDocEndpoint{
-				{"GET", info.Base, "List all " + info.Title},
+				{"GET", info.Base, "List a page of " + info.Title},
 				{"POST", info.Base, "Create a " + info.Singular},
 				{"GET", info.Base + "/{id}", "Get one " + info.Singular},
 				{"PUT", info.Base + "/{id}", "Replace a " + info.Singular},
@@ -576,4 +594,29 @@ func apiDocsPage(resources []mountable, version string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		render(w, r, "apidocs.html", data)
 	}
+}
+
+func pagingParameters() []oaParameter {
+	one, limit, size := 1, maxPageSize, defaultPageSize
+	return []oaParameter{
+		{Name: "page", In: "query", Schema: &oaSchema{Type: "integer", Minimum: &one, Default: &one}, Description: "One-based page number"},
+		{Name: "per_page", In: "query", Schema: &oaSchema{Type: "integer", Minimum: &one, Maximum: &limit, Default: &size}, Description: "Records per page; follow the Link response header to retrieve subsequent pages"},
+	}
+}
+func inventoryParameters() []oaParameter {
+	out := pagingParameters()
+	for _, entry := range [][2]string{{"q", "Unicode case-insensitive text query"}, {"tag", "Exact tag name"}, {"field", "Visible standard or custom field label to filter"}, {"value", "Case-insensitive substring in the selected field"}, {"sort", "Visible standard or custom field label to sort numerically where possible"}, {"dir", "Sort direction: asc (default) or desc"}} {
+		out = append(out, oaParameter{Name: entry[0], In: "query", Schema: &oaSchema{Type: "string"}, Description: entry[1]})
+	}
+	return out
+}
+func paginatedArrayResp(desc, ref string) oaResponse {
+	response := jsonArrayResp(desc, ref)
+	response.Headers = map[string]oaHeader{
+		"X-Total-Count": {Description: "Total matching records before pagination", Schema: &oaSchema{Type: "integer"}},
+		"X-Page":        {Description: "Current one-based page", Schema: &oaSchema{Type: "integer"}},
+		"X-Per-Page":    {Description: "Maximum records on this page", Schema: &oaSchema{Type: "integer"}},
+		"Link":          {Description: "Relative first, prev and next links preserving all filters", Schema: &oaSchema{Type: "string"}},
+	}
+	return response
 }

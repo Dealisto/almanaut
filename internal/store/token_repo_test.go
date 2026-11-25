@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 )
@@ -132,5 +133,61 @@ func TestTokenCascadeOnUserDelete(t *testing.T) {
 	}
 	if _, _, err := tokens.UserByToken("a1"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("token survived user delete (cascade broken): %v", err)
+	}
+}
+
+func TestTokenExpiryAndLastUsedWriteBudget(t *testing.T) {
+	users, tokens := newTokenRepos(t)
+	uid, _ := users.Create(domain.User{Username: "alice", PasswordHash: "h", CreatedAt: "t", UpdatedAt: "t"})
+	now := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
+	id, err := tokens.Create(APIToken{TokenHash: "timed", UserID: uid, Label: "expiring", Scope: "read-only", CreatedAt: now.Format(time.RFC3339), ExpiresAt: now.Add(time.Hour).Format(time.RFC3339)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := tokens.userByTokenAt("timed", now); err != nil {
+		t.Fatal(err)
+	}
+	got, err := tokens.GetByOwner(id, uid)
+	if err != nil || got.LastUsedAt != now.Format(time.RFC3339) {
+		t.Fatalf("first use = %+v, err=%v", got, err)
+	}
+	if _, err := tokens.db.Exec(`CREATE TRIGGER fail_usage BEFORE UPDATE ON api_tokens BEGIN SELECT RAISE(ABORT, 'unexpected usage write'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := tokens.userByTokenAt("timed", now.Add(4*time.Minute)); err != nil {
+		t.Fatalf("write inside usage window: %v", err)
+	}
+	if _, err := tokens.db.Exec(`DROP TRIGGER fail_usage`); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := tokens.userByTokenAt("timed", now.Add(5*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	got, err = tokens.GetByOwner(id, uid)
+	if err != nil || got.LastUsedAt != now.Add(5*time.Minute).Format(time.RFC3339) {
+		t.Fatalf("refreshed use = %+v, err=%v", got, err)
+	}
+	for _, at := range []time.Time{now.Add(time.Hour), now.Add(2 * time.Hour)} {
+		if _, _, err := tokens.userByTokenAt("timed", at); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("expired token accepted at %v: %v", at, err)
+		}
+	}
+	if _, err := tokens.GetByOwner(id, uid+1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-owner lookup: %v", err)
+	}
+}
+
+func TestTokenLifecycleLegacyDefaults(t *testing.T) {
+	users, tokens := newTokenRepos(t)
+	uid, _ := users.Create(domain.User{Username: "alice", PasswordHash: "h", CreatedAt: "t", UpdatedAt: "t"})
+	if _, err := tokens.db.Exec(`INSERT INTO api_tokens (token_hash,user_id,label,scope,created_at) VALUES ('legacy',?,'legacy','read-only','t')`, uid); err != nil {
+		t.Fatal(err)
+	}
+	list, err := tokens.ListByUser(uid)
+	if err != nil || len(list) != 1 || list[0].ExpiresAt != "" || list[0].LastUsedAt != "" || list[0].RotatedFromID != 0 {
+		t.Fatalf("legacy token=%+v err=%v", list, err)
+	}
+	if _, _, err := tokens.UserByToken("legacy"); err != nil {
+		t.Fatal(err)
 	}
 }

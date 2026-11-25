@@ -41,9 +41,6 @@ func hostResourceForTest(t *testing.T) (resource[domain.Host], handlerDeps) {
 				{"Disk", h.Disk}, {"Status", h.Status}, {"IPs", strings.Join(h.IPs, ", ")},
 			}
 		},
-		search: func(h domain.Host) []string {
-			return []string{h.Name, h.OS, h.CPU, h.RAM, h.Disk, h.Status, h.Notes, strings.Join(h.IPs, " ")}
-		},
 		newItem:  domain.Host{Type: "physical"},
 		listTmpl: "hosts.html", formTmpl: "host_form.html",
 	}

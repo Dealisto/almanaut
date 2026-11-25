@@ -33,3 +33,49 @@ func TestExpiryChecksIncludeValidatedPaddedDates(t *testing.T) {
 		t.Fatalf("padded renewal date missing: %+v", got)
 	}
 }
+
+func TestExpiryChecksUseCallerCalendarDate(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		now        time.Time
+		withinDays int
+		included   string
+		excluded   string
+	}{
+		{
+			name:     "late night west of UTC",
+			now:      time.Date(2026, 1, 1, 23, 30, 0, 0, time.FixedZone("UTC-5", -5*60*60)),
+			included: "2026-01-01", excluded: "2026-01-02",
+		},
+		{
+			name:     "early morning east of UTC",
+			now:      time.Date(2026, 1, 1, 0, 30, 0, 0, time.FixedZone("UTC+14", 14*60*60)),
+			included: "2026-01-01", excluded: "2026-01-02",
+		},
+		{
+			name:       "lookahead crosses year boundary west of UTC",
+			now:        time.Date(2026, 12, 31, 23, 30, 0, 0, time.FixedZone("UTC-5", -5*60*60)),
+			withinDays: 1, included: "2027-01-01", excluded: "2027-01-02",
+		},
+		{
+			name:       "lookahead crosses month boundary east of UTC",
+			now:        time.Date(2026, 1, 31, 0, 30, 0, 0, time.FixedZone("UTC+14", 14*60*60)),
+			withinDays: 1, included: "2026-02-01", excluded: "2026-02-02",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			certs := []Certificate{{ID: 1, ExpiresOn: tc.included}, {ID: 2, ExpiresOn: tc.excluded}}
+			if got := ExpiringSoon(certs, tc.now, tc.withinDays); len(got) != 1 || got[0].ID != 1 {
+				t.Errorf("certificate expiry = %+v, want only %s", got, tc.included)
+			}
+			hardware := []Hardware{{ID: 1, WarrantyEnd: tc.included}, {ID: 2, WarrantyEnd: tc.excluded}}
+			if got := WarrantyExpiring(hardware, tc.now, tc.withinDays); len(got) != 1 || got[0].ID != 1 {
+				t.Errorf("warranty expiry = %+v, want only %s", got, tc.included)
+			}
+			subscriptions := []Subscription{{ID: 1, RenewalDate: tc.included}, {ID: 2, RenewalDate: tc.excluded}}
+			if got := RenewalsDue(subscriptions, tc.now, tc.withinDays); len(got) != 1 || got[0].ID != 1 {
+				t.Errorf("renewal expiry = %+v, want only %s", got, tc.included)
+			}
+		})
+	}
+}

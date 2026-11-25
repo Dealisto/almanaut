@@ -46,7 +46,15 @@ func Send(ctx context.Context, hc *http.Client, serverURL, token string, rep age
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := hc.Do(req)
+	// Reports contain host facts and a bearer token. Do not replay them at a
+	// redirect target (or turn the POST into a GET and accept a false success).
+	// Copy the supplied client so callers retain their transport and timeout
+	// without changing the redirect policy of a shared client.
+	client := *hc
+	client.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return SendResult{}, fmt.Errorf("post report: %w", err)
 	}
@@ -72,6 +80,11 @@ func Send(ctx context.Context, hc *http.Client, serverURL, token string, rep age
 		return res, nil
 	case resp.StatusCode == http.StatusConflict:
 		return SendResult{}, fmt.Errorf("%w: %s", ErrConflict, serverMessage(resp.Body))
+	case resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusTooManyRequests:
+		return SendResult{}, fmt.Errorf("server returned %d: %s", resp.StatusCode, serverMessage(resp.Body))
+	case resp.StatusCode >= 300 && resp.StatusCode < 400:
+		// Redirect bodies may echo destination URLs containing credentials.
+		return SendResult{}, fmt.Errorf("%w: server redirected the report (status %d); configure the final server URL", ErrRejected, resp.StatusCode)
 	case resp.StatusCode >= 400 && resp.StatusCode < 500:
 		return SendResult{}, fmt.Errorf("%w (%d): %s", ErrRejected, resp.StatusCode, serverMessage(resp.Body))
 	default:

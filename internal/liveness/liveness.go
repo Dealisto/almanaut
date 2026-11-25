@@ -4,6 +4,8 @@ package liveness
 
 import (
 	"context"
+	"crypto/rand"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -26,6 +28,15 @@ type StateStore interface {
 	RecordCheck(entityType string, entityID int64, address string, s domain.LivenessStatus) (*domain.LivenessStatus, bool, error)
 }
 
+// NotificationQueue is implemented by the persistent state repository. Lightweight
+// test adapters may omit it and retain immediate transition delivery.
+type NotificationQueue interface {
+	PendingNotifications(runID string, limit int) ([]domain.LivenessNotification, error)
+	NotificationCurrent(id int64) (bool, error)
+	MarkNotificationAttempt(id int64, runID string) (bool, error)
+	DeleteNotification(id int64) error
+}
+
 // DialFunc probes one address; nil error means reachable. Overridable in tests.
 type DialFunc func(ctx context.Context, addr string) error
 
@@ -45,7 +56,8 @@ type Checker struct {
 	timeout  time.Duration
 	log      *slog.Logger
 	now      func() time.Time
-	workers  int // concurrent dials per pass
+	workers  int           // concurrent dials per pass
+	runGate  chan struct{} // context-aware admission for concurrent Run callers
 }
 
 // New builds a Checker. dial may be nil to use the default TCP dialer; log may
@@ -61,7 +73,7 @@ func New(hosts HostSource, services ServiceSource, state StateStore, sender noti
 	if now == nil {
 		now = time.Now
 	}
-	return &Checker{hosts, services, state, sender, dial, timeout, log, now, maxConcurrentChecks}
+	return &Checker{hosts: hosts, services: services, state: state, sender: sender, dial: dial, timeout: timeout, log: log, now: now, workers: maxConcurrentChecks, runGate: make(chan struct{}, 1)}
 }
 
 func tcpDial(ctx context.Context, addr string) error {
@@ -82,9 +94,18 @@ type target struct {
 }
 
 // Run probes every monitored host/service once, up to c.workers at a time. A
-// single entity's error is logged and does not abort the pass. It returns nil
-// unless the context ended.
+// single entity's error is logged and does not abort the pass. Storage and
+// notification errors are returned together after all checks have finished.
 func (c *Checker) Run(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case c.runGate <- struct{}{}:
+	}
+	defer func() { <-c.runGate }()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	hosts, err := c.hosts.List()
 	if err != nil {
 		return fmt.Errorf("list hosts: %w", err)
@@ -105,10 +126,20 @@ func (c *Checker) Run(ctx context.Context) error {
 		}
 	}
 
+	// Delivery and observation progress independently: a slow notification
+	// endpoint must not consume the whole pass before any TCP checks start.
+	queue, durable := c.state.(NotificationQueue)
+	runID := rand.Text()
+	budget := 100
+	deliveryDone := make(chan error, 1)
+	if durable {
+		go func() { deliveryDone <- c.safeDrain(ctx, queue, runID, &budget) }()
+	}
 	sem := make(chan struct{}, max(c.workers, 1))
+	checkErrors := make([]error, len(targets))
 	var wg sync.WaitGroup
 dispatch:
-	for _, t := range targets {
+	for i, t := range targets {
 		select {
 		case <-ctx.Done():
 			break dispatch // the pass is over: start no further dials
@@ -116,35 +147,43 @@ dispatch:
 		}
 		wg.Go(func() {
 			defer func() { <-sem }()
-			c.safeCheck(ctx, t)
+			checkErrors[i] = c.safeCheck(ctx, t)
 		})
 	}
 	wg.Wait()
-	return ctx.Err()
+	var deliveryErr error
+	if durable {
+		deliveryErr = <-deliveryDone
+		// The initial drain may have finished before these checks enqueued new
+		// transitions. Joining it also synchronizes access to the shared budget.
+		deliveryErr = errors.Join(deliveryErr, c.safeDrain(ctx, queue, runID, &budget))
+	}
+	return errors.Join(append(checkErrors, deliveryErr, ctx.Err())...)
 }
 
 // safeCheck runs check for t and turns a panic into a logged error. The job
 // runner recovers panics in Run itself, but not in goroutines Run starts; one
 // bad target must not take the whole process down.
-func (c *Checker) safeCheck(ctx context.Context, t target) {
+func (c *Checker) safeCheck(ctx context.Context, t target) (err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			c.log.Error("liveness: check panicked", "type", t.entityType, "id", t.id, "panic", p, "stack", string(debug.Stack()))
+			err = fmt.Errorf("check %s %d panicked: %v", t.entityType, t.id, p)
 		}
 	}()
-	c.check(ctx, t.entityType, t.id, t.label, t.addr)
+	return c.check(ctx, t.entityType, t.id, t.label, t.addr)
 }
 
-func (c *Checker) check(ctx context.Context, entityType string, id int64, label, addr string) {
+func (c *Checker) check(ctx context.Context, entityType string, id int64, label, addr string) error {
 	if ctx.Err() != nil {
-		return
+		return nil
 	}
 	startedAt := c.now()
 	dialCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	probeErr := c.dial(dialCtx, addr)
 	cancel()
 	if ctx.Err() != nil {
-		return // parent context ended mid-dial; don't record or notify a spurious result
+		return nil // parent context ended mid-dial; don't record or notify a spurious result
 	}
 
 	status := domain.LivenessUp
@@ -159,16 +198,19 @@ func (c *Checker) check(ctx context.Context, entityType string, id int64, label,
 	})
 	if err != nil {
 		c.log.Error("liveness: record check", "type", entityType, "id", id, "err", err)
-		return
+		return fmt.Errorf("record %s %d check: %w", entityType, id, err)
 	}
 
 	// Notify only on a real transition (a prior observation existed and differs).
-	if accepted && prior != nil && prior.Status != status {
-		c.notify(ctx, entityType, label, addr, status, lastErr)
+	if _, durable := c.state.(NotificationQueue); !durable && accepted && prior != nil && prior.Status != status {
+		if err := c.notify(ctx, entityType, label, addr, status, lastErr); err != nil {
+			return fmt.Errorf("notify %s %d transition: %w", entityType, id, err)
+		}
 	}
+	return nil
 }
 
-func (c *Checker) notify(ctx context.Context, entityType, label, addr, status, lastErr string) {
+func (c *Checker) notify(ctx context.Context, entityType, label, addr, status, lastErr string, observedAt ...string) error {
 	var n notify.Notification
 	if status == domain.LivenessDown {
 		n = notify.Notification{
@@ -182,7 +224,71 @@ func (c *Checker) notify(ctx context.Context, entityType, label, addr, status, l
 			Body:  fmt.Sprintf("%s is reachable again at %s", label, addr),
 		}
 	}
+	if len(observedAt) > 0 {
+		n.Body += " (observed " + observedAt[0] + ")"
+	}
 	if err := c.sender.Send(ctx, n); err != nil {
 		c.log.Error("liveness: send notification", "label", label, "err", err)
+		return err
 	}
+	return nil
+}
+
+// drain preserves FIFO order per entity while allowing other entities to proceed
+// after one delivery fails. Persisted attempt metadata makes retries fair across
+// passes and prevents attempting a failed event twice in the same pass.
+func (c *Checker) drain(ctx context.Context, queue NotificationQueue, runID string, budget *int) error {
+	var result error
+	for *budget > 0 {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(result, err)
+		}
+		pending, err := queue.PendingNotifications(runID, *budget)
+		if err != nil {
+			return errors.Join(result, err)
+		}
+		if len(pending) == 0 {
+			return result
+		}
+		for _, n := range pending {
+			if err := ctx.Err(); err != nil {
+				return errors.Join(result, err)
+			}
+			*budget--
+			current, err := queue.NotificationCurrent(n.ID)
+			if err != nil {
+				result = errors.Join(result, err)
+				continue
+			}
+			if current {
+				marked, err := queue.MarkNotificationAttempt(n.ID, runID)
+				if err != nil {
+					result = errors.Join(result, err)
+					continue
+				}
+				if !marked {
+					continue
+				}
+				if err := c.notify(ctx, n.EntityType, n.Label, n.Address, n.Status, n.LastError, n.ObservedAt); err != nil {
+					result = errors.Join(result, fmt.Errorf("deliver liveness notification %d: %w", n.ID, err))
+					continue
+				}
+			}
+			if err := queue.DeleteNotification(n.ID); err != nil {
+				result = errors.Join(result, fmt.Errorf("acknowledge liveness notification %d: %w", n.ID, err))
+			}
+		}
+	}
+	return result
+}
+
+// Delivery now runs alongside probe workers, so recover its panics locally.
+func (c *Checker) safeDrain(ctx context.Context, queue NotificationQueue, runID string, budget *int) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("liveness delivery panicked: %v", recovered)
+			c.log.Error("liveness delivery panic", "panic", recovered, "stack", string(debug.Stack()))
+		}
+	}()
+	return c.drain(ctx, queue, runID, budget)
 }

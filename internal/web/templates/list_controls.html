@@ -5,9 +5,10 @@
     <label class="lc-field filter-query">Find in this list
       <input type="search" name="q" value="{{.Query}}" placeholder="Name, address, or another detail…" aria-label="Search this list">
     </label>
-    {{if .Tags}}<label class="lc-field">Tag<select name="tag"><option value="">All tags</option>{{range .Tags}}<option value="{{.}}"{{if eq . $.Tag}} selected{{end}}>{{.}}</option>{{end}}</select></label>{{end}}
+    {{if or .Tags .Tag}}<label class="lc-field">Tag<input name="tag" value="{{.Tag}}" list="tag-suggestions" placeholder="All tags"><datalist id="tag-suggestions">{{range .Tags}}<option value="{{.}}">{{end}}</datalist>{{if .TagSuggestionsLimited}}<small>First 100 suggestions; enter any tag.</small>{{end}}</label>{{end}}
     <label class="lc-field">Sort by<select name="sort"><option value="">Default order</option>{{range .Columns}}<option value="{{.}}"{{if eq . $.Sort}} selected{{end}}>{{.}}</option>{{end}}</select></label>
     <label class="lc-field">Direction<select name="dir"><option value="asc"{{if eq .Dir "asc"}} selected{{end}}>Ascending</option><option value="desc"{{if eq .Dir "desc"}} selected{{end}}>Descending</option></select></label>
+    <label class="lc-field">Rows per page<select name="per_page">{{if and (ne .Pagination.PerPage 25) (ne .Pagination.PerPage 50) (ne .Pagination.PerPage 100)}}<option value="{{.Pagination.PerPage}}" selected>{{.Pagination.PerPage}}</option>{{end}}<option value="25"{{if eq .Pagination.PerPage 25}} selected{{end}}>25</option><option value="50"{{if eq .Pagination.PerPage 50}} selected{{end}}>50</option><option value="100"{{if eq .Pagination.PerPage 100}} selected{{end}}>100</option></select></label>
     <button class="btn btn-primary" type="submit">Apply</button>
     {{if .Active}}<a class="btn" href="{{.BasePath}}">Clear</a>{{end}}
     <details class="field-filter"{{if .FilterField}} open{{end}}>
@@ -26,4 +27,13 @@
   </details>
 </div>
 {{end}}
+{{end}}
+
+{{define "pagination"}}
+<nav class="pagination" aria-label="Pagination">
+  <span>Showing {{.From}}–{{.To}} of {{.Total}} records · Page {{.Page}} of {{.Pages}}</span>
+  {{if .PreviousURL}}<a class="btn" href="{{.PreviousURL}}" rel="prev">Previous</a>{{end}}
+  {{if .NextURL}}<a class="btn" href="{{.NextURL}}" rel="next">Next</a>{{end}}
+  {{if and (gt .Page 1) (eq .From 0)}}<a class="btn" href="{{.FirstURL}}">First page</a>{{end}}
+</nav>
 {{end}}

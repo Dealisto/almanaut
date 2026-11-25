@@ -11,6 +11,16 @@ details are listed there.
 ## [Unreleased]
 
 ### Added
+- Paginate inventory lists and global search in the database, including Unicode
+  matching, custom-field filters, stable numeric-aware sorting, and visible
+  previous/next controls. Saved views open on their first page; bulk selection
+  applies only to the displayed page.
+- Add optional API-token expiry, coarse last-used timestamps, and guided
+  rotation: prepare a replacement, verify its use, then retire the old token.
+  Existing tokens keep their previous no-expiry behavior.
+- Persist liveness transition notifications atomically with observations and
+  retry them fairly after delivery failure or restart, preserving per-entity
+  order. Notification delivery runs alongside probes instead of delaying them.
 - Add a **Sign in with SSO** button when reverse-proxy authentication is
   configured, with a dedicated `/login/sso` entry point, safe return paths and
   an accessible fallback to password login when SSO cannot complete.
@@ -38,6 +48,14 @@ details are listed there.
   when available; discovery never automatically removes inventory records.
 
 ### Changed
+- **API pagination:** inventory collection and search endpoints now default to
+  50 records and accept `page` / `per_page` (maximum 100). JSON arrays retain
+  their shape; clients needing every result must follow the `Link` header.
+  `X-Total-Count`, `X-Page`, and `X-Per-Page` make the response bounds explicit.
+- Bound concurrent password work across login and account provisioning; excess
+  requests receive HTTP 503 with `Retry-After` without an unbounded wait queue.
+- Schedule each recurring pass after the previous pass finishes plus its
+  interval. Manual runs restart this delay, matching the displayed next run.
 - Label container discovery as Docker / Podman while preserving existing
   single-source environment settings and default review routes. New scheduled
   engine runs use `type:id` source keys for independent history and comparisons.
@@ -49,6 +67,34 @@ details are listed there.
   requires a pre-upgrade database backup.
 
 ### Fixed
+- Reject ambiguous initial agent adoption with HTTP 422, preserving every
+  candidate record until duplicate names or IP assignments are corrected.
+- Enforce the agent's collection deadline even when a system read blocks;
+  discard late results and bound the number of outstanding collection workers.
+- Run TLS probes with bounded concurrency and rotate unfinished work across
+  interrupted passes so slow early targets cannot indefinitely starve others.
+- Make direct port writes and NIC move/delete operations transactional, and
+  resolve only referenced peer/owner labels when reading individual records.
+- Reject malformed, truncated, and oversized forms before applying mutations,
+  and release temporary multipart uploads after processing.
+- Report failed logout revocation and two-factor challenge storage failures
+  instead of presenting a successful logout or redirecting back to login.
+- Encode international attachment filenames correctly in download headers.
+- Refuse agent-report redirects to prevent forwarding credentials and host
+  facts; classify HTTP 408 and 429 responses as transient failures.
+- Match agent reports against canonical IP addresses, remove duplicate reported
+  addresses, and ignore unspecified, multicast, and broadcast addresses.
+- Count overlapping reservations accurately on large bounded IPv4 and IPv6
+  networks without allocating an entry for every reserved address.
+- Report expiry notification delivery failures to the task runner while
+  continuing other deliveries. Calculate expiry windows and labels using
+  calendar days consistently across timezones.
+- Surface liveness storage/delivery failures and TLS probe storage failures on
+  Scheduled tasks while continuing checks for the remaining targets.
+- Reject redirects in the local health probe instead of accepting an unrelated
+  destination's HTTP 200 response.
+- Log the HTTP status actually committed to the response and preserve response
+  flushing through the request logger.
 - Record history and post-commit webhooks for indirectly changed ports when
   connecting, disconnecting, replacing or deleting a peer, or moving/deleting
   their NIC. Unchanged peers remain silent; failures roll back all changes.

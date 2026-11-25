@@ -45,6 +45,8 @@ probes can reach them):
 The Docker image ships a `HEALTHCHECK` that runs `almanaut healthcheck`, a
 built-in subcommand that probes the local `/healthz` and exits non-zero when
 unhealthy (the distroless image has no shell, so the binary is its own probe).
+Only a direct HTTP 200 response counts as healthy. Redirects fail the probe,
+even if their destination is a working login page.
 
 To stamp a version into a build, pass it at build time:
 

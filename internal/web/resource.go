@@ -86,7 +86,8 @@ type resource[T validatable] struct {
 	setID      func(item *T, id int64) // writes the id back onto a decoded/parsed T (JSON writes)
 	notes      func(T) string
 	fields     func(T) []fieldRow                                // detail-page rows
-	search     func(T) []string                                  // free-text fields matched by global search
+	search     []string                                          // trusted SQL expressions matched by global search
+	query      store.InventoryQuery                              // SQL projection for lists and search
 	ipam       func(T) *ipamSection                              // optional; nil for all but network
 	children   func(T, entityCatalog) (*childrenSection, error)  // optional; nil for all but Site/Location
 	elevation  func(T, entityCatalog) (*elevationSection, error) // optional; only Rack
@@ -151,43 +152,6 @@ func (rs resource[T]) basePath() string { return "/" + rs.name }
 // search results page.
 func (rs resource[T]) searchHeading() string { return rs.title }
 
-// searchEntries projects every entity into the form the global search handler
-// needs. Custom field values are folded into Fields (bulk-loaded to avoid N+1)
-// so search matches them too.
-func (rs resource[T]) searchEntries(cf *store.CustomFieldRepo) ([]searchEntry, error) {
-	items, err := rs.repo.List()
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]int64, 0, len(items))
-	for _, it := range items {
-		ids = append(ids, rs.id(it))
-	}
-	cfValues, err := cf.ValuesForEntities(rs.sing, ids)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]searchEntry, 0, len(items))
-	for _, it := range items {
-		id := rs.id(it)
-		var fields []string
-		if rs.search != nil {
-			fields = rs.search(it)
-		}
-		for _, v := range cfValues[id] {
-			fields = append(fields, v.Value)
-		}
-		out = append(out, searchEntry{
-			Type:   rs.sing,
-			ID:     id,
-			Label:  rs.label(it),
-			Path:   fmt.Sprintf("%s/%d", rs.basePath(), id),
-			Fields: fields,
-		})
-	}
-	return out, nil
-}
-
 func (rs resource[T]) idParam(w http.ResponseWriter, req *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(chi.URLParam(req, "id"), 10, 64)
 	if err != nil {
@@ -221,17 +185,18 @@ func constraintError(err error) *store.ConstraintError {
 
 func (rs resource[T]) list(d handlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		items, err := rs.repo.List()
+		p, err := parsePagination(req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		page, err := rs.listPage(req, d, p, true)
 		if err != nil {
 			serverError(w, req, err)
 			return
 		}
-		items, controls, err := rs.filterSort(items, req, d)
-		if err != nil {
-			serverError(w, req, err)
-			return
-		}
-		render(w, req, rs.listTmpl, listData[T]{Title: rs.title, Items: items, Controls: controls})
+		page.Controls.Pagination.headers(w)
+		render(w, req, rs.listTmpl, listData[T]{Title: rs.title, Items: page.Items, Controls: page.Controls})
 	}
 }
 
@@ -693,33 +658,29 @@ func (rs resource[T]) mount(r chi.Router, d handlerDeps) {
 	r.Post(rs.basePath()+"/{id}/attachments", rs.addAttachment(d))
 }
 
-// listJSON writes all entities of this type as a JSON array, each merged with
-// its custom_fields.
+// listJSON keeps the array response shape and advertises bounded pages in headers.
 func (rs resource[T]) listJSON(d handlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		items, err := rs.repo.List()
+		p, err := parsePagination(req)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		page, err := rs.listPage(req, d, p, false)
 		if err != nil {
 			apiServerError(w, req, err)
 			return
 		}
-		ids := make([]int64, 0, len(items))
-		for _, it := range items {
-			ids = append(ids, rs.id(it))
-		}
-		cfValues, err := d.customFields.ValuesForEntities(rs.sing, ids)
-		if err != nil {
-			apiServerError(w, req, err)
-			return
-		}
-		out := make([]json.RawMessage, 0, len(items))
-		for _, it := range items {
-			buf, err := mergeCustomFields(it, cfValues[rs.id(it)])
+		out := make([]json.RawMessage, 0, len(page.Items))
+		for _, it := range page.Items {
+			buf, err := mergeCustomFields(it, page.Values[rs.id(it)])
 			if err != nil {
 				apiServerError(w, req, err)
 				return
 			}
 			out = append(out, buf)
 		}
+		page.Controls.Pagination.headers(w)
 		writeJSON(w, http.StatusOK, out)
 	}
 }
@@ -908,7 +869,7 @@ type mountable interface {
 	basePath() string
 	apiResource() apiResourceInfo
 	searchHeading() string
-	searchEntries(cf *store.CustomFieldRepo) ([]searchEntry, error)
+	querySpec() store.InventoryQuery
 	importCSV(d handlerDeps, r io.Reader, actor string) (int, int, []string, error)
 }
 

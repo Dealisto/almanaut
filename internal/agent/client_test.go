@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/Dealisto/almanaut/internal/agentapi"
@@ -188,6 +189,52 @@ func TestSendValidatesSuccessResponse(t *testing.T) {
 			defer srv.Close()
 			if _, err := Send(context.Background(), srv.Client(), srv.URL, "t", testReport()); err == nil {
 				t.Fatal("invalid success response was accepted")
+			}
+		})
+	}
+}
+
+func TestSendDoesNotFollowRedirects(t *testing.T) {
+	for _, code := range []int{301, 302, 303, 307, 308} {
+		t.Run(http.StatusText(code), func(t *testing.T) {
+			var forwarded atomic.Int32
+			target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				forwarded.Add(1)
+				_, _ = w.Write([]byte(`{"host_id":42}`))
+			}))
+			defer target.Close()
+			source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, target.URL+"/secret-target", code)
+			}))
+			defer source.Close()
+			client := source.Client()
+			_, err := Send(context.Background(), client, source.URL, "private-token", testReport())
+			if !errors.Is(err, ErrRejected) {
+				t.Fatalf("redirect error = %v, want ErrRejected", err)
+			}
+			if forwarded.Load() != 0 {
+				t.Fatal("report was forwarded to the redirect target")
+			}
+			if strings.Contains(err.Error(), "secret-target") {
+				t.Fatalf("redirect destination leaked in error: %v", err)
+			}
+			if client.CheckRedirect != nil {
+				t.Fatal("Send changed the caller's client")
+			}
+		})
+	}
+}
+
+func TestSendTreatsTimeoutAndRateLimitAsTransient(t *testing.T) {
+	for _, code := range []int{http.StatusRequestTimeout, http.StatusTooManyRequests} {
+		t.Run(http.StatusText(code), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(code)
+			}))
+			defer srv.Close()
+			_, err := Send(context.Background(), srv.Client(), srv.URL, "t", testReport())
+			if err == nil || errors.Is(err, ErrRejected) || errors.Is(err, ErrConflict) {
+				t.Fatalf("error = %v, want a transient error", err)
 			}
 		})
 	}

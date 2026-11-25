@@ -117,3 +117,33 @@ func TestResolveConflictWhenOldHasNoMACsNewHasMACs(t *testing.T) {
 		t.Fatalf("old-no-MAC conflict = %+v, want conflict", got)
 	}
 }
+
+func TestResolveAdoptsEquivalentIPSpellings(t *testing.T) {
+	for _, tc := range []struct{ reported, stored string }{
+		{"2001:db8::1/64", "2001:db8:0:0:0:0:0:1"},
+		{"2001:DB8::1", "2001:db8::1"},
+		{"192.0.2.1", "::ffff:192.0.2.1"},
+		{"192.0.2.1", " 192.0.2.1 "},
+	} {
+		t.Run(tc.stored, func(t *testing.T) {
+			r := Report{Hostname: "renamed", Interfaces: []Interface{{Addrs: []string{tc.reported}}}}
+			hosts := []HostRef{{ID: 9, Name: "original", IPs: []string{tc.stored}}}
+			got := Resolve(r, nil, hosts)
+			if got.Kind != DecideAdopt || got.HostID != 9 {
+				t.Fatalf("Resolve = %+v, want adoption of host 9", got)
+			}
+		})
+	}
+}
+
+func TestResolveDoesNotAdoptUsingUnspecifiedOrMulticastIP(t *testing.T) {
+	for _, ip := range []string{"0.0.0.0", "::", "224.0.0.1", "ff0e::1", "255.255.255.255"} {
+		t.Run(ip, func(t *testing.T) {
+			r := Report{Hostname: "new", Interfaces: []Interface{{Addrs: []string{ip}}}}
+			hosts := []HostRef{{ID: 9, Name: "unrelated", IPs: []string{ip}}}
+			if got := Resolve(r, nil, hosts); got.Kind != DecideCreate {
+				t.Fatalf("Resolve = %+v, must not adopt another machine based on %s", got, ip)
+			}
+		})
+	}
+}

@@ -1,6 +1,45 @@
 package agent
 
-import "github.com/Dealisto/almanaut/internal/agentapi"
+import (
+	"context"
+
+	"github.com/Dealisto/almanaut/internal/agentapi"
+)
+
+// System calls such as statfs cannot be interrupted portably. Keep at most one
+// collection worker alive even if a caller times out and retries. The one-shot
+// CLI exits after a timeout, terminating its remaining worker with the process.
+var collectionSlot = make(chan struct{}, 1)
+
+// CollectContext bounds how long the caller waits for machine facts. A timed-out
+// collection is discarded, so a partial or late report is never sent. The
+// underlying OS call may finish later; it cannot spawn further workers on retry.
+func CollectContext(ctx context.Context, opts CollectOptions) (agentapi.Report, error) {
+	if err := ctx.Err(); err != nil {
+		return agentapi.Report{}, err
+	}
+	select {
+	case collectionSlot <- struct{}{}:
+	case <-ctx.Done():
+		return agentapi.Report{}, ctx.Err()
+	}
+	result := make(chan agentapi.Report, 1)
+	go func() {
+		defer func() { <-collectionSlot }()
+		if ctx.Err() == nil {
+			result <- Collect(opts)
+		}
+	}()
+	select {
+	case report := <-result:
+		if err := ctx.Err(); err != nil {
+			return agentapi.Report{}, err
+		}
+		return report, nil
+	case <-ctx.Done():
+		return agentapi.Report{}, ctx.Err()
+	}
+}
 
 // CollectOptions are the inputs Collect cannot discover for itself.
 //

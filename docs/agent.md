@@ -82,6 +82,13 @@ full here — an agent-managed host is exactly where it bites.
 
 ## Checking on it
 
+The `-timeout` flag bounds collection and reporting together (30 seconds by
+default; it must be positive). If a filesystem or another system read blocks,
+the command stops waiting at the deadline, exits with code `3`, and sends no
+partial report. The OS operation itself is not cancellable portably; its worker
+ends with the one-shot process. Repeated in-process attempts cannot start an
+unbounded number of collection workers.
+
 - `systemctl list-timers almanaut-agent.timer` — when it last ran and when
   it runs next.
 - `journalctl -u almanaut-agent.service` — the outcome of the last run; a
@@ -93,9 +100,24 @@ The process exit code doubles as a quick diagnosis without opening the logs:
 |---|---|
 | `0` | Accepted |
 | `1` | Config error — bad flags, or an unreadable/incomplete config file |
-| `2` | Rejected — a bad token or a schema version the server doesn't speak; fix the setup, retrying won't help |
-| `3` | Unreachable — a transport failure or a `5xx`; transient, the next hourly run retries on its own |
+| `2` | Rejected — a bad token, unsupported schema, or redirected endpoint; fix the setup, retrying won't help |
+| `3` | Transient failure — a transport error, `408`, `429`, or `5xx`; the next hourly run retries on its own |
 | `4` | Conflict — this agent id is already bound to a different host on the server; see `reset-id` below |
+
+Configure the final server URL, including its correct HTTP or HTTPS scheme.
+The agent refuses redirects so reports and bearer tokens stay at the configured
+endpoint.
+
+## Resolving an ambiguous first report
+
+An unbound agent adopts an existing host only when exactly one unbound record
+matches its normalized hostname or reported IP addresses. Multiple matches,
+including a name matching one host and an IP matching another, return HTTP
+`422` and exit code `2`. No host, binding, or report history is changed.
+
+Correct the duplicate names or IP assignments in the inventory, then report
+again with the same agent identity. `reset-id` does not resolve ambiguity.
+An agent already bound to a host keeps using that established binding.
 
 ## Recovering from a conflict (`reset-id`)
 

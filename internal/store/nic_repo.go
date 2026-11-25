@@ -81,6 +81,9 @@ func (r *NICRepo) List() ([]domain.NIC, error) {
 // of the old host's ports, as deleting it would: a port only belongs to a NIC
 // of the host that owns it.
 func (r *NICRepo) Update(v domain.NIC) error {
+	if db, ok := r.db.(*sql.DB); ok {
+		return WithTx(db, func(tx *sql.Tx) error { return r.UpdateTx(tx, v) })
+	}
 	res, err := r.db.Exec(
 		`UPDATE nics SET host_id=?, name=?, kind=?, model=?, serial=?, notes=? WHERE id=?`,
 		v.HostID, v.Name, v.Kind, v.Model, v.Serial, v.Notes, v.ID,
@@ -103,6 +106,9 @@ func (r *NICRepo) Update(v domain.NIC) error {
 // Delete removes the NIC and clears the attribution mark on any port that
 // referenced it; the ports themselves survive (soft references throughout).
 func (r *NICRepo) Delete(id int64) error {
+	if db, ok := r.db.(*sql.DB); ok {
+		return WithTx(db, func(tx *sql.Tx) error { return r.DeleteTx(tx, id) })
+	}
 	if _, err := r.db.Exec(`UPDATE ports SET nic_id = 0 WHERE nic_id = ?`, id); err != nil {
 		return fmt.Errorf("clear port nic refs: %w", err)
 	}
@@ -118,7 +124,11 @@ func (r *NICRepo) decorate(items []domain.NIC) ([]domain.NIC, error) {
 	if len(items) == 0 {
 		return items, nil
 	}
-	hosts, err := entityNames(r.db, "hosts")
+	ids := make([]int64, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.HostID)
+	}
+	hosts, err := entityNames(r.db, "hosts", ids)
 	if err != nil {
 		return nil, err
 	}
@@ -130,25 +140,6 @@ func (r *NICRepo) decorate(items []domain.NIC) ([]domain.NIC, error) {
 		items[i].HostName = name
 	}
 	return items, nil
-}
-
-// entityNames loads an id → name map from a table with (id, name) columns.
-func entityNames(db DBTX, table string) (map[int64]string, error) {
-	rows, err := db.Query(`SELECT id, name FROM ` + table)
-	if err != nil {
-		return nil, fmt.Errorf("query %s names: %w", table, err)
-	}
-	defer rows.Close()
-	names := map[int64]string{}
-	for rows.Next() {
-		var id int64
-		var name string
-		if err := rows.Scan(&id, &name); err != nil {
-			return nil, fmt.Errorf("scan %s name: %w", table, err)
-		}
-		names[id] = name
-	}
-	return names, rows.Err()
 }
 
 func scanNIC(s scanner) (domain.NIC, error) {

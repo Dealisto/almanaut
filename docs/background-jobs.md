@@ -19,7 +19,14 @@ nav entry for it and the route rejects them.
 One row per registered job, showing its title, interval, when it last ran and
 when it runs next, how long the last pass took, how many times it has run, and
 the error from the last pass if there was one. A job currently executing is
-marked as running.
+marked as running. Scheduled intervals are delays after the previous pass
+finishes, including a manual pass: **run now** restarts the delay. No next-run
+time is advertised while a pass is running or after the scheduler stops.
+
+Expiry deliveries, liveness checks, and TLS probes report storage or delivery
+failures here while continuing with the other items. An unreachable monitored
+host or a failed TLS handshake is recorded as a probe result; it does not by
+itself mean that the scheduled job failed to run.
 
 Each row also has a **run now** button, which is the useful part when you are
 setting something up: rather than editing an interval down to a minute to see
@@ -53,7 +60,21 @@ The host and service list pages gain a **Liveness** column reading `up` or
 third state matters: `unknown` means "not checked", not "reachable".
 
 Transitions are pushed through the same notification channels as expiry alerts,
-so a host going down reaches the same ntfy topic or Discord webhook.
+so a host going down reaches the same ntfy topic or Discord webhook. Each accepted
+transition is queued in SQLite in the same transaction as its observation.
+Failed deliveries survive restarts and retry on later passes; older transitions
+for one entity are delivered before newer ones, while failures do not block
+other entities. Delayed alerts include their observation time.
+
+Each pass attempts at most 100 queued alerts. Delivery runs alongside probes,
+so an unresponsive notification endpoint cannot prevent observations. Retries
+prioritize entities least recently attempted; a long queue of failing deliveries
+does not starve its later entries. Fresh transitions are delivered within the
+remaining budget after probes finish. Changing or disabling a check
+address, deleting its entity, or replacing the inventory discards its queued
+alerts. Delivery is at least once: a crash after sending but before recording
+success can repeat an alert. When multiple channels are configured, a partial
+failure can repeat delivery to channels that already accepted the alert.
 
 Note this is a TCP connect check, nothing more — a port that accepts a
 connection counts as up even if the service behind it is broken.
@@ -68,6 +89,11 @@ job is enabled** — the prober is built regardless. `ALMANAUT_CERT_PROBE_ENABLE
 only controls whether probing also happens on a schedule, every
 `ALMANAUT_CERT_PROBE_INTERVAL`. Each certificate's detail page shows the
 outcome of its last probe, including when it has never been probed.
+
+Scheduled passes probe at most eight targets concurrently. If the pass deadline
+interrupts the scan, the next pass starts with certificates it did not reach,
+so slow early targets cannot indefinitely starve later certificates. This
+rotation resets when the server restarts.
 
 Probing on demand is a write action, so it needs an editor or admin role: a
 viewer sees the last probe's result but cannot trigger a new one.
