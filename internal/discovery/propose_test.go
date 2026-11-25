@@ -105,6 +105,37 @@ func TestProposeHostsAlreadyTrackedByIP(t *testing.T) {
 	}
 }
 
+func TestProposeHostsAlreadyTrackedByEquivalentIP(t *testing.T) {
+	for _, tc := range []struct{ stored, scanned string }{
+		{"2001:0DB8:0000:0000:0000:0000:0000:0001", "2001:db8::1"},
+		{"2001:db8::1", "2001:0db8:0000:0000:0000:0000:0000:0001"},
+		{"::ffff:192.0.2.1", "192.0.2.1"},
+		{"192.0.2.1", "::ffff:c000:201"},
+	} {
+		t.Run(tc.stored+"/"+tc.scanned, func(t *testing.T) {
+			existing := []domain.Host{{Name: "tracked", Type: "physical", IPs: []string{tc.stored}}}
+			got := ProposeHosts([]ScannedHost{{IP: tc.scanned}}, existing)
+			if len(got) != 1 || !got[0].AlreadyTracked {
+				t.Fatalf("equivalent IP proposed as new: %+v", got)
+			}
+		})
+	}
+}
+
+func TestNormalizeIP(t *testing.T) {
+	for input, want := range map[string]string{
+		" 2001:0DB8:0000::1 ": "2001:db8::1",
+		"::ffff:c000:201":     "192.0.2.1",
+		"192.0.2.1":           "192.0.2.1",
+		" invalid ":           "invalid",
+		"":                    "",
+	} {
+		if got := NormalizeIP(input); got != want {
+			t.Errorf("NormalizeIP(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestProposeHostsSortedByIP(t *testing.T) {
 	got := ProposeHosts([]ScannedHost{
 		{IP: "192.168.1.10", OpenPorts: []int{80}},

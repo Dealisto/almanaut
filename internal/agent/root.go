@@ -7,7 +7,7 @@ import (
 )
 
 // Root is where the collectors read the system from. Production passes the
-// real /proc, /sys, /etc and /run; tests pass fixture trees.
+// real /proc, /sys, /etc, /run and /usr/lib; tests pass fixture trees.
 //
 // Without this indirection the LXC and cgroup logic would only be testable on
 // a real container, which in practice means not tested at all — so every
@@ -16,15 +16,16 @@ import (
 // suite consult the real machine, passing on a laptop and reporting "lxc" the
 // day CI moves into a container.
 type Root struct {
-	Proc string
-	Sys  string
-	Etc  string
-	Run  string
+	Proc   string
+	Sys    string
+	Etc    string
+	Run    string
+	UsrLib string
 }
 
 // SystemRoot is the real machine.
 func SystemRoot() Root {
-	return Root{Proc: "/proc", Sys: "/sys", Etc: "/etc", Run: "/run"}
+	return Root{Proc: "/proc", Sys: "/sys", Etc: "/etc", Run: "/run", UsrLib: "/usr/lib"}
 }
 
 // Path joins a relative path onto one of the roots.

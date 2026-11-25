@@ -12,8 +12,56 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/Dealisto/almanaut/internal/agent"
 	"github.com/Dealisto/almanaut/internal/agentapi"
 )
+
+func TestRunHelpExitsSuccessfully(t *testing.T) {
+	for _, flag := range []string{"-h", "--help"} {
+		var out, errOut bytes.Buffer
+		if code := run(context.Background(), []string{flag}, &out, &errOut); code != exitOK || !strings.Contains(errOut.String(), "usage:") {
+			t.Fatalf("%s: code=%d stderr=%s", flag, code, errOut.String())
+		}
+	}
+}
+
+func TestRunRejectsExtraArgumentsBeforeSideEffects(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{"host_id": 1})
+	}))
+	defer srv.Close()
+	cfg, state := agentEnv(t, srv.URL)
+	id, err := agent.LoadOrCreateAgentID(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"report", "typo"},
+		{"report", "-timeout", "1s"},
+		{"reset-id", "--help"},
+		{"reset-id", "-state-dir", filepath.Join(t.TempDir(), "other")},
+		{"version", "extra"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			fullArgs := append([]string{"-config", cfg, "-state-dir", state}, args...)
+			if code := run(context.Background(), fullArgs, &out, &errOut); code != exitUsage {
+				t.Fatalf("code=%d stdout=%s stderr=%s", code, out.String(), errOut.String())
+			}
+			if out.Len() != 0 || !strings.Contains(errOut.String(), "flags must precede the command") {
+				t.Fatalf("stdout=%s stderr=%s", out.String(), errOut.String())
+			}
+			if got, err := agent.LoadOrCreateAgentID(state); err != nil || got != id {
+				t.Fatalf("invalid arguments changed identity: got=%q err=%v", got, err)
+			}
+		})
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("invalid arguments sent %d reports", requests.Load())
+	}
+}
 
 func TestRunRejectsNonPositiveTimeout(t *testing.T) {
 	for _, timeout := range []string{"0s", "-1s"} {
@@ -137,6 +185,31 @@ func TestRunMissingConfigExitsOne(t *testing.T) {
 	code := run(context.Background(), []string{"-config", filepath.Join(t.TempDir(), "absent.toml")}, &out, &errOut)
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1", code)
+	}
+}
+
+func TestRunInvalidEndpointDoesNotCreateIdentity(t *testing.T) {
+	cfg, state := agentEnv(t, "http://localhost:65536")
+	var out, errOut bytes.Buffer
+	code := run(context.Background(), []string{"-config", cfg, "-state-dir", state}, &out, &errOut)
+	if code != exitUsage || !strings.Contains(errOut.String(), "port must be") {
+		t.Fatalf("invalid endpoint: code=%d stderr=%s", code, errOut.String())
+	}
+	if _, err := os.Stat(state); !os.IsNotExist(err) {
+		t.Fatalf("invalid configuration created state: %v", err)
+	}
+}
+
+func TestRunMalformedSuccessIsPermanentRejection(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<html>Sign in</html>"))
+	}))
+	defer srv.Close()
+	cfg, state := agentEnv(t, srv.URL)
+	var out, errOut bytes.Buffer
+	code := run(context.Background(), []string{"-config", cfg, "-state-dir", state}, &out, &errOut)
+	if code != exitRejected || !strings.Contains(errOut.String(), "invalid JSON response") {
+		t.Fatalf("malformed success: code=%d stderr=%s", code, errOut.String())
 	}
 }
 

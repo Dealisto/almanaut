@@ -478,7 +478,11 @@ func (rs resource[T]) deleteEntityTx(tx *sql.Tx, d handlerDeps, id int64, actor 
 
 func (rs resource[T]) create(d handlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		item := rs.parse(req.FormValue, 0)
+		item, err := rs.parseInput(req.FormValue, 0)
+		if err != nil {
+			rs.renderCreateError(w, req, d, item, err)
+			return
+		}
 		if err := item.Validate(); err != nil {
 			rs.renderCreateError(w, req, d, item, err)
 			return
@@ -526,7 +530,11 @@ func (rs resource[T]) update(d handlerDeps) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		item := rs.parse(req.FormValue, id)
+		item, err := rs.parseInput(req.FormValue, id)
+		if err != nil {
+			rs.renderUpdateError(w, req, d, id, item, err)
+			return
+		}
 		if err := item.Validate(); err != nil {
 			rs.renderUpdateError(w, req, d, id, item, err)
 			return
@@ -716,9 +724,8 @@ func (rs resource[T]) getJSON(d handlerDeps) http.HandlerFunc {
 // id (if any) is ignored. Returns 201 with the created entity and a Location.
 func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+		body, ok := readAPIBody(w, req, "invalid JSON body")
+		if !ok {
 			return
 		}
 		var item T
@@ -777,9 +784,8 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 			writeJSONError(w, http.StatusBadRequest, "invalid id")
 			return
 		}
-		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+		body, ok := readAPIBody(w, req, "invalid JSON body")
+		if !ok {
 			return
 		}
 		var item T

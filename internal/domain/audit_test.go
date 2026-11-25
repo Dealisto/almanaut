@@ -53,10 +53,12 @@ func TestHardwareWithoutWarranty(t *testing.T) {
 	hw := []Hardware{
 		{ID: 1, Name: "tracked", WarrantyEnd: "2027-01-01"},
 		{ID: 2, Name: "untracked", WarrantyEnd: ""},
+		{ID: 3, Name: "blank", WarrantyEnd: " \t\n"},
+		{ID: 4, Name: "padded", WarrantyEnd: " 2027-01-01 "},
 	}
 	got := HardwareWithoutWarranty(hw)
-	if len(got) != 1 || got[0].ID != 2 {
-		t.Errorf("want only hardware 2, got %+v", got)
+	if len(got) != 2 || got[0].ID != 2 || got[1].ID != 3 {
+		t.Errorf("want hardware 2 and 3, got %+v", got)
 	}
 }
 
@@ -64,10 +66,12 @@ func TestSubscriptionsWithoutRenewal(t *testing.T) {
 	subs := []Subscription{
 		{ID: 1, Name: "tracked", RenewalDate: "2027-01-01"},
 		{ID: 2, Name: "untracked", RenewalDate: ""},
+		{ID: 3, Name: "blank", RenewalDate: " \t\n"},
+		{ID: 4, Name: "padded", RenewalDate: " 2027-01-01 "},
 	}
 	got := SubscriptionsWithoutRenewal(subs)
-	if len(got) != 1 || got[0].ID != 2 {
-		t.Errorf("want only subscription 2, got %+v", got)
+	if len(got) != 2 || got[0].ID != 2 || got[1].ID != 3 {
+		t.Errorf("want subscriptions 2 and 3, got %+v", got)
 	}
 }
 

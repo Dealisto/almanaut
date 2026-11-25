@@ -63,6 +63,15 @@ Everything else on the host record — `notes`, `status`, `check_address`,
 rack placement, tags, relationships, and custom fields — the agent never
 writes at all.
 
+OS names follow the [os-release format](https://www.freedesktop.org/software/systemd/man/latest/os-release.html),
+including quoted names and escaped characters. `/etc/os-release` takes
+precedence; `/usr/lib/os-release` is used only when the former is absent.
+
+CPU and RAM summaries use the lower available value from `/proc` and the
+cgroup limit. A container limit above the machine's available resources does
+not inflate the inventory; when one memory source is unreadable, the agent
+uses the other. Invalid or overflowing memory totals are treated as unknown.
+
 Virtualization detection uses container markers before examining DMI. If no
 positive container marker is available and `/proc/1/environ` cannot be read,
 the agent leaves virtualization undetermined and reports only the root
@@ -81,6 +90,12 @@ the host record on the very first agent report. That warning applies in
 full here — an agent-managed host is exactly where it bites.
 
 ## Checking on it
+
+Flags must precede the command, for example
+`almanaut-agent -timeout 10s report` or
+`almanaut-agent -state-dir /var/lib/almanaut-agent reset-id`.
+Extra arguments are rejected before collecting facts or changing the agent
+identity. `almanaut-agent --help` prints usage and exits successfully.
 
 The `-timeout` flag bounds collection and reporting together (30 seconds by
 default; it must be positive). If a filesystem or another system read blocks,
@@ -107,6 +122,14 @@ The process exit code doubles as a quick diagnosis without opening the logs:
 Configure the final server URL, including its correct HTTP or HTTPS scheme.
 The agent refuses redirects so reports and bearer tokens stay at the configured
 endpoint.
+
+The URL must have a hostname, a port between 1 and 65535 when specified, and
+no embedded username or password. Supply authentication through `token` or
+`ALMANAUT_AGENT_TOKEN`; tokens must contain only printable ASCII without whitespace.
+Invalid configuration exits with code `1` before creating an agent identity.
+A successful HTTP response containing HTML or malformed JSON exits with code
+`2`, identifying a misconfigured endpoint. Error logs omit unstructured response
+bodies and redact the configured token and endpoint from structured API errors.
 
 ## Resolving an ambiguous first report
 

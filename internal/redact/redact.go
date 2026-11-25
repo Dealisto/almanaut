@@ -11,6 +11,7 @@ package redact
 import (
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // URL returns raw reduced to scheme and host, e.g. "https://discord.com/…".
@@ -39,6 +40,34 @@ func Error(err error) error {
 		return err
 	}
 	return &redactedError{op: ue.Op, url: URL(ue.URL), err: ue.Err}
+}
+
+// ErrorWithSecrets also filters credentials reflected in underlying protocol
+// or body-read errors. URL redaction alone cannot hide a token in, for example,
+// a malformed HTTP status line. Error identity and timeout behavior are kept.
+func ErrorWithSecrets(err error, secrets ...string) error {
+	if err == nil {
+		return nil
+	}
+	pairs := make([]string, 0, len(secrets)*2)
+	for _, secret := range secrets {
+		if secret != "" {
+			pairs = append(pairs, secret, "[redacted]")
+		}
+	}
+	return &secretError{err: Error(err), replacer: strings.NewReplacer(pairs...)}
+}
+
+type secretError struct {
+	err      error
+	replacer *strings.Replacer
+}
+
+func (e *secretError) Error() string { return e.replacer.Replace(e.err.Error()) }
+func (e *secretError) Unwrap() error { return e.err }
+func (e *secretError) Timeout() bool {
+	t, ok := e.err.(interface{ Timeout() bool })
+	return ok && t.Timeout()
 }
 
 type redactedError struct {

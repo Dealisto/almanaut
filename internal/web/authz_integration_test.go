@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,15 +21,7 @@ import (
 
 func rbacDB(t *testing.T) *sql.DB {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	return db
 }
 

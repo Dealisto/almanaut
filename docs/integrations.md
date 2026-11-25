@@ -13,8 +13,13 @@ Set `ALMANAUT_NTFY_URL` to an [ntfy](https://ntfy.sh) topic URL and/or
 URL. Almanaut pushes an alert when a certificate, hardware warranty, or
 subscription renewal falls within `ALMANAUT_NOTIFY_WITHIN_DAYS` (default 30).
 
-Each item notifies **once** per configured channel; renewing it (pushing the
-date beyond the window) re-arms it for next time. The check runs at startup
+Each item notifies **once per deadline** after successful delivery. Changing
+the date re-arms the alert, even when the new date stays inside the window
+(for example, a weekly subscription renewed within a 30-day alert window).
+Moving it beyond the window re-arms it for when it becomes due again.
+The notified deadline survives restarts. When upgrading from a version that
+tracked only the item, existing alerts adopt the current inventory deadline
+to avoid sending every alert again immediately. The check runs at startup
 and every `ALMANAUT_NOTIFY_INTERVAL`. Leave both URLs unset to disable
 notifications entirely.
 
@@ -25,8 +30,8 @@ other items from being attempted; failed items remain eligible for the next pass
 Notification URLs must point directly to their final ntfy or Discord endpoint.
 HTTP redirects are treated as failed deliveries, including redirects that
 preserve the POST method; this prevents a redirected request from being mistaken
-for a delivered alert. Redirect response bodies are omitted from error logs
-because they may contain secret-bearing destination URLs.
+for a delivered alert. HTTP response bodies are omitted from error logs
+because they may contain secret-bearing URLs or reflected credentials.
 
 ## Outbound webhooks
 
@@ -41,6 +46,12 @@ A signing secret is generated when the endpoint is created and shown **once**
 with it. Each delivery also carries an `X-Almanaut-Delivery: <id>` header,
 stable across retries, for receiver-side idempotency. Failed deliveries retry
 with backoff up to `ALMANAUT_WEBHOOK_MAX_ATTEMPTS` times.
+
+Pending deliveries, including delayed retries, have a shared capacity bound;
+when it is full, additional deliveries are dropped and logged. Events remain
+in memory and do not survive a process restart. During server shutdown, the
+queue stops accepting new events and drains accepted deliveries until the
+shutdown deadline, then cancels active requests and pending retry timers.
 
 ## Uptime Kuma sync
 
@@ -65,6 +76,8 @@ Things to know:
   a sync), the monitor can end up created in Kuma with no matching almanaut
   record; almanaut logs this case, and the orphaned monitor should be removed
   by hand in Kuma before the next sync creates a duplicate.
+- An unexpected sync panic is recorded as a failed last sync on the admin page;
+  the worker stays available for the next trigger.
 
 ---
 

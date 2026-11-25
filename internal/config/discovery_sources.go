@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -123,8 +124,14 @@ func (row discoverySourceFile) resolve(baseDir string) (DiscoverySource, error) 
 			return s, fmt.Errorf("hypervisor sources do not accept socket")
 		}
 		u, err := url.Parse(s.URL)
-		if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(s.URL, "#") {
 			return s, fmt.Errorf("url must be an HTTP(S) base URL without credentials, query or fragment")
+		}
+		if port := u.Port(); port != "" {
+			n, err := strconv.Atoi(port)
+			if err != nil || n < 1 || n > 65535 {
+				return s, fmt.Errorf("url port must be between 1 and 65535")
+			}
 		}
 		if row.TokenFile != "" {
 			path := row.TokenFile

@@ -4,6 +4,7 @@
   <summary>Bulk actions <span class="bulk-hint" data-selection-count role="status">Select rows on this page to apply an action</span></summary>
   <form id="bulkform" class="bulk-actions" method="post" action="{{.BasePath}}/bulk">
     {{ csrfField }}
+    <input type="hidden" name="return_to" value="{{currentPath}}">
     <label>Tag<input name="tag" placeholder="Tag name" aria-label="Tag name"></label>
     <button class="btn" name="action" value="tag-add" type="submit">Add tag</button>
     <button class="btn" name="action" value="tag-remove" type="submit">Remove tag</button>

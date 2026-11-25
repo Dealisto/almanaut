@@ -45,9 +45,20 @@ type IPAMReport struct {
 // (most specific), mirroring routing; IPs in no known network are unassigned.
 func BuildIPAM(networks []Network, hosts []Host, reservations []Reservation) IPAMReport {
 	used, unassigned := attribute(networks, hosts, -1)
+	// Group once for the full report; rescanning every reservation for every
+	// network makes otherwise small subnet reports quadratic in inventory size.
+	byNetwork := make(map[int64][]Reservation, len(networks))
+	for _, n := range networks {
+		byNetwork[n.ID] = nil
+	}
+	for _, r := range reservations {
+		if group, exists := byNetwork[r.NetworkID]; exists {
+			byNetwork[r.NetworkID] = append(group, r)
+		}
+	}
 	report := IPAMReport{Unassigned: sortAllocs(unassigned)}
 	for i, n := range networks {
-		report.Networks = append(report.Networks, buildUsage(n, sortAllocs(used[i]), reservationsFor(n.ID, reservations)))
+		report.Networks = append(report.Networks, buildUsage(n, sortAllocs(used[i]), byNetwork[n.ID]))
 	}
 	return report
 }
@@ -88,9 +99,9 @@ func BuildNetworkUsage(targetID int64, networks []Network, hosts []Host, reserva
 // while still scanning all networks so the longest-prefix winner is unchanged.
 func attribute(networks []Network, hosts []Host, onlyIdx int) (map[int][]Allocation, []Allocation) {
 	type parsedNet struct {
-		idx  int
-		ipn  *net.IPNet
-		ones int
+		idx      int
+		ipn      *net.IPNet
+		hostBits int
 	}
 	var parsed []parsedNet
 	for i, n := range networks {
@@ -98,8 +109,8 @@ func attribute(networks []Network, hosts []Host, onlyIdx int) (map[int][]Allocat
 		if err != nil {
 			continue // invalid CIDR: this network matches nothing
 		}
-		ones, _ := ipn.Mask.Size()
-		parsed = append(parsed, parsedNet{idx: i, ipn: ipn, ones: ones})
+		ones, bits := ipn.Mask.Size()
+		parsed = append(parsed, parsedNet{idx: i, ipn: ipn, hostBits: bits - ones})
 	}
 
 	used := make(map[int][]Allocation, len(networks))
@@ -116,10 +127,12 @@ func attribute(networks []Network, hosts []Host, onlyIdx int) (map[int][]Allocat
 				continue // alternate spellings or repeats on one host are not conflicts
 			}
 			seen[canonical] = true
-			best, bestOnes := -1, -1
+			best, bestHostBits := -1, 129
 			for _, p := range parsed {
-				if p.ipn.Contains(ip) && p.ones > bestOnes {
-					best, bestOnes = p.idx, p.ones
+				// Compare block sizes so IPv4 /24 and mapped IPv6 /120 tie;
+				// comparing raw prefix lengths would let /120 beat IPv4 /25.
+				if p.ipn.Contains(ip) && p.hostBits < bestHostBits {
+					best, bestHostBits = p.idx, p.hostBits
 				}
 			}
 			if best < 0 {
@@ -176,7 +189,7 @@ func buildUsage(n Network, used []Allocation, reservations []Reservation) Networ
 	switch {
 	case hostBits >= 31:
 		u.Unbounded = true
-	case reservesEnds(ones, bits):
+	case reservesEnds(ipn):
 		u.TotalUsable = (1 << hostBits) - 2 // exclude network + broadcast
 	default:
 		u.TotalUsable = 1 << hostBits // /31, /32, and small IPv6 subnets
@@ -200,7 +213,7 @@ func buildUsage(n Network, used []Allocation, reservations []Reservation) Networ
 		}
 		// These addresses are already excluded from TotalUsable. Keep any host
 		// allocations visible, but do not subtract subnet endpoints twice.
-		if reservesEnds(ones, bits) {
+		if reservesEnds(ipn) {
 			base := ipn.IP.Mask(ipn.Mask)
 			broadcast := make(net.IP, len(base))
 			for i := range base {
@@ -228,11 +241,12 @@ func buildUsage(n Network, used []Allocation, reservations []Reservation) Networ
 
 // reservesEnds reports whether a subnet reserves its network and broadcast
 // addresses, so they count as neither usable capacity nor a next-free
-// suggestion. Only IPv4 subnets larger than a /31 point-to-point link do; /31,
-// /32 and IPv6 subnets use every address. This is the single source of that rule
-// for both the capacity count (buildUsage) and the enumeration (nextFree).
-func reservesEnds(ones, bits int) bool {
-	return bits == 32 && bits-ones >= 2
+// suggestion. Only IPv4 subnets larger than a /31 point-to-point link do,
+// including their IPv6-mapped representation. /31, /32 and native IPv6 subnets
+// use every address. This is shared by capacity, reservations and next-free.
+func reservesEnds(ipn *net.IPNet) bool {
+	ones, bits := ipn.Mask.Size()
+	return ipn.IP.To4() != nil && bits-ones >= 2
 }
 
 // nextFree returns the lowest usable address in ipn not present in taken, or ""
@@ -249,7 +263,7 @@ func nextFree(ipn *net.IPNet, taken map[string]bool, reserved ipRanges) string {
 	cur := make(net.IP, len(base))
 	copy(cur, base)
 
-	excludeEnds := reservesEnds(ones, bits)
+	excludeEnds := reservesEnds(ipn)
 	var broadcast net.IP
 	if excludeEnds {
 		broadcast = make(net.IP, len(base))
@@ -288,14 +302,13 @@ func (ranges ipRanges) contains(ip net.IP) bool {
 // and merges overlaps. Counting each range needs only its low 32 bits because
 // buildUsage calls this for subnets with at most 30 host bits.
 func reservationRanges(ipn *net.IPNet, reservations []Reservation) ipRanges {
-	ones, bits := ipn.Mask.Size()
 	base := ipn.IP.Mask(ipn.Mask)
 	last := make(net.IP, len(base))
 	for i := range base {
 		last[i] = base[i] | ^ipn.Mask[i]
 	}
 	first, last := append(net.IP(nil), base.To16()...), last.To16()
-	if reservesEnds(ones, bits) {
+	if reservesEnds(ipn) {
 		incIP(first)
 		// An IPv4 broadcast address always ends in at least two set bits.
 		last[len(last)-1]--

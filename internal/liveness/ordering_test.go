@@ -74,8 +74,8 @@ func TestCheckerDiscardsResultAfterTargetChange(t *testing.T) {
 					t.Fatal(err)
 				}
 				got, err := state.Get(entityType, id)
-				if err != nil || got != initial {
-					t.Fatalf("obsolete result changed state: %+v, %v", got, err)
+				if !errors.Is(err, store.ErrNotFound) {
+					t.Fatalf("obsolete result recreated invalidated state: %+v, %v", got, err)
 				}
 				if sender.count() != 0 {
 					t.Fatal("obsolete result sent a transition notification")

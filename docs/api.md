@@ -102,6 +102,14 @@ name — `hardware`, not `hardwares` (see [The inventory model](inventory-model.
 for the full set). Field names match the YAML export (snake_case), and request
 bodies use the same shape. Responses are `application/json`.
 
+Request bodies are limited to 32 MiB. Exceeding the limit returns
+`413 {"error":"request body too large"}`, including chunked uploads.
+
+Numeric values in `custom_fields` retain their submitted precision in storage
+and JSON responses. Clients that need exact large integers or decimal values
+should use a JSON parser that preserves numbers instead of converting them to
+binary floating point.
+
 Every API write is recorded in the same per-entity **change history** as UI
 edits, attributed to the token's owning user — so `GET /history` and each
 entity's Change history show exactly who made a scripted change.

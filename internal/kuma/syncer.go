@@ -2,6 +2,7 @@ package kuma
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"runtime/debug"
 	"sync"
@@ -112,6 +113,9 @@ func (y *Syncer) pass(ctx context.Context) {
 	// and the next trigger still syncs, instead of taking down the server.
 	defer func() {
 		if p := recover(); p != nil {
+			y.mu.Lock()
+			y.last = LastSync{Ran: true, Time: time.Now(), Summary: Summary{Err: fmt.Errorf("sync panicked: %v", p)}}
+			y.mu.Unlock()
 			y.log.Printf("kuma: sync panicked: %v\n%s", p, debug.Stack())
 		}
 	}()

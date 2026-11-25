@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -193,4 +194,31 @@ func TestSyncerPassRecoversPanic(t *testing.T) {
 	db := newSyncerDB(t)
 	y := NewSyncer(NewClient("http://127.0.0.1:1", "a", "b", false), panickingServices{}, store.NewKumaRepo(db), log.New(io.Discard, "", 0))
 	y.pass(context.Background()) // must return, not panic
+	last := y.LastSync()
+	if !last.Ran || last.Time.IsZero() || last.Summary.Err == nil || !strings.Contains(last.Summary.Err.Error(), "boom") {
+		t.Fatalf("panic must be visible in LastSync: %+v", last)
+	}
+}
+
+func TestSyncerPanicReplacesSuccessfulStatusAndNextPassRecovers(t *testing.T) {
+	f := newFakeKuma(t)
+	db := newSyncerDB(t)
+	y := NewSyncer(NewClient(f.url(), "admin", "s3cret", false), staticServices{}, store.NewKumaRepo(db), log.New(io.Discard, "", 0))
+	y.pass(context.Background())
+	before := y.LastSync()
+	if !before.Ran || before.Summary.Err != nil {
+		t.Fatalf("initial successful status: %+v", before)
+	}
+	y.services = panickingServices{}
+	y.pass(context.Background())
+	after := y.LastSync()
+	if after.Summary.Err == nil || !after.Time.After(before.Time) {
+		t.Fatalf("panic left stale successful status: %+v", after)
+	}
+	y.services = staticServices{}
+	y.pass(context.Background())
+	recovered := y.LastSync()
+	if recovered.Summary.Err != nil || !recovered.Time.After(after.Time) {
+		t.Fatalf("subsequent success did not clear panic: %+v", recovered)
+	}
 }

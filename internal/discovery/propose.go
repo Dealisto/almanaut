@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 
@@ -74,6 +75,17 @@ func NormalizeName(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }
 
+// NormalizeIP gives equivalent IP spellings the same discovery matching key,
+// including expanded IPv6 and IPv4-mapped IPv6. Invalid values are only trimmed;
+// callers must still validate addresses before importing them.
+func NormalizeIP(s string) string {
+	s = strings.TrimSpace(s)
+	if ip := net.ParseIP(s); ip != nil {
+		return ip.String()
+	}
+	return s
+}
+
 // HostProposal is a scanned host mapped to a candidate Host, with a flag
 // indicating whether one of its IPs already belongs to an existing host.
 type HostProposal struct {
@@ -90,7 +102,7 @@ func ProposeHosts(scanned []ScannedHost, existing []domain.Host) []HostProposal 
 	tracked := make(map[string]bool)
 	for _, h := range existing {
 		for _, ip := range h.IPs {
-			tracked[strings.TrimSpace(ip)] = true
+			tracked[NormalizeIP(ip)] = true
 		}
 	}
 	out := make([]HostProposal, 0, len(scanned))
@@ -108,7 +120,7 @@ func ProposeHosts(scanned []ScannedHost, existing []domain.Host) []HostProposal 
 				IPs:   []string{sh.IP},
 				Notes: NetworkHostNotes(ports),
 			},
-			AlreadyTracked: tracked[sh.IP],
+			AlreadyTracked: tracked[NormalizeIP(sh.IP)],
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return ipLess(out[i].IP, out[j].IP) })

@@ -121,7 +121,9 @@ select the corrected file again before retrying.
   `id` **updates** that row; a blank or absent `id` **creates** a new row.
 - Multi-value fields use commas inside the cell — e.g. a host's `ips` column:
   `"10.0.0.1,10.0.0.2"` (quote the cell so the commas are not column separators).
-- Boolean fields (`auto_renew`) accept `true`/`false` (also `1`/`0`, `yes`/`no`).
+- Boolean fields (`auto_renew`, `mgmt_only`) accept `true`/`false` (also
+  `1`/`0`, `yes`/`no`, `on`/`off`, `y`/`n`), ignoring case and surrounding
+  whitespace. Empty values mean false; other values abort the import.
 - Updating a row is a **full replace** of that row's columns present in the
   file — an omitted column is written as empty, same as clearing it in the
   edit form.

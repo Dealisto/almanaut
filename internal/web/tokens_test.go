@@ -3,7 +3,6 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -77,15 +76,7 @@ func TestTokenUICreateShowsRawOnce(t *testing.T) {
 // read-write when the form omits "scope" (the token form has no scope
 // selector yet; PR B adds it), and rejects an explicit but invalid scope.
 func TestTokenCreateDefaultsToReadWriteScope(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	users := store.NewUserRepo(db)
 	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)

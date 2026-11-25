@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/Dealisto/almanaut/internal/domain"
@@ -36,15 +35,7 @@ func newProxyTestHandler(t *testing.T, autoProvision bool) (http.Handler, *sql.D
 
 func newProxyTestHandlerWithRetention(t *testing.T, autoProvision bool, retentionDays int) (http.Handler, *sql.DB) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	srv := New(Config{
 		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
 		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),

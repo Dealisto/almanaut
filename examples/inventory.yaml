@@ -59,11 +59,17 @@ services:
     category: Database
     notes: ""
 
+vlans:
+  - id: 1
+    name: LAN
+    vid: 1
+    notes: Main home VLAN
+
 networks:
   - id: 1
     name: LAN
     cidr: 192.168.1.0/24
-    vlan: "1"
+    vlan_id: 1
     gateway: 192.168.1.1
     notes: Main home network
 

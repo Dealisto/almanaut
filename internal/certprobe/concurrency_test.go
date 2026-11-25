@@ -25,6 +25,8 @@ func TestRunBoundsConcurrencyAndResumesUnstartedCertificates(t *testing.T) {
 	var slow atomic.Bool
 	slow.Store(true)
 	entered := make(chan string, 6)
+	resumedEntered := make(chan string, 6)
+	releaseResumed := make(chan struct{})
 	var active, maxActive atomic.Int32
 	var mu sync.Mutex
 	var resumed []string
@@ -41,6 +43,8 @@ func TestRunBoundsConcurrencyAndResumesUnstartedCertificates(t *testing.T) {
 		mu.Lock()
 		resumed = append(resumed, addr)
 		mu.Unlock()
+		resumedEntered <- addr
+		<-releaseResumed
 		return nil, errors.New("ordinary probe failure")
 	}
 	p := New(certs, store.NewCertProbeRepo(db), db, dial, time.Second, nil, nil)
@@ -58,13 +62,19 @@ func TestRunBoundsConcurrencyAndResumesUnstartedCertificates(t *testing.T) {
 		t.Fatalf("max concurrency=%d", maxActive.Load())
 	}
 	slow.Store(false)
-	if err := p.Run(context.Background()); err != nil {
+	go func() { done <- p.Run(context.Background()) }()
+	// Keep the first resumed workers in flight until both have entered. Without
+	// this barrier one worker may finish and admit cert4 before the scheduler
+	// runs cert2, even though cert2 and cert3 were correctly admitted first.
+	first, second := <-resumedEntered, <-resumedEntered
+	close(releaseResumed)
+	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
 	if len(resumed) != 6 {
 		t.Fatalf("resumed=%v", resumed)
 	}
-	if (resumed[0] != "cert2:443" && resumed[0] != "cert3:443") || (resumed[1] != "cert2:443" && resumed[1] != "cert3:443") {
+	if first == second || (first != "cert2:443" && first != "cert3:443") || (second != "cert2:443" && second != "cert3:443") {
 		t.Fatalf("did not resume unstarted targets: %v", resumed)
 	}
 	if maxActive.Load() > 2 {

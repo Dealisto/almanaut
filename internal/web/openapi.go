@@ -377,6 +377,7 @@ func buildOpenAPIDoc(resources []mountable, version string) *openAPIDoc {
 				Responses: map[string]oaResponse{
 					"201": jsonResp("The created "+info.Singular, info.SchemaName),
 					"400": errorResp("Validation or malformed-JSON error"),
+					"413": errorResp("Request body exceeds 32 MiB"),
 				},
 			},
 		}
@@ -395,6 +396,7 @@ func buildOpenAPIDoc(resources []mountable, version string) *openAPIDoc {
 					"200": jsonResp("The updated "+info.Singular, info.SchemaName),
 					"400": errorResp("Validation or malformed-JSON error"),
 					"404": errorResp(info.Singular + " not found"),
+					"413": errorResp("Request body exceeds 32 MiB"),
 				},
 			},
 			Delete: &oaOperation{
@@ -454,6 +456,7 @@ func buildOpenAPIDoc(resources []mountable, version string) *openAPIDoc {
 				"401": errorResp("Missing or invalid bearer token"),
 				"403": errorResp("Token scope is not agent"),
 				"409": errorResp("agent_id is already bound to a different machine"),
+				"413": errorResp("Request body exceeds 32 MiB"),
 				"422": errorResp("multiple unbound hosts match the reported hostname or IP addresses; resolve inventory ambiguity before retrying"),
 			},
 		},

@@ -51,7 +51,7 @@ func TestDecide(t *testing.T) {
 	cert2 := Item{Kind: KindCertificate, ID: 2, Label: "b.com", Date: "2026-07-10"}
 
 	t.Run("new item is notified", func(t *testing.T) {
-		notify, clear := decide([]Item{cert1}, map[Key]bool{})
+		notify, clear := decide([]Item{cert1}, map[Key]string{})
 		if len(notify) != 1 || notify[0].Key() != cert1.Key() {
 			t.Fatalf("want cert1 notified, got %v", notify)
 		}
@@ -61,7 +61,7 @@ func TestDecide(t *testing.T) {
 	})
 
 	t.Run("already-notified item is left alone", func(t *testing.T) {
-		notify, clear := decide([]Item{cert1}, map[Key]bool{cert1.Key(): true})
+		notify, clear := decide([]Item{cert1}, map[Key]string{cert1.Key(): cert1.Date})
 		if len(notify) != 0 {
 			t.Fatalf("want nothing notified, got %v", notify)
 		}
@@ -70,8 +70,22 @@ func TestDecide(t *testing.T) {
 		}
 	})
 
+	t.Run("changed deadline is notified", func(t *testing.T) {
+		notify, clear := decide([]Item{cert1}, map[Key]string{cert1.Key(): "2026-07-01"})
+		if len(notify) != 1 || notify[0].Date != cert1.Date || len(clear) != 0 {
+			t.Fatalf("want new deadline notified without clearing state, got %v / %v", notify, clear)
+		}
+	})
+
+	t.Run("date whitespace does not re-arm", func(t *testing.T) {
+		notify, clear := decide([]Item{cert1}, map[Key]string{cert1.Key(): " 2026-07-08\t"})
+		if len(notify) != 0 || len(clear) != 0 {
+			t.Fatalf("want unchanged calendar date suppressed, got %v / %v", notify, clear)
+		}
+	})
+
 	t.Run("no-longer-expiring item is cleared", func(t *testing.T) {
-		notify, clear := decide([]Item{}, map[Key]bool{cert1.Key(): true})
+		notify, clear := decide([]Item{}, map[Key]string{cert1.Key(): cert1.Date})
 		if len(notify) != 0 {
 			t.Fatalf("want nothing notified, got %v", notify)
 		}
@@ -85,7 +99,7 @@ func TestDecide(t *testing.T) {
 		cert3 := Key{Kind: KindCertificate, ID: 3}
 		notify, clear := decide(
 			[]Item{cert1, cert2},
-			map[Key]bool{cert1.Key(): true, cert3: true},
+			map[Key]string{cert1.Key(): cert1.Date, cert3: "2026-07-10"},
 		)
 		gotNotify := keys(notify)
 		sortKeys(gotNotify)

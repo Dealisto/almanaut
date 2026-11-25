@@ -66,13 +66,11 @@ func (c *ntfyClient) Send(ctx context.Context, n Notification) error {
 		return fmt.Errorf("post ntfy: %w", redact.Error(err)) // the topic in the URL is its credential
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-		// Redirect pages may echo a secret-bearing destination URL.
-		return fmt.Errorf("ntfy status %d", resp.StatusCode)
-	}
+	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("ntfy status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		// Gateways may echo the secret-bearing topic URL or Authorization
+		// header. Response bodies must not reach logs or task diagnostics.
+		return fmt.Errorf("ntfy status %d", resp.StatusCode)
 	}
 	return nil
 }

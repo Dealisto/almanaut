@@ -28,7 +28,7 @@ func TestIPAMFreeCapacityMatchesAvailableAddresses(t *testing.T) {
 		{name: "host route reservation", cidr: "10.0.0.1/32", start: "10.0.0.1", end: "10.0.0.1", reserved: 1},
 		{name: "IPv6 subnet base remains usable", cidr: "2001:db8::/126", start: "2001:db8::", end: "2001:db8::", free: 3, reserved: 1, next: "2001:db8::1"},
 		{name: "IPv6 gateway overlaps host", cidr: "2001:db8::/126", gateway: "2001:db8::1", hostIPs: []string{"2001:db8::1"}, free: 3, next: "2001:db8::"},
-		{name: "IPv4 reservations in mapped IPv6 subnet", cidr: "::ffff:192.0.2.0/120", start: "192.0.2.0", end: "192.0.2.10", free: 245, reserved: 11, next: "192.0.2.11"},
+		{name: "IPv4 reservations in mapped IPv6 subnet", cidr: "::ffff:192.0.2.0/120", start: "192.0.2.0", end: "192.0.2.10", free: 244, reserved: 10, next: "192.0.2.11"},
 		{name: "mapped reservations in IPv4 subnet", cidr: "192.0.2.0/24", start: "::ffff:192.0.2.0", end: "::ffff:192.0.2.10", free: 244, reserved: 10, next: "192.0.2.11"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -127,5 +127,30 @@ func TestIPAMMergesNestedAndOverlappingReservations(t *testing.T) {
 	got := BuildIPAM(networks, nil, reservations).Networks[0]
 	if got.ReservedCount != 30 || got.FreeCount != 224 || got.NextFree != "10.0.0.31" {
 		t.Fatalf("overlapping and adjacent ranges = %+v", got)
+	}
+}
+
+func TestIPAMGroupsReservationsWithoutChangingOrderOrAttribution(t *testing.T) {
+	networks := []Network{{ID: 1, CIDR: "10.0.0.0/24"}, {ID: 2, CIDR: "10.0.0.0/25"}, {ID: 3, CIDR: "10.0.1.0/24"}}
+	reservations := []Reservation{
+		{ID: 1, NetworkID: 2, StartIP: "10.0.0.5", EndIP: "10.0.0.5"},
+		{ID: 2, NetworkID: 1, StartIP: "10.0.0.1", EndIP: "10.0.0.2"},
+		{ID: 3, NetworkID: 99, StartIP: "10.0.0.3", EndIP: "10.0.0.3"},
+		{ID: 4, NetworkID: 2, StartIP: "10.0.0.1", EndIP: "10.0.0.1"},
+	}
+	original := append([]Reservation(nil), reservations...)
+	report := BuildIPAM(networks, nil, reservations)
+	for _, usage := range report.Networks {
+		single, ok := BuildNetworkUsage(usage.Network.ID, networks, nil, reservations)
+		if !ok || !reflect.DeepEqual(single, usage) {
+			t.Fatalf("grouped full report differs from individual view: %+v / %+v", usage, single)
+		}
+	}
+	if len(report.Networks[1].Reservations) != 2 || report.Networks[1].Reservations[0].ID != 1 || report.Networks[1].Reservations[1].ID != 4 {
+		t.Fatalf("reservation input order changed: %+v", report.Networks[1].Reservations)
+	}
+	report.Networks[1].Reservations[0].Name = "changed in report"
+	if !reflect.DeepEqual(reservations, original) {
+		t.Fatal("report reservations share caller-owned storage")
 	}
 }

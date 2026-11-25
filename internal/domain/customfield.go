@@ -109,8 +109,10 @@ func ValidateCustomFieldValue(kind CustomFieldKind, raw string) (string, error) 
 		switch strings.ToLower(raw) {
 		case "on", "true", "1", "yes", "y":
 			return "true", nil
-		default:
+		case "", "off", "false", "0", "no", "n":
 			return "false", nil
+		default:
+			return "", fmt.Errorf("must be a boolean (true or false)")
 		}
 	case KindDate:
 		if err := validateOptionalDate("value", raw); err != nil {

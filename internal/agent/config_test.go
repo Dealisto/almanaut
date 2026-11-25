@@ -1,11 +1,43 @@
 package agent
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestLoadConfigRejectsInvalidEndpointWithoutLeakingCredentials(t *testing.T) {
+	for _, endpoint := range []string{
+		"https://:8080", "https://alm.lan:65536", "https://alm.lan:0",
+		"https://user:private-secret@alm.lan", "https://alm.lan/private-secret/%zz",
+	} {
+		t.Run(endpoint, func(t *testing.T) {
+			p := writeConfig(t, fmt.Sprintf("server_url = %q\ntoken = \"t\"\n", endpoint))
+			_, err := LoadConfig(p, noEnv)
+			if err == nil {
+				t.Fatal("invalid server endpoint accepted")
+			}
+			if strings.Contains(err.Error(), "private-secret") {
+				t.Fatalf("configuration error leaks credentials: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadConfigRejectsInvalidBearerToken(t *testing.T) {
+	p := writeConfig(t, "server_url = \"https://alm.lan\"\ntoken = \"fallback\"\n")
+	for _, token := range []string{" ", "private-secret\r\n", "private-secret\x00", "private secret", "private-secret\t", "private-secreté"} {
+		_, err := LoadConfig(p, func(string) string { return token })
+		if err == nil {
+			t.Fatalf("invalid bearer token %q was accepted", token)
+		}
+		if strings.Contains(err.Error(), "private-secret") {
+			t.Fatalf("configuration error leaks token: %v", err)
+		}
+	}
+}
 
 func writeConfig(t *testing.T, body string) string {
 	t.Helper()

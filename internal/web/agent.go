@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 
 	"github.com/Dealisto/almanaut/internal/agentapi"
@@ -96,9 +95,8 @@ func agentReport(d agentDeps) http.HandlerFunc {
 			return
 		}
 
-		raw, err := io.ReadAll(req.Body)
-		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, "could not read body")
+		raw, ok := readAPIBody(w, req, "could not read body")
+		if !ok {
 			return
 		}
 		var rep agentapi.Report
@@ -129,7 +127,7 @@ func agentReport(d agentDeps) http.HandlerFunc {
 		// way it re-runs the whole closure against fresh state, so the
 		// loser's next attempt observes the winner's committed binding and
 		// takes the ordinary DecideConflict path.
-		err = store.WithTxRetry(d.db, func(tx *sql.Tx) error {
+		err := store.WithTxRetry(d.db, func(tx *sql.Tx) error {
 			// A failed attempt rolls back its host changes, so its pending
 			// webhook events must be discarded before the next attempt runs.
 			events = nil

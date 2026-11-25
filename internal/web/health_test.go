@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -17,15 +16,7 @@ import (
 // freshly migrated db, so tests can assert auth gating.
 func newTestServerAuthEnabled(t *testing.T) http.Handler {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	return newAuthedTestHandler(t, db)
 }
 
@@ -56,15 +47,7 @@ func TestHealthzOK(t *testing.T) {
 }
 
 func TestVersionEndpoint(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	srv := New(Config{
 		Hosts: store.NewHostRepo(db), Services: store.NewServiceRepo(db), Networks: store.NewNetworkRepo(db),
 		Domains: store.NewDomainRepo(db), Certificates: store.NewCertificateRepo(db), Backups: store.NewBackupRepo(db),

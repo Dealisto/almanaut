@@ -77,13 +77,11 @@ func (c *discordClient) Send(ctx context.Context, n Notification) error {
 		return fmt.Errorf("post discord: %w", redact.Error(err)) // the URL holds the webhook token
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-		// Redirect pages may echo a secret-bearing destination URL.
-		return fmt.Errorf("discord status %d", resp.StatusCode)
-	}
+	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("discord status %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
+		// Gateways may echo the webhook URL or its token. Keep response
+		// bodies out of errors that are logged or shown on the tasks page.
+		return fmt.Errorf("discord status %d", resp.StatusCode)
 	}
 	return nil
 }

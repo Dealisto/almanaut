@@ -51,7 +51,7 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		log.Fatalf("create data dir: %v", err)
 	}
 	dbPath := filepath.Join(cfg.DataDir, "almanaut.db")
@@ -312,8 +312,10 @@ func main() {
 		}
 		// Deliver what is already queued; retries waiting on a backoff past
 		// the deadline are dropped.
-		if webhookQueue != nil && !waitUntil(shutdownCtx, webhookQueue.Wait) {
-			log.Println("webhook deliveries still pending at the shutdown deadline; dropping them")
+		if webhookQueue != nil {
+			if err := webhookQueue.Shutdown(shutdownCtx); err != nil {
+				log.Println("webhook deliveries still pending at the shutdown deadline; dropping them")
+			}
 		}
 		cancel()
 		log.Println("stopped")

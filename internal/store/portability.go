@@ -174,14 +174,20 @@ func Import(db *sql.DB, snap Snapshot) error {
 	for _, def := range snap.CustomFieldDefs {
 		fieldKinds[def.ID] = def.Kind
 	}
-	for i := range snap.CustomFieldValues {
-		value := &snap.CustomFieldValues[i]
+	values := snap.CustomFieldValues[:0]
+	for _, value := range snap.CustomFieldValues {
 		normalized, err := domain.ValidateCustomFieldValue(fieldKinds[value.DefID], value.Value)
 		if err != nil {
 			return fmt.Errorf("custom field value %d (definition %d): %w", value.ID, value.DefID, err)
 		}
 		value.Value = normalized
+		// Match SetForEntity: an empty text, number or date is unset, not a
+		// stored empty value that can override a standard list column.
+		if normalized != "" {
+			values = append(values, value)
+		}
 	}
+	snap.CustomFieldValues = values
 	ports, unlinked, err := pairPortLinks(snap.Ports)
 	if err != nil {
 		return err

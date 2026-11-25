@@ -42,6 +42,14 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return exitOK
+		}
+		return exitUsage
+	}
+	if fs.NArg() > 1 {
+		fmt.Fprintln(stderr, "almanaut-agent: unexpected arguments; flags must precede the command")
+		fs.Usage()
 		return exitUsage
 	}
 

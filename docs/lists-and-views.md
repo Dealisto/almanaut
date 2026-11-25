@@ -60,6 +60,8 @@ longer matches anything still opens — it simply lists nothing.
 
 ## Bulk actions
 
+After an action, the list keeps its filters, sort order, and current page.
+
 Select rows with the checkboxes, open **Bulk actions**, and apply one action to
 all of them. The header checkbox selects every row on the current page;
 the selection count shows how many records the action will affect. Individual

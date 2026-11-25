@@ -133,6 +133,11 @@ entity type and has a kind (text, number, bool, or date). Defined fields
 appear on that type's edit forms and detail pages, their values are searchable
 from global search, and they round-trip through the YAML export.
 
+Boolean values accept `true`, `on`, `1`, `yes`, or `y`, and `false`, `off`,
+`0`, `no`, or `n` (case-insensitive, with surrounding whitespace ignored).
+An empty checkbox value means false. Other values are rejected, including
+during YAML import, so a typo cannot silently replace a stored true value.
+
 ## Attachments
 
 Any entity's detail page accepts **file attachments** (manuals, invoices,

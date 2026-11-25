@@ -135,13 +135,15 @@ func NetworkOverlaps(target Network, networks []Network) []Network {
 	return out
 }
 
-// sameBlock reports whether two aligned CIDR blocks are identical (same prefix
-// length and same masked base). Blocks of different sizes are parent/child, not
+// sameBlock reports whether two aligned CIDR blocks are identical (same size
+// and same masked base). Blocks of different sizes are parent/child, not
 // a conflict.
 func sameBlock(a, b *net.IPNet) bool {
-	aOnes, _ := a.Mask.Size()
-	bOnes, _ := b.Mask.Size()
-	return aOnes == bOnes && a.IP.Equal(b.IP)
+	aOnes, aBits := a.Mask.Size()
+	bOnes, bBits := b.Mask.Size()
+	// IP.Equal treats IPv4 and its IPv6-mapped spelling as the same address.
+	// Compare their block sizes on that same basis (/24 equals mapped /120).
+	return aBits-aOnes == bBits-bOnes && a.IP.Equal(b.IP)
 }
 
 // ipLess orders two IP strings by parsed value, falling back to lexical order

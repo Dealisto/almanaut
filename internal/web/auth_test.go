@@ -6,12 +6,10 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/Dealisto/almanaut/internal/domain"
-	"github.com/Dealisto/almanaut/internal/store"
 )
 
 func TestHashAndVerifyPassword(t *testing.T) {
@@ -115,15 +113,7 @@ func sessionCookie(t *testing.T, cookies []*http.Cookie) *http.Cookie {
 // returns the handler plus a valid session cookie for that user.
 func authTestServer(t *testing.T) (http.Handler, *http.Cookie) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
@@ -211,15 +201,7 @@ func TestBearerToken(t *testing.T) {
 }
 
 func TestLoginThrottleLocksOutAfterRepeatedFailures(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := store.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := store.Migrate(db, dbPath); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
+	db := newWebTestDB(t)
 	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}

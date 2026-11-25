@@ -51,7 +51,7 @@ func (r *SessionRepo) UserByToken(tokenHash, now string) (domain.User, error) {
 	row := r.db.QueryRow(
 		`SELECT u.id, u.username, u.role, u.password_hash, u.created_at, u.updated_at
 		 FROM sessions s JOIN users u ON u.id = s.user_id
-		 WHERE s.token_hash = ? AND s.expires_at > ?`,
+		 WHERE s.token_hash = ? AND julianday(s.expires_at) > julianday(?)`,
 		tokenHash, now,
 	)
 	return scanUser(row)
@@ -86,9 +86,9 @@ func (r *SessionRepo) DeleteOtherSessions(userID int64, keepTokenHash string) er
 	return nil
 }
 
-// DeleteExpired prunes every session whose expires_at is at or before now.
+// DeleteExpired prunes expired sessions and unusable malformed expiries.
 func (r *SessionRepo) DeleteExpired(now string) error {
-	if _, err := r.db.Exec(`DELETE FROM sessions WHERE expires_at <= ?`, now); err != nil {
+	if _, err := r.db.Exec(`DELETE FROM sessions WHERE julianday(expires_at) <= julianday(?) OR julianday(expires_at) IS NULL`, now); err != nil {
 		return fmt.Errorf("delete expired sessions: %w", err)
 	}
 	return nil
