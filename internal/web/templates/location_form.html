@@ -12,7 +12,7 @@
   <label>Site
     <select name="site_id">
       <option value="0">— none —</option>
-      {{range .Extras.Sites}}<option value="{{.ID}}"{{if eq .ID $.Item.SiteID}} selected{{end}}>{{.Name}}</option>{{end}}
+      {{$foundSiteID := false}}{{range .Extras.Sites}}{{if eq .ID $.Item.SiteID}}{{$foundSiteID = true}}{{end}}<option value="{{.ID}}"{{if eq .ID $.Item.SiteID}} selected{{end}}>{{.Name}}</option>{{end}}{{if and (gt .Item.SiteID 0) (not $foundSiteID)}}<option value="{{.Item.SiteID}}" selected>site:{{.Item.SiteID}} (deleted)</option>{{end}}
     </select>
   </label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>

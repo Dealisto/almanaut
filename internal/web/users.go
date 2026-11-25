@@ -203,14 +203,42 @@ func revokeSessions(sessions *store.SessionRepo, r *http.Request, userID int64) 
 // and must be invalidated in the same transaction.
 func setPasswordAndRevoke(db *sql.DB, users *store.UserRepo, sessions *store.SessionRepo, r *http.Request, userID int64, hash string) error {
 	return store.WithTx(db, func(tx *sql.Tx) error {
-		if err := users.WithTx(tx).UpdatePassword(userID, hash, nowRFC3339()); err != nil {
-			return err
-		}
-		if err := store.NewTOTPRepo(db).WithTx(tx).DeletePendingByUser(userID); err != nil {
-			return err
-		}
-		return revokeSessions(sessions.WithTx(tx), r, userID)
+		return writePasswordAndRevoke(users.WithTx(tx), sessions.WithTx(tx), store.NewTOTPRepo(db).WithTx(tx), r, userID, hash)
 	})
+}
+
+var errPasswordChanged = errors.New("password changed; sign in again before retrying")
+
+// changeVerifiedPassword rechecks the password hash verified by the handler
+// before replacing it. A concurrent reset must not be overwritten by a request
+// authenticated with the previous credentials. Bcrypt runs outside the lock.
+func changeVerifiedPassword(db *sql.DB, users *store.UserRepo, sessions *store.SessionRepo, r *http.Request, verified domain.User, hash string) error {
+	return store.WithTx(db, func(tx *sql.Tx) error {
+		ur := users.WithTx(tx)
+		current, err := ur.Get(verified.ID)
+		if errors.Is(err, store.ErrNotFound) {
+			return errPasswordChanged
+		}
+		if err != nil {
+			return err
+		}
+		if current.PasswordHash != verified.PasswordHash {
+			return errPasswordChanged
+		}
+		return writePasswordAndRevoke(ur, sessions.WithTx(tx), store.NewTOTPRepo(db).WithTx(tx), r, verified.ID, hash)
+	})
+}
+
+// writePasswordAndRevoke receives tx-bound repositories so the password and
+// credential revocations commit or roll back together.
+func writePasswordAndRevoke(users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPRepo, r *http.Request, userID int64, hash string) error {
+	if err := users.UpdatePassword(userID, hash, nowRFC3339()); err != nil {
+		return err
+	}
+	if err := totp.DeletePendingByUser(userID); err != nil {
+		return err
+	}
+	return revokeSessions(sessions, r, userID)
 }
 
 func resetUserPassword(users *store.UserRepo, sessions *store.SessionRepo, db *sql.DB, audit *store.AuthEventRepo) http.HandlerFunc {
@@ -266,7 +294,12 @@ func changePassword(users *store.UserRepo, sessions *store.SessionRepo, db *sql.
 			serverError(w, r, err)
 			return
 		}
-		if err := setPasswordAndRevoke(db, users, sessions, r, u.ID, hash); err != nil {
+		if err := changeVerifiedPassword(db, users, sessions, r, u, hash); err != nil {
+			if errors.Is(err, errPasswordChanged) {
+				w.WriteHeader(http.StatusConflict)
+				render(w, r, "password.html", passwordPageData{Title: "Change password", Error: errPasswordChanged.Error()})
+				return
+			}
 			serverError(w, r, err)
 			return
 		}

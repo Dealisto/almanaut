@@ -95,6 +95,7 @@ func (p *Prober) Run(ctx context.Context) error {
 // leaves the certificate row unchanged. Returns a non-nil error only on a
 // storage failure.
 func (p *Prober) ProbeOne(ctx context.Context, cert domain.Certificate) error {
+	startedAt := p.now()
 	dialCtx, cancel := context.WithTimeout(ctx, p.timeout)
 	leaf, probeErr := p.dial(dialCtx, cert.ProbeTarget)
 	cancel()
@@ -120,13 +121,18 @@ func (p *Prober) ProbeOne(ctx context.Context, cert domain.Certificate) error {
 		var prev *domain.CertProbeStatus
 		previous, err := state.Get(cert.ID)
 		if err == nil {
+			// A later-started probe may finish first, especially when a manual
+			// probe overlaps the scheduled pass. Preserve its result; identical
+			// start times keep the first committed result deterministically.
+			if !previous.ProbedAt.Before(startedAt) {
+				return nil
+			}
 			prev = &previous
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return err
 		}
-		now := p.now()
 		if probeErr != nil {
-			st := domain.CertProbeStatus{ProbedAt: now, Success: false, LastError: probeErr.Error()}
+			st := domain.CertProbeStatus{ProbedAt: startedAt, Success: false, LastError: probeErr.Error()}
 			if prev != nil {
 				st.Serial, st.Issuer, st.SANs, st.NotAfter = prev.Serial, prev.Issuer, prev.SANs, prev.NotAfter
 			}
@@ -143,7 +149,7 @@ func (p *Prober) ProbeOne(ctx context.Context, cert domain.Certificate) error {
 			return err
 		}
 		return state.Upsert(cert.ID, domain.CertProbeStatus{
-			ProbedAt: now, Success: true, Serial: serial, Issuer: issuer,
+			ProbedAt: startedAt, Success: true, Serial: serial, Issuer: issuer,
 			SANs: sans, NotAfter: notAfter, Mismatches: mismatches,
 		})
 	})

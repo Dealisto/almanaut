@@ -121,3 +121,43 @@ func TestCompareValuesNumeric(t *testing.T) {
 		t.Error("string compare should be case-insensitive: alpha before Zebra")
 	}
 }
+
+func TestCompareValuesMixedOrder(t *testing.T) {
+	// Numeric values sort first, followed by text. NaN must be text because
+	// treating it as equal to every number breaks the sort comparator contract.
+	ordered := []string{"-Inf", "-2", "2", "10", "+Inf", "", "1x", "alpha", "NaN", "Zebra"}
+	for i, a := range ordered {
+		for j, b := range ordered {
+			got := compareValues(a, b)
+			if (i < j && got >= 0) || (i == j && got != 0) || (i > j && got <= 0) {
+				t.Errorf("compareValues(%q, %q) = %d; expected the order of positions %d and %d", a, b, got, i, j)
+			}
+		}
+	}
+}
+
+func TestListSortMixedNumbersAndText(t *testing.T) {
+	srv := newTestServer(t)
+	for _, name := range []string{"1x", "10", "2"} {
+		if rec := postForm(t, srv, "/hosts", url.Values{"name": {name}, "type": {"physical"}}); rec.Code != 303 {
+			t.Fatalf("create host %q = %d", name, rec.Code)
+		}
+	}
+	for _, tc := range []struct {
+		direction string
+		ids       []string
+	}{
+		{"asc", []string{"3", "2", "1"}},
+		{"desc", []string{"1", "2", "3"}},
+	} {
+		body := getBody(t, srv, "/hosts?sort=Name&dir="+tc.direction)
+		previous := -1
+		for _, id := range tc.ids {
+			position := strings.Index(body, `href="/hosts/`+id+`"`)
+			if position <= previous {
+				t.Fatalf("%s order: host %s occurs at %d after position %d", tc.direction, id, position, previous)
+			}
+			previous = position
+		}
+	}
+}

@@ -49,6 +49,63 @@ details are listed there.
   requires a pre-upgrade database backup.
 
 ### Fixed
+- Record history and post-commit webhooks for indirectly changed ports when
+  connecting, disconnecting, replacing or deleting a peer, or moving/deleting
+  their NIC. Unchanged peers remain silent; failures roll back all changes.
+- Reject stale self-service password changes after a concurrent reset, preserving
+  the newer credentials and their active sessions and challenges.
+- Treat notification redirects as failed deliveries instead of accepting a
+  bodyless redirected request as success; keep redirect destinations out of logs.
+- Preserve missing soft references in edit selectors until explicitly replaced
+  or cleared, instead of silently selecting another owner or no association.
+- Avoid recording history or refreshing inventory activity for bulk tag no-ops,
+  and record tag names in the same canonical form as storage.
+- Keep agent virtualization undetermined when required container signals cannot
+  be read, reporting root filesystem usage instead of potentially shared disks.
+- Report custom-field definition lookup failures as generic HTTP 500 responses
+  while preserving HTTP 400 for invalid JSON field values.
+- Build history, webhook payloads, and JSON write responses from stored entity
+  state, avoiding fictitious liveness changes and preserving normalized arrays.
+- Revalidate password credentials and current two-factor policy atomically with
+  login issuance, preventing a concurrent password reset from leaving a new
+  session or pending challenge authenticated with the previous password.
+- Discard liveness results for changed, disabled, or deleted targets and retain
+  newer observations when checks finish out of order.
+- Dispatch agent webhooks only for the committed transaction attempt after
+  transient database contention triggers a retry.
+- Fail resource forms when relationship options cannot be loaded, preventing
+  empty selectors from silently clearing existing associations.
+- Reject object and array values in scalar custom fields before changing any
+  inventory data through the JSON API.
+- Preserve full integer identifiers in bulk edits and change-history diffs, and
+  include the inserted entity ID in creation webhook payloads.
+- Reject duplicate CSV headers before importing, including duplicates hidden
+  by surrounding whitespace or a leading UTF-8 BOM.
+- Include accepted whitespace-padded dates in expiry checks, and honor padded
+  gateway and reserved-range addresses in IPAM calculations.
+- Reject IP reservations whose endpoints belong to different address families.
+- Resolve imported port links independently of input order when dangling peer
+  references must be cleared before completing reciprocal connections.
+- Reject malformed Uptime Kuma monitor lists instead of treating them as an
+  empty inventory that needs replacement monitors.
+- Preserve the newest-started certificate probe when concurrent probes finish
+  out of order, retaining subsecond timestamps for comparisons.
+- Run health checks without reloading startup secrets or discovery files, so
+  rotating or removing those files does not misreport a running server's health.
+- Reject cross-origin browser form submissions even when their CSRF cookie and
+  form token match; retain support for TLS-terminating proxies preserving Host.
+- Rate-limit attempts to turn off two-factor authentication independently from
+  login, and preserve one-time credentials if saving the removal fails.
+- Retry failed scheduled-discovery notifications on later scans, including
+  after restart, and include delivery failures in discovery run history.
+- Reject non-finite custom-field numbers and validate imported values against
+  their field definitions before replacing inventory. Keep legacy invalid
+  numeric values readable through the JSON API.
+- Sort mixed numeric and text list values consistently, including NaN values.
+- Allow editing unassigned hosts and hardware with zero rack height, and give
+  network-discovery selection checkboxes accessible labels.
+- Probe the configured healthcheck address, including IPv6 and explicit IPv4
+  bindings, without routing local health checks through an HTTP proxy.
 - Keep long service tables and their screen-reader labels inside the table's
   scroll area instead of causing page-level horizontal scrolling.
 - Reject empty, unversioned, misspelled, or multi-document YAML imports before

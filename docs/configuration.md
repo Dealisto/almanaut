@@ -159,6 +159,11 @@ Almanaut serves plain HTTP with no built-in TLS, so put a reverse proxy in
 front for anything beyond localhost, and set `ALMANAUT_SECURE_COOKIES=true` so
 cookies get the `Secure` flag once TLS is terminated upstream.
 
+Preserve the browser's original `Host` header when proxying requests. Form
+submissions check browser origin metadata as well as CSRF tokens; a proxy that
+rewrites `Host` can cause valid submissions to be rejected. HTTPS termination
+at the proxy is supported without trusting forwarded origin headers.
+
 **Caddy** — automatic Let's Encrypt TLS in two lines (`Caddyfile`):
 
 ```caddyfile

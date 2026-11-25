@@ -676,6 +676,7 @@ func TestAgentReportRollsBackHostOnAgentIDConflict(t *testing.T) {
 		repo:  hosts,
 		label: func(h domain.Host) string { return h.Name },
 		id:    func(h domain.Host) int64 { return h.ID },
+		setID: func(h *domain.Host, id int64) { h.ID = id },
 	}
 	deps := handlerDeps{
 		changelog:    store.NewChangelogRepo(db),
@@ -760,6 +761,7 @@ func agentDepsWithFake(t *testing.T, fake fakeAgentRepo) (agentDeps, *sql.DB, *r
 		repo:  hosts,
 		label: func(h domain.Host) string { return h.Name },
 		id:    func(h domain.Host) int64 { return h.ID },
+		setID: func(h *domain.Host, id int64) { h.ID = id },
 	}
 	deps := handlerDeps{
 		changelog:    store.NewChangelogRepo(db),

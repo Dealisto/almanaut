@@ -41,7 +41,7 @@ func (rs resource[T]) bulk(d handlerDeps) http.HandlerFunc {
 		value := req.FormValue("value")
 		switch action {
 		case "tag-add", "tag-remove":
-			if tag == "" {
+			if domain.NormalizeTag(tag) == "" {
 				http.Error(w, "a tag name is required", http.StatusBadRequest)
 				return
 			}
@@ -91,21 +91,31 @@ func (rs resource[T]) bulkTag(tx *sql.Tx, d handlerDeps, id int64, action, tag, 
 	if err != nil {
 		return err
 	}
+	canonicalTag := domain.NormalizeTag(tag)
+	tags := d.tags.WithTx(tx)
+	existing, err := tags.ListForEntity(rs.sing, id)
+	if err != nil {
+		return err
+	}
+	present := slices.ContainsFunc(existing, func(t domain.Tag) bool { return t.Name == canonicalTag })
+	if (action == "tag-add" && present) || (action == "tag-remove" && !present) {
+		return nil // No change: preserve history and the entity's activity clock.
+	}
 	var old, new string
 	if action == "tag-add" {
 		t := domain.Tag{EntityType: rs.sing, EntityID: id, Name: tag}
 		if err := t.Validate(); err != nil {
 			return err
 		}
-		if err := d.tags.WithTx(tx).Add(t); err != nil {
+		if err := tags.Add(t); err != nil {
 			return err
 		}
-		new = tag
+		new = canonicalTag
 	} else {
-		if err := d.tags.WithTx(tx).RemoveByName(rs.sing, id, tag); err != nil {
+		if err := tags.RemoveByName(rs.sing, id, tag); err != nil {
 			return err
 		}
-		old = tag
+		old = canonicalTag
 	}
 	return d.changelog.WithTx(tx).Create(store.ChangeEvent{
 		EntityType: rs.sing, EntityID: id, Label: rs.label(item),
@@ -148,7 +158,8 @@ func parseIDs(raw []string) []int64 {
 }
 
 // mergeField returns a copy of item with one JSON field set to value, via a
-// JSON round-trip. Only string fields succeed: assigning a string to a numeric,
+// JSON round-trip that preserves the exact encoding of untouched fields. Only
+// string fields succeed: assigning a string to a numeric,
 // boolean, or slice field fails to unmarshal and returns an error, which is why
 // the handler restricts the field picker to string fields.
 func mergeField[T any](item T, key, value string) (T, error) {
@@ -157,14 +168,18 @@ func mergeField[T any](item T, key, value string) (T, error) {
 	if err != nil {
 		return out, err
 	}
-	var m map[string]any
+	var m map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return out, err
 	}
 	if _, ok := m[key]; !ok {
 		return out, fmt.Errorf("unknown field %q", key)
 	}
-	m[key] = value
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return out, err
+	}
+	m[key] = encoded
 	raw2, err := json.Marshal(m)
 	if err != nil {
 		return out, err

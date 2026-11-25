@@ -33,16 +33,22 @@ import (
 var version = "dev"
 
 func main() {
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("load config: %v", err)
-	}
-
 	// "almanaut healthcheck" probes the local /healthz endpoint and exits 0/1.
 	// It backs the container HEALTHCHECK, which cannot use a shell on the
 	// distroless image, so the binary doubles as its own probe client.
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
-		os.Exit(runHealthcheck(cfg.Addr))
+		// The running server already loaded its configuration. Missing or
+		// rotated startup files must not make a healthy process fail its probe.
+		addr := os.Getenv("ALMANAUT_ADDR")
+		if addr == "" {
+			addr = config.DefaultAddr
+		}
+		os.Exit(runHealthcheck(addr))
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("load config: %v", err)
 	}
 
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
@@ -332,16 +338,25 @@ func waitUntil(ctx context.Context, wait func()) bool {
 
 // runHealthcheck issues a GET to the local /healthz endpoint and returns a
 // process exit code: 0 when it answers 200, 1 otherwise. addr is the server's
-// listen address (e.g. ":8080" or "0.0.0.0:8080"); the probe always targets
-// loopback regardless of the bind host.
+// listen address (e.g. ":8080" or "0.0.0.0:8080"). Wildcard listeners are
+// probed through loopback; explicit hosts retain their address and IP family.
 func runHealthcheck(addr string) int {
-	_, port, err := net.SplitHostPort(addr)
+	host, port, err := net.SplitHostPort(addr)
 	if err != nil || port == "" {
 		log.Printf("healthcheck: invalid address %q: %v", addr, err)
 		return 1
 	}
-	url := "http://" + net.JoinHostPort("127.0.0.1", port) + "/healthz"
-	client := &http.Client{Timeout: 3 * time.Second}
+	switch host {
+	case "", "0.0.0.0":
+		host = "127.0.0.1"
+	case "::":
+		host = "::1"
+	}
+	url := "http://" + net.JoinHostPort(host, port) + "/healthz"
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil // A local health probe must not go through an HTTP proxy.
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Timeout: 3 * time.Second, Transport: transport}
 	resp, err := client.Get(url)
 	if err != nil {
 		log.Printf("healthcheck: %v", err)

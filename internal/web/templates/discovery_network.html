@@ -35,7 +35,7 @@
       <tbody>
       {{range .Rows}}
         <tr>
-          <td>{{if not .AlreadyTracked}}<input type="checkbox" name="host" value="{{.IP}}|{{.Name}}|{{.Ports}}" checked>{{end}}</td>
+          <td>{{if not .AlreadyTracked}}<input type="checkbox" name="host" value="{{.IP}}|{{.Name}}|{{.Ports}}" aria-label="Import {{.Name}} ({{.IP}})" checked>{{end}}</td>
           <td>{{.Name}}</td>
           <td>{{.IP}}</td>
           <td>{{.Ports}}</td>

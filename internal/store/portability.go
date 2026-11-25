@@ -167,6 +167,21 @@ func Import(db *sql.DB, snap Snapshot) error {
 	}
 
 	snap, skipped := dropDanglingRefs(snap)
+	// dropDanglingRefs copies the surviving rows, so normalization never
+	// changes the caller's snapshot. Missing or mismatched definitions retain
+	// their legacy skip behavior before typed values are checked.
+	fieldKinds := make(map[int64]domain.CustomFieldKind, len(snap.CustomFieldDefs))
+	for _, def := range snap.CustomFieldDefs {
+		fieldKinds[def.ID] = def.Kind
+	}
+	for i := range snap.CustomFieldValues {
+		value := &snap.CustomFieldValues[i]
+		normalized, err := domain.ValidateCustomFieldValue(fieldKinds[value.DefID], value.Value)
+		if err != nil {
+			return fmt.Errorf("custom field value %d (definition %d): %w", value.ID, value.DefID, err)
+		}
+		value.Value = normalized
+	}
 	ports, unlinked, err := pairPortLinks(snap.Ports)
 	if err != nil {
 		return err
@@ -567,17 +582,24 @@ func pairPortLinks(ports []domain.Port) ([]domain.Port, int, error) {
 		index[p.ID] = i
 	}
 	cleared := 0
+	// Clear every missing target before completing reciprocal links. Otherwise
+	// A -> B with B -> missing succeeds only when B happens to appear first.
 	for i := range out {
 		p := &out[i]
 		if p.PeerPortID == 0 {
 			continue
 		}
-		j, ok := index[p.PeerPortID]
-		if !ok {
+		if _, ok := index[p.PeerPortID]; !ok {
 			p.PeerPortID = 0
 			cleared++
+		}
+	}
+	for i := range out {
+		p := &out[i]
+		if p.PeerPortID == 0 {
 			continue
 		}
+		j := index[p.PeerPortID]
 		peer := &out[j]
 		switch peer.PeerPortID {
 		case p.ID:

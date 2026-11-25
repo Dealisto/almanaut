@@ -88,6 +88,11 @@ Turning 2FA off requires a current TOTP code or a recovery code, not just your
 session. That is deliberate: a hijacked session should not be able to quietly
 remove the second factor it is supposed to be protected by.
 
+After five failed removal attempts, further attempts are refused for 15 minutes.
+This per-user limit is separate from login throttling and resets on server
+restart. If saving the removal fails, the submitted one-time credential remains
+usable for a retry.
+
 With 2FA on, logging in becomes two steps — the password form, then a challenge
 at `/login/2fa` reached through a short-lived cookie that is only valid between
 the two. A correct password alone creates no session.

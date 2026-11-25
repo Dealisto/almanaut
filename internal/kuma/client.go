@@ -164,7 +164,15 @@ func (s *Session) readLoop(ctx context.Context) {
 		case strings.HasPrefix(msg, "43"): // ack
 			s.resolveAck(msg)
 		case strings.HasPrefix(msg, "42"): // server-initiated event
-			s.handleEvent(msg)
+			if err := s.handleEvent(msg); err != nil {
+				select {
+				case s.readErr <- err:
+				default:
+				}
+				s.conn.CloseNow()
+				s.failPendingAcks()
+				return
+			}
 		}
 	}
 }
@@ -246,32 +254,47 @@ func (s *Session) failPendingAcks() {
 
 // handleEvent captures server pushes we care about (monitorList); the rest of
 // Kuma's chatty updates (heartbeats, uptime, ...) are ignored.
-func (s *Session) handleEvent(msg string) {
+func (s *Session) handleEvent(msg string) error {
 	rest := strings.TrimLeft(msg[2:], "0123456789")
 	var arr []json.RawMessage
 	if err := json.Unmarshal([]byte(rest), &arr); err != nil || len(arr) < 2 {
-		return
+		return nil
 	}
 	var event string
 	if err := json.Unmarshal(arr[0], &event); err != nil || event != "monitorList" {
-		return
+		return nil
 	}
 	var list map[string]map[string]any
-	if err := json.Unmarshal(arr[1], &list); err != nil {
-		return
+	// Some socket.io versions encode an empty collection as []. Only an
+	// empty array is equivalent to an empty object; null and malformed lists
+	// must not erase our view of existing monitors and trigger replacements.
+	if strings.HasPrefix(strings.TrimSpace(string(arr[1])), "[") {
+		var entries []json.RawMessage
+		if err := json.Unmarshal(arr[1], &entries); err != nil || len(entries) != 0 {
+			return errors.New("kuma: invalid monitorList array")
+		}
+		list = map[string]map[string]any{}
+	} else if err := json.Unmarshal(arr[1], &list); err != nil || list == nil {
+		return errors.New("kuma: invalid monitorList object")
 	}
 	mons := make(map[int64]Monitor, len(list))
 	for key, raw := range list {
 		id, err := strconv.ParseInt(key, 10, 64)
-		if err != nil {
-			continue
+		if err != nil || id <= 0 || raw == nil {
+			return errors.New("kuma: invalid monitorList entry")
 		}
 		m := Monitor{ID: id, raw: raw}
-		if v, ok := raw["name"].(string); ok {
-			m.Name = v
+		name, ok := raw["name"].(string)
+		if !ok {
+			return errors.New("kuma: invalid monitorList name")
 		}
-		if v, ok := raw["url"].(string); ok {
-			m.URL = v
+		m.Name = name
+		if value, exists := raw["url"]; exists && value != nil {
+			url, ok := value.(string)
+			if !ok {
+				return errors.New("kuma: invalid monitorList URL")
+			}
+			m.URL = url
 		}
 		mons[id] = m
 	}
@@ -283,6 +306,7 @@ func (s *Session) handleEvent(msg string) {
 	default:
 		close(s.monsOnce)
 	}
+	return nil
 }
 
 // Monitors returns the most recent monitor list pushed by the server.

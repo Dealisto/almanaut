@@ -55,6 +55,41 @@ func TestCSRFPostMatchingTokenAllows(t *testing.T) {
 	}
 }
 
+func TestCSRFRequestOrigins(t *testing.T) {
+	for _, tc := range []struct {
+		name, origin, site string
+		secure, allowed    bool
+	}{
+		{name: "same origin", origin: "http://inventory.example", allowed: true},
+		{name: "TLS terminated at proxy", origin: "https://inventory.example", secure: true, allowed: true},
+		{name: "browser same origin", site: "same-origin", allowed: true},
+		{name: "non-browser client", allowed: true},
+		{name: "different origin", origin: "https://other.example"},
+		{name: "sibling subdomain", origin: "https://other.inventory.example", site: "same-site"},
+		{name: "cross site", site: "cross-site"},
+		{name: "opaque origin", origin: "null"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var reached bool
+			h := csrfProtect(tc.secure)(passThrough(&reached))
+			req := httptest.NewRequest(http.MethodPost, "http://inventory.example/hosts", strings.NewReader(csrfFieldName+"=valid-token"))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("Origin", tc.origin)
+			req.Header.Set("Sec-Fetch-Site", tc.site)
+			req.AddCookie(&http.Cookie{Name: csrfCookieName, Value: "valid-token"})
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			want := http.StatusForbidden
+			if tc.allowed {
+				want = http.StatusOK
+			}
+			if reached != tc.allowed || rec.Code != want {
+				t.Fatalf("request origin: reached=%v status=%d, want reached=%v status=%d", reached, rec.Code, tc.allowed, want)
+			}
+		})
+	}
+}
+
 func TestCSRFPostMismatchOrMissingRejected(t *testing.T) {
 	cases := []struct {
 		name      string

@@ -9,6 +9,9 @@ import (
 	"time"
 )
 
+// DefaultAddr is shared by server startup and the standalone health probe.
+const DefaultAddr = ":8080"
+
 // Config holds the runtime configuration for the server.
 type Config struct {
 	DiscoverySources     []DiscoverySource // engine sources loaded from a file or legacy environment settings
@@ -101,7 +104,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg := Config{
-		Addr:                          getenv("ALMANAUT_ADDR", ":8080"),
+		Addr:                          getenv("ALMANAUT_ADDR", DefaultAddr),
 		DataDir:                       getenv("ALMANAUT_DATA_DIR", "./data"),
 		DockerSocket:                  getenv("ALMANAUT_DOCKER_SOCKET", "/var/run/docker.sock"),
 		NetworkScanEnabled:            getenvBool("ALMANAUT_ENABLE_NETWORK_SCAN", false),

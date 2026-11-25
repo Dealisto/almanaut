@@ -128,6 +128,9 @@ func agentReport(d agentDeps) http.HandlerFunc {
 		// loser's next attempt observes the winner's committed binding and
 		// takes the ordinary DecideConflict path.
 		err = store.WithTxRetry(d.db, func(tx *sql.Tx) error {
+			// A failed attempt rolls back its host changes, so its pending
+			// webhook events must be discarded before the next attempt runs.
+			events = nil
 			agents := d.agents.WithTx(tx)
 
 			var existing *agentapi.Binding

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"database/sql"
 	"encoding/json"
 	"io"
 	"log"
@@ -33,6 +34,12 @@ func (r *recordingDispatcher) all() []webhook.Event {
 
 func newTestServerWH(t *testing.T) (http.Handler, *recordingDispatcher) {
 	t.Helper()
+	srv, _, rec := newTestServerWHDB(t)
+	return srv, rec
+}
+
+func newTestServerWHDB(t *testing.T) (http.Handler, *sql.DB, *recordingDispatcher) {
+	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := store.Open(dbPath)
 	if err != nil {
@@ -54,7 +61,7 @@ func newTestServerWH(t *testing.T) (http.Handler, *recordingDispatcher) {
 		Docker: fakeScanner{}, NetScan: fakeNetworkScanner{}, NetOpts: NetDiscoveryOptions{}, Proxmox: fakeProxmoxScanner{}, PVEOpts: ProxmoxOptions{},
 		Webhooks: rec,
 	})
-	return srv, rec
+	return srv, db, rec
 }
 
 func TestWebhookEventOnCreate(t *testing.T) {
@@ -74,6 +81,15 @@ func TestWebhookEventOnCreate(t *testing.T) {
 	}
 	if data["name"] != "box" {
 		t.Errorf("data.name = %v, want box", data["name"])
+	}
+	var identity struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal(evs[0].Data, &identity); err != nil {
+		t.Fatal(err)
+	}
+	if evs[0].ID <= 0 || identity.ID != evs[0].ID {
+		t.Errorf("create payload ID=%d, want inserted event ID=%d", identity.ID, evs[0].ID)
 	}
 }
 

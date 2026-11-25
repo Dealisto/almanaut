@@ -21,11 +21,11 @@
   <label>Rack
     <select name="rack_id">
       <option value="0">— none —</option>
-      {{range .Extras.Racks}}<option value="{{.ID}}"{{if eq .ID $.Item.RackID}} selected{{end}}>{{.Name}}</option>{{end}}
+      {{$foundRackID := false}}{{range .Extras.Racks}}{{if eq .ID $.Item.RackID}}{{$foundRackID = true}}{{end}}<option value="{{.ID}}"{{if eq .ID $.Item.RackID}} selected{{end}}>{{.Name}}</option>{{end}}{{if and (gt .Item.RackID 0) (not $foundRackID)}}<option value="{{.Item.RackID}}" selected>rack:{{.Item.RackID}} (deleted)</option>{{end}}
     </select>
   </label>
   <label>Rack position (U)<input type="number" name="rack_position" min="0" max="60" value="{{.Item.RackPosition}}"></label>
-  <label>Height (U)<input type="number" name="u_height" min="1" max="60" value="{{.Item.UHeight}}"></label>
+  <label>Height (U)<input type="number" name="u_height" min="0" max="60" value="{{.Item.UHeight}}"></label>
   {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>

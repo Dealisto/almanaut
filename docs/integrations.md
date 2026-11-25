@@ -18,6 +18,12 @@ date beyond the window) re-arms it for next time. The check runs at startup
 and every `ALMANAUT_NOTIFY_INTERVAL`. Leave both URLs unset to disable
 notifications entirely.
 
+Notification URLs must point directly to their final ntfy or Discord endpoint.
+HTTP redirects are treated as failed deliveries, including redirects that
+preserve the POST method; this prevents a redirected request from being mistaken
+for a delivered alert. Redirect response bodies are omitted from error logs
+because they may contain secret-bearing destination URLs.
+
 ## Outbound webhooks
 
 Set `ALMANAUT_WEBHOOKS_ENABLED=true` to push a signed HTTP payload to your own

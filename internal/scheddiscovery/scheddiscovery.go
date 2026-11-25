@@ -190,18 +190,6 @@ func (d *Detector) finish(ctx context.Context, source string, start time.Time, f
 		}
 	}
 
-	errStr := ""
-	if scanErr != nil {
-		errStr = scanErr.Error()
-	}
-	if _, err := d.runs.Record(store.DiscoveryRun{
-		Source: source, StartedAt: start, FinishedAt: d.now(),
-		FoundCount: found, NewCount: len(newKeys), Error: errStr, NewKeys: newKeys,
-	}); err != nil {
-		d.log.Error("discovery: record run", "source", source, "err", err)
-		runErr = errors.Join(runErr, fmt.Errorf("record discovery run: %w", err))
-	}
-
 	if scanErr == nil && len(fresh) > 0 {
 		n := notify.Notification{
 			Title: fmt.Sprintf("Discovery: %d new %s item(s) to review", len(fresh), source),
@@ -211,6 +199,22 @@ func (d *Detector) finish(ctx context.Context, source string, start time.Time, f
 			d.log.Error("discovery: send notification", "source", source, "err", err)
 			runErr = errors.Join(runErr, fmt.Errorf("send discovery notification: %w", err))
 		}
+	}
+	// Advance the comparison baseline only after delivery succeeds. A failed
+	// send remains in history with its scan results, but the next pass (including
+	// after restart) retries against the last fully successful run. Delivery is
+	// at least once: if sending succeeds but recording fails, a retry may send
+	// the notification again rather than silently lose it.
+	errStr := ""
+	if runErr != nil {
+		errStr = runErr.Error()
+	}
+	if _, err := d.runs.Record(store.DiscoveryRun{
+		Source: source, StartedAt: start, FinishedAt: d.now(),
+		FoundCount: found, NewCount: len(newKeys), Error: errStr, NewKeys: newKeys,
+	}); err != nil {
+		d.log.Error("discovery: record run", "source", source, "err", err)
+		runErr = errors.Join(runErr, fmt.Errorf("record discovery run: %w", err))
 	}
 	return runErr
 }

@@ -108,27 +108,27 @@ func TestDetectVirtKind(t *testing.T) {
 		// Physical: false positive prevention
 		{
 			name:  "systemd unit docker.service is not a container",
-			files: map[string]string{"proc/1/cgroup": "0::/system.slice/docker.service\n"},
+			files: map[string]string{"proc/1/cgroup": "0::/system.slice/docker.service\n", "proc/1/environ": ""},
 			want:  "physical",
 		},
 		{
 			name:  "systemd unit lxcbackup.service is not a container",
-			files: map[string]string{"proc/1/cgroup": "0::/system.slice/lxcbackup.service\n"},
+			files: map[string]string{"proc/1/cgroup": "0::/system.slice/lxcbackup.service\n", "proc/1/environ": ""},
 			want:  "physical",
 		},
 		{
 			name:  "systemd unit dockerize.service is not a container",
-			files: map[string]string{"proc/1/cgroup": "0::/system.slice/dockerize.service\n"},
+			files: map[string]string{"proc/1/cgroup": "0::/system.slice/dockerize.service\n", "proc/1/environ": ""},
 			want:  "physical",
 		},
 		{
 			name:  "empty cgroup path is not a container",
-			files: map[string]string{"proc/1/cgroup": "0::/\n"},
+			files: map[string]string{"proc/1/cgroup": "0::/\n", "proc/1/environ": ""},
 			want:  "physical",
 		},
 		{
 			name:  "systemd user slice is not a container",
-			files: map[string]string{"proc/1/cgroup": "11:name=systemd:/user.slice/user-1000.slice\n"},
+			files: map[string]string{"proc/1/cgroup": "11:name=systemd:/user.slice/user-1000.slice\n", "proc/1/environ": ""},
 			want:  "physical",
 		},
 
@@ -202,19 +202,19 @@ func TestDetectVirtKind(t *testing.T) {
 		// VM detection
 		{
 			name:  "kvm guest via DMI",
-			files: map[string]string{"sys/class/dmi/id/product_name": "KVM\n"},
+			files: map[string]string{"sys/class/dmi/id/product_name": "KVM\n", "proc/1/environ": ""},
 			want:  "vm",
 		},
 		{
 			name:  "vmware guest via DMI vendor",
-			files: map[string]string{"sys/class/dmi/id/sys_vendor": "VMware, Inc.\n"},
+			files: map[string]string{"sys/class/dmi/id/sys_vendor": "VMware, Inc.\n", "proc/1/environ": ""},
 			want:  "vm",
 		},
 
 		// Physical/bare metal
 		{
 			name:  "bare metal when nothing indicates otherwise",
-			files: map[string]string{"sys/class/dmi/id/sys_vendor": "ASUSTeK COMPUTER INC.\n"},
+			files: map[string]string{"sys/class/dmi/id/sys_vendor": "ASUSTeK COMPUTER INC.\n", "proc/1/environ": ""},
 			want:  "physical",
 		},
 	}

@@ -12,7 +12,7 @@
   <label>Network
     <select name="network_id">
       <option value="0">— none —</option>
-      {{range .Extras.Networks}}<option value="{{.ID}}"{{if eq .ID $.Item.NetworkID}} selected{{end}}>{{.Name}} ({{.CIDR}})</option>{{end}}
+      {{$foundNetworkID := false}}{{range .Extras.Networks}}{{if eq .ID $.Item.NetworkID}}{{$foundNetworkID = true}}{{end}}<option value="{{.ID}}"{{if eq .ID $.Item.NetworkID}} selected{{end}}>{{.Name}} ({{.CIDR}})</option>{{end}}{{if and (gt .Item.NetworkID 0) (not $foundNetworkID)}}<option value="{{.Item.NetworkID}}" selected>network:{{.Item.NetworkID}} (deleted)</option>{{end}}
     </select>
   </label>
   <label>Start IP<input name="start_ip" value="{{.Item.StartIP}}" placeholder="10.0.0.100"></label>

@@ -41,6 +41,10 @@ func (d handlerDeps) parseCustomFields(entityType string, get func(string) strin
 	return out, nil
 }
 
+// customFieldValidationError distinguishes invalid input from definition lookup
+// failures, which must be reported as server errors rather than client errors.
+type customFieldValidationError struct{ error }
+
 // parseJSONCustomFields resolves a decoded custom_fields object (name → raw JSON
 // value) against the definitions for entityType, validating each value, and
 // returns a map[defID]canonical-value for SetForEntity. Names with no matching
@@ -65,11 +69,15 @@ func (d handlerDeps) parseJSONCustomFields(entityType string, raw map[string]jso
 		}
 		var v any
 		if err := json.Unmarshal(rawVal, &v); err != nil {
-			return nil, fmt.Errorf("%s: invalid value", name)
+			return nil, customFieldValidationError{fmt.Errorf("%s: invalid value", name)}
+		}
+		switch v.(type) {
+		case []any, map[string]any:
+			return nil, customFieldValidationError{fmt.Errorf("%s: value must be a string, number, boolean, or null", def.Label)}
 		}
 		canon, err := domain.ValidateCustomFieldValue(def.Kind, jsonValueToString(v))
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", def.Label, err)
+			return nil, customFieldValidationError{fmt.Errorf("%s: %w", def.Label, err)}
 		}
 		out[def.ID] = canon
 	}

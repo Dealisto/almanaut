@@ -13,7 +13,7 @@
   <label>VLAN
     <select name="vlan_id">
       <option value="0">— none —</option>
-      {{range .Extras.VLANs}}<option value="{{.ID}}"{{if eq .ID $.Item.VLANID}} selected{{end}}>VLAN {{.VID}} ({{.Name}})</option>{{end}}
+      {{$foundVLANID := false}}{{range .Extras.VLANs}}{{if eq .ID $.Item.VLANID}}{{$foundVLANID = true}}{{end}}<option value="{{.ID}}"{{if eq .ID $.Item.VLANID}} selected{{end}}>VLAN {{.VID}} ({{.Name}})</option>{{end}}{{if and (gt .Item.VLANID 0) (not $foundVLANID)}}<option value="{{.Item.VLANID}}" selected>vlan:{{.Item.VLANID}} (deleted)</option>{{end}}
     </select>
   </label>
   <label>Gateway<input name="gateway" value="{{.Item.Gateway}}"></label>

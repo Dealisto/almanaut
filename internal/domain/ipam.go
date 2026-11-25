@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net"
 	"sort"
+	"strings"
 )
 
 // maxEnumerableHostBits caps the subnet size NextFree will scan: 2^16 addresses.
@@ -185,7 +186,7 @@ func buildUsage(n Network, used []Allocation, reservations []Reservation) Networ
 			taken[ip] = true
 		}
 		// The gateway is a reserved address: never suggest it as free.
-		if gw := net.ParseIP(n.Gateway); gw != nil && ipn.Contains(gw) {
+		if gw := net.ParseIP(strings.TrimSpace(n.Gateway)); gw != nil && ipn.Contains(gw) {
 			taken[gw.String()] = true
 		}
 		// Reserved ranges are skipped by next-free and subtracted from free.
@@ -276,8 +277,8 @@ func reservedAddrs(ipn *net.IPNet, reservations []Reservation) map[string]bool {
 	limit := 1 << uint(bits-ones) // network size caps any single range walk
 	set := map[string]bool{}
 	for _, r := range reservations {
-		start := net.ParseIP(r.StartIP)
-		end := net.ParseIP(r.EndIP)
+		start := net.ParseIP(strings.TrimSpace(r.StartIP))
+		end := net.ParseIP(strings.TrimSpace(r.EndIP))
 		if start == nil || end == nil {
 			continue
 		}

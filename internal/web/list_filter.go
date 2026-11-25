@@ -1,6 +1,7 @@
 package web
 
 import (
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -170,20 +171,31 @@ func (rs resource[T]) filterSort(items []T, req *http.Request, d handlerDeps) ([
 	return out, ctrl, nil
 }
 
-// compareValues orders two cell values: numerically when both parse as numbers
-// (so "10" sorts after "9"), otherwise case-insensitively. Returns -1, 0, or 1.
+// compareValues orders numbers numerically before case-insensitive text.
+// Classifying each operand independently keeps mixed columns transitive;
+// comparing mixed pairs lexically would produce cycles such as 2 < 10 < 1x < 2.
+// NaN is text because it cannot participate in an ordered numeric comparison.
+// Returns -1, 0, or 1.
 func compareValues(a, b string) int {
-	if fa, ea := strconv.ParseFloat(strings.TrimSpace(a), 64); ea == nil {
-		if fb, eb := strconv.ParseFloat(strings.TrimSpace(b), 64); eb == nil {
-			switch {
-			case fa < fb:
-				return -1
-			case fa > fb:
-				return 1
-			default:
-				return 0
-			}
+	fa, ea := strconv.ParseFloat(strings.TrimSpace(a), 64)
+	fb, eb := strconv.ParseFloat(strings.TrimSpace(b), 64)
+	aNumber := ea == nil && !math.IsNaN(fa)
+	bNumber := eb == nil && !math.IsNaN(fb)
+	if aNumber && bNumber {
+		switch {
+		case fa < fb:
+			return -1
+		case fa > fb:
+			return 1
+		default:
+			return 0
 		}
+	}
+	if aNumber {
+		return -1
+	}
+	if bNumber {
+		return 1
 	}
 	return strings.Compare(strings.ToLower(a), strings.ToLower(b))
 }
