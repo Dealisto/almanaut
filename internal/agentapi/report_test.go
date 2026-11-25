@@ -136,3 +136,20 @@ func TestValidateRejectsUnknownSchemaVersion(t *testing.T) {
 		t.Fatal("Validate() with future schema version = nil, want error")
 	}
 }
+
+func TestReportedIPsDeduplicatesAndRejectsNonHostAddresses(t *testing.T) {
+	r := Report{Interfaces: []Interface{
+		{Addrs: []string{"0.0.0.0", "::", "224.0.0.1", "ff0e::1", "255.255.255.255", "10.0.0.1/24", "2001:db8::1"}},
+		{Addrs: []string{"10.0.0.1", "::ffff:10.0.0.1", "2001:db8:0:0:0:0:0:1", "fc00::1"}},
+	}}
+	got := r.ReportedIPs()
+	want := []string{"10.0.0.1", "2001:db8::1", "fc00::1"}
+	if len(got) != len(want) {
+		t.Fatalf("ReportedIPs = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ReportedIPs = %v, want %v", got, want)
+		}
+	}
+}

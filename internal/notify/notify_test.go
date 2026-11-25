@@ -3,6 +3,7 @@ package notify
 import (
 	"sort"
 	"testing"
+	"time"
 )
 
 func keys(items []Item) []Key {
@@ -11,6 +12,29 @@ func keys(items []Item) []Key {
 		out[i] = it.Key()
 	}
 	return out
+}
+
+func TestHumanizeWhenUsesCalendarDays(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		now  time.Time
+		date string
+		want string
+	}{
+		{"tomorrow at noon", time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC), "2026-07-02", "expires in 1 day"},
+		{"two days at night", time.Date(2026, 7, 1, 23, 59, 0, 0, time.UTC), "2026-07-03", "expires in 2 days"},
+		{"today", time.Date(2026, 7, 1, 23, 59, 0, 0, time.UTC), "2026-07-01", "expires today"},
+		{"yesterday", time.Date(2026, 7, 1, 0, 1, 0, 0, time.UTC), "2026-06-30", "expired"},
+		{"east of UTC", time.Date(2026, 7, 1, 0, 1, 0, 0, time.FixedZone("east", 14*3600)), "2026-06-30", "expired"},
+		{"west of UTC", time.Date(2026, 7, 1, 23, 59, 0, 0, time.FixedZone("west", -10*3600)), "2026-07-02", "expires in 1 day"},
+		{"surrounding whitespace", time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC), " 2026-07-02 ", "expires in 1 day"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := humanizeWhen(tc.date, tc.now); got != tc.want {
+				t.Fatalf("humanizeWhen = %q, want %q", got, tc.want)
+			}
+		})
+	}
 }
 
 func sortKeys(ks []Key) {

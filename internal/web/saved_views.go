@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -107,6 +108,12 @@ func createSavedView(repo *store.SavedViewRepo, cat entityCatalog) http.HandlerF
 			Query:      strings.TrimPrefix(strings.TrimSpace(req.FormValue("query")), "?"),
 			CreatedAt:  nowRFC3339(),
 		}
+		query, err := url.ParseQuery(view.Query)
+		if err != nil {
+			http.Error(w, "invalid saved view query", http.StatusBadRequest)
+			return
+		}
+		view.Query = savedQuery(query)
 		if err := view.Validate(); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

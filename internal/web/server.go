@@ -126,6 +126,19 @@ func New(cfg Config) http.Handler {
 	hostTypes := store.NewHostTypeRepo(db)
 	hostRS := resource[domain.Host]{
 		name: "hosts", sing: "host", title: "Hosts", heading: "Host",
+		search: []string{"e.name", "e.type", "COALESCE((SELECT label FROM host_types WHERE name=e.type), e.type)", "e.os", "e.cpu", "e.ram", "e.disk", "e.status", "e.notes", "(SELECT group_concat(value, ' ') FROM json_each(e.ips))"},
+		query: inventoryQuery("hosts", "e.name", "e.name",
+			sqlField("Type", "COALESCE((SELECT label FROM host_types WHERE name=e.type), e.type)"),
+			sqlField("OS", "e.os"),
+			sqlField("CPU", "e.cpu"),
+			sqlField("RAM", "e.ram"),
+			sqlField("Disk", "e.disk"),
+			sqlField("Status", "e.status"),
+			sqlField("IPs", "(SELECT group_concat(value, ', ') FROM json_each(e.ips))"),
+			sqlField("Rack", sqlReference("racks", "rack_id", "r.name")),
+			sqlField("Rack position (U)", sqlRackPosition()),
+			sqlField("Liveness", sqlLiveness("host")),
+		),
 		repo:  hosts,
 		parse: parseHost,
 		label: func(h domain.Host) string { return h.Name },
@@ -139,9 +152,6 @@ func New(cfg Config) http.Handler {
 				{"Rack", rackLabel(racks, h.RackID)}, {"Rack position (U)", rackPosLabel(h.RackID, h.RackPosition, h.UHeight)},
 				{"Liveness", livenessLabel(h.Liveness)},
 			}
-		},
-		search: func(h domain.Host) []string {
-			return []string{h.Name, h.Type, h.TypeLabel, h.OS, h.CPU, h.RAM, h.Disk, h.Status, h.Notes, strings.Join(h.IPs, " ")}
 		},
 		children: func(h domain.Host, cat entityCatalog) (*childrenSection, error) {
 			return ownedPortsChildren(ports, "host", h.ID, cat)
@@ -163,6 +173,13 @@ func New(cfg Config) http.Handler {
 	}
 	nicRS := resource[domain.NIC]{
 		name: "nics", sing: "nic", title: "NICs", heading: "NIC",
+		search: []string{"e.name", "e.kind", "e.model", "e.serial", sqlNICHost(), "e.notes"},
+		query: inventoryQuery("nics", sqlOwnedLabel(sqlNICHost()), "e.host_id,e.name",
+			sqlField("Host", sqlNICHost()),
+			sqlField("Kind", "e.kind"),
+			sqlField("Model", "e.model"),
+			sqlField("Serial", "e.serial"),
+		),
 		repo:  nics,
 		parse: parseNIC,
 		label: func(n domain.NIC) string {
@@ -195,9 +212,6 @@ func New(cfg Config) http.Handler {
 			}
 			return &childrenSection{Title: "Ports", Items: items}, nil
 		},
-		search: func(n domain.NIC) []string {
-			return []string{n.Name, n.Kind, n.Model, n.Serial, n.HostName, n.Notes}
-		},
 		loadExtras: func() (map[string]any, error) {
 			hostList, err := hosts.List()
 			if err != nil {
@@ -210,6 +224,14 @@ func New(cfg Config) http.Handler {
 	}
 	portRS := resource[domain.Port]{
 		name: "ports", sing: "port", title: "Ports", heading: "Port",
+		search: []string{"e.name", "e.mac", sqlOwner("e"), sqlNICName(), "e.notes"},
+		query: inventoryQuery("ports", sqlOwnedLabel(sqlOwner("e")), "e.owner_type,e.owner_id,LENGTH(e.name),e.name",
+			sqlField("Owner", sqlOwner("e")),
+			sqlField("NIC", "COALESCE(NULLIF(("+sqlNICName()+"),''),'—')"),
+			sqlField("MAC", "e.mac"),
+			sqlField("Management only", "CASE WHEN e.mgmt_only THEN 'yes' ELSE 'no' END"),
+			sqlField("Connected to", sqlPortPeer()),
+		),
 		repo:  ports,
 		parse: parsePort,
 		label: func(p domain.Port) string {
@@ -254,9 +276,6 @@ func New(cfg Config) http.Handler {
 			}
 			return &childrenSection{Title: "Connections", Items: items}, nil
 		},
-		search: func(p domain.Port) []string {
-			return []string{p.Name, p.MAC, p.OwnerName, p.NICName, p.Notes}
-		},
 		loadExtras: func() (map[string]any, error) {
 			nicList, err := nics.List()
 			if err != nil {
@@ -285,6 +304,14 @@ func New(cfg Config) http.Handler {
 		hostRS,
 		resource[domain.Service]{
 			name: "services", sing: "service", title: "Services", heading: "Service",
+			search: []string{"e.name", "e.kind", "e.url", "e.ports", "e.category", "e.notes"},
+			query: inventoryQuery("services", "e.name", "e.name",
+				sqlField("Kind", "e.kind"),
+				sqlField("URL", "e.url"),
+				sqlField("Ports", "e.ports"),
+				sqlField("Category", "e.category"),
+				sqlField("Liveness", sqlLiveness("service")),
+			),
 			repo:  services,
 			parse: parseService,
 			label: func(s domain.Service) string { return s.Name },
@@ -300,15 +327,18 @@ func New(cfg Config) http.Handler {
 					{"Liveness", livenessLabel(s.Liveness)},
 				}
 			},
-			search: func(s domain.Service) []string {
-				return []string{s.Name, s.Kind, s.URL, s.Ports, s.Category, s.Notes}
-			},
 			newItem:  domain.Service{Kind: "container"},
 			listTmpl: "services.html", formTmpl: "service_form.html",
 			extras: func() map[string]any { return map[string]any{"Kinds": domain.ServiceKinds} },
 		},
 		resource[domain.Network]{
 			name: "networks", sing: "network", title: "Networks", heading: "Network",
+			search: []string{"e.name", "e.cidr", "e.gateway", "e.notes"},
+			query: inventoryQuery("networks", "e.name", "e.name",
+				sqlField("CIDR", "e.cidr"),
+				sqlField("VLAN", sqlReference("vlans", "vlan_id", "'VLAN '||r.vid||' ('||r.name||')'")),
+				sqlField("Gateway", "e.gateway"),
+			),
 			repo:  networks,
 			parse: parseNetwork,
 			label: func(n domain.Network) string { return n.Name },
@@ -321,9 +351,6 @@ func New(cfg Config) http.Handler {
 					{"VLAN", vlanLabel(vlans, n.VLANID)},
 					{"Gateway", n.Gateway},
 				}
-			},
-			search: func(n domain.Network) []string {
-				return []string{n.Name, n.CIDR, n.Gateway, n.Notes}
 			},
 			loadExtras: func() (map[string]any, error) {
 				list, err := vlans.List()
@@ -363,6 +390,10 @@ func New(cfg Config) http.Handler {
 		},
 		resource[domain.Domain]{
 			name: "domains", sing: "domain", title: "Domains", heading: "Domain",
+			search: []string{"e.fqdn", "e.provider", "e.notes"},
+			query: inventoryQuery("domains", "e.fqdn", "e.fqdn",
+				sqlField("Provider", "e.provider"),
+			),
 			repo:  domains,
 			parse: parseDomain,
 			label: func(d domain.Domain) string { return d.FQDN },
@@ -374,14 +405,18 @@ func New(cfg Config) http.Handler {
 					{"Provider", d.Provider},
 				}
 			},
-			search: func(d domain.Domain) []string {
-				return []string{d.FQDN, d.Provider, d.Notes}
-			},
 			newItem:  domain.Domain{},
 			listTmpl: "domains.html", formTmpl: "domain_form.html",
 		},
 		resource[domain.Certificate]{
 			name: "certificates", sing: "certificate", title: "Certificates", heading: "Certificate",
+			search: []string{"e.subject", "e.issuer", "e.notes"},
+			query: inventoryQuery("certificates", "e.subject", "e.expires_on",
+				sqlField("Issuer", "e.issuer"),
+				sqlField("Expires on", "e.expires_on"),
+				sqlField("Auto-renew", "CASE WHEN e.auto_renew THEN 'yes' ELSE 'no' END"),
+				sqlField("Probe target", "e.probe_target"),
+			),
 			repo:  certificates,
 			parse: parseCertificate,
 			label: func(c domain.Certificate) string { return c.Subject },
@@ -400,15 +435,18 @@ func New(cfg Config) http.Handler {
 					{"Probe target", c.ProbeTarget},
 				}
 			},
-			search: func(c domain.Certificate) []string {
-				return []string{c.Subject, c.Issuer, c.Notes}
-			},
 			probe:    certProbeSection(cfg.CertProbes),
 			newItem:  domain.Certificate{},
 			listTmpl: "certificates.html", formTmpl: "certificate_form.html",
 		},
 		resource[domain.Backup]{
 			name: "backups", sing: "backup", title: "Backups", heading: "Backup",
+			search: []string{"e.source", "e.destination", "e.frequency", "e.last_run", "e.notes"},
+			query: inventoryQuery("backups", "e.source", "e.source",
+				sqlField("Destination", "e.destination"),
+				sqlField("Frequency", "e.frequency"),
+				sqlField("Last run", "e.last_run"),
+			),
 			repo:  backups,
 			parse: parseBackup,
 			label: func(b domain.Backup) string { return b.Source },
@@ -422,14 +460,24 @@ func New(cfg Config) http.Handler {
 					{"Last run", b.LastRun},
 				}
 			},
-			search: func(b domain.Backup) []string {
-				return []string{b.Source, b.Destination, b.Frequency, b.LastRun, b.Notes}
-			},
 			newItem:  domain.Backup{},
 			listTmpl: "backups.html", formTmpl: "backup_form.html",
 		},
 		resource[domain.Hardware]{
 			name: "hardware", sing: "hardware", title: "Hardware", heading: "Hardware",
+			search: []string{"e.name", "e.kind", "e.manufacturer", "e.model", "e.serial", "e.location", "e.status", "e.notes"},
+			query: inventoryQuery("hardware", "e.name", "e.name",
+				sqlField("Kind", "e.kind"),
+				sqlField("Manufacturer", "e.manufacturer"),
+				sqlField("Model", "e.model"),
+				sqlField("Serial", "e.serial"),
+				sqlField("Location", "e.location"),
+				sqlField("Purchase date", "e.purchase_date"),
+				sqlField("Warranty end", "e.warranty_end"),
+				sqlField("Status", "e.status"),
+				sqlField("Rack", sqlReference("racks", "rack_id", "r.name")),
+				sqlField("Rack position (U)", sqlRackPosition()),
+			),
 			repo:  hardware,
 			parse: parseHardware,
 			label: func(h domain.Hardware) string { return h.Name },
@@ -450,9 +498,6 @@ func New(cfg Config) http.Handler {
 					{"Rack position (U)", rackPosLabel(h.RackID, h.RackPosition, h.UHeight)},
 				}
 			},
-			search: func(h domain.Hardware) []string {
-				return []string{h.Name, h.Kind, h.Manufacturer, h.Model, h.Serial, h.Location, h.Status, h.Notes}
-			},
 			children: func(h domain.Hardware, cat entityCatalog) (*childrenSection, error) {
 				return ownedPortsChildren(ports, "hardware", h.ID, cat)
 			},
@@ -468,6 +513,16 @@ func New(cfg Config) http.Handler {
 		},
 		resource[domain.Subscription]{
 			name: "subscriptions", sing: "subscription", title: "Subscriptions", heading: "Subscription",
+			search: []string{"e.name", "e.kind", "e.provider", "e.currency", "e.billing_cycle", "e.status", "e.notes"},
+			query: inventoryQuery("subscriptions", "e.name", "e.name",
+				sqlField("Kind", "e.kind"),
+				sqlField("Provider", "e.provider"),
+				sqlField("Amount", "CASE WHEN e.amount<>'' AND e.currency<>'' THEN e.amount||' '||e.currency ELSE e.amount END"),
+				sqlField("Billing cycle", "e.billing_cycle"),
+				sqlField("Renewal date", "e.renewal_date"),
+				sqlField("Auto-renew", "CASE WHEN e.auto_renew THEN 'yes' ELSE 'no' END"),
+				sqlField("Status", "e.status"),
+			),
 			repo:  subscriptions,
 			parse: parseSubscription,
 			label: func(s domain.Subscription) string { return s.Name },
@@ -493,14 +548,20 @@ func New(cfg Config) http.Handler {
 					{"Status", s.Status},
 				}
 			},
-			search: func(s domain.Subscription) []string {
-				return []string{s.Name, s.Kind, s.Provider, s.Currency, s.BillingCycle, s.Status, s.Notes}
-			},
 			newItem:  domain.Subscription{},
 			listTmpl: "subscriptions.html", formTmpl: "subscription_form.html",
 		},
 		resource[domain.Account]{
 			name: "accounts", sing: "account", title: "Accounts", heading: "Account",
+			search: []string{"e.name", "e.kind", "e.username", "e.password_manager", "e.secret_ref", "e.url", "e.status", "e.notes"},
+			query: inventoryQuery("accounts", "e.name", "e.name",
+				sqlField("Kind", "e.kind"),
+				sqlField("Username", "e.username"),
+				sqlField("Password manager", "e.password_manager"),
+				sqlField("Secret ref", "e.secret_ref"),
+				sqlField("URL", "e.url"),
+				sqlField("Status", "e.status"),
+			),
 			repo:  accounts,
 			parse: parseAccount,
 			label: func(a domain.Account) string { return a.Name },
@@ -517,14 +578,15 @@ func New(cfg Config) http.Handler {
 					{"Status", a.Status},
 				}
 			},
-			search: func(a domain.Account) []string {
-				return []string{a.Name, a.Kind, a.Username, a.PasswordManager, a.SecretRef, a.URL, a.Status, a.Notes}
-			},
 			newItem:  domain.Account{},
 			listTmpl: "accounts.html", formTmpl: "account_form.html",
 		},
 		resource[domain.Site]{
 			name: "sites", sing: "site", title: "Sites", heading: "Site",
+			search: []string{"e.name", "e.address", "e.notes"},
+			query: inventoryQuery("sites", "e.name", "e.name",
+				sqlField("Address", "e.address"),
+			),
 			repo:  sites,
 			parse: parseSite,
 			label: func(s domain.Site) string { return s.Name },
@@ -547,14 +609,15 @@ func New(cfg Config) http.Handler {
 				}
 				return &childrenSection{Title: "Locations", Items: items}, nil
 			},
-			search: func(s domain.Site) []string {
-				return []string{s.Name, s.Address, s.Notes}
-			},
 			newItem:  domain.Site{},
 			listTmpl: "sites.html", formTmpl: "site_form.html",
 		},
 		resource[domain.Location]{
 			name: "locations", sing: "location", title: "Locations", heading: "Location",
+			search: []string{"e.name", "e.notes"},
+			query: inventoryQuery("locations", "e.name", "e.name",
+				sqlField("Site", sqlReference("sites", "site_id", "r.name")),
+			),
 			repo:  locations,
 			parse: parseLocation,
 			label: func(l domain.Location) string { return l.Name },
@@ -577,9 +640,6 @@ func New(cfg Config) http.Handler {
 				}
 				return &childrenSection{Title: "Racks", Items: items}, nil
 			},
-			search: func(l domain.Location) []string {
-				return []string{l.Name, l.Notes}
-			},
 			loadExtras: func() (map[string]any, error) {
 				list, err := sites.List()
 				if err != nil {
@@ -592,6 +652,11 @@ func New(cfg Config) http.Handler {
 		},
 		resource[domain.Rack]{
 			name: "racks", sing: "rack", title: "Racks", heading: "Rack",
+			search: []string{"e.name", "e.notes"},
+			query: inventoryQuery("racks", "e.name", "e.name",
+				sqlField("Location", sqlReference("locations", "location_id", "r.name")),
+				sqlField("Height (U)", "e.u_height"),
+			),
 			repo:  racks,
 			parse: parseRack,
 			label: func(k domain.Rack) string { return k.Name },
@@ -603,9 +668,6 @@ func New(cfg Config) http.Handler {
 					{"Location", locationLabel(locations, k.LocationID)},
 					{"Height (U)", strconv.Itoa(k.UHeight)},
 				}
-			},
-			search: func(k domain.Rack) []string {
-				return []string{k.Name, k.Notes}
 			},
 			loadExtras: func() (map[string]any, error) {
 				list, err := locations.List()
@@ -630,6 +692,13 @@ func New(cfg Config) http.Handler {
 		},
 		resource[domain.Contact]{
 			name: "contacts", sing: "contact", title: "Contacts", heading: "Contact",
+			search: []string{"e.name", "e.email", "e.phone", "e.role", "e.organization", "e.notes"},
+			query: inventoryQuery("contacts", "e.name", "e.name",
+				sqlField("Email", "e.email"),
+				sqlField("Phone", "e.phone"),
+				sqlField("Role", "e.role"),
+				sqlField("Organization", "e.organization"),
+			),
 			repo:  contacts,
 			parse: parseContact,
 			label: func(c domain.Contact) string { return c.Name },
@@ -644,14 +713,15 @@ func New(cfg Config) http.Handler {
 					{"Organization", c.Organization},
 				}
 			},
-			search: func(c domain.Contact) []string {
-				return []string{c.Name, c.Email, c.Phone, c.Role, c.Organization, c.Notes}
-			},
 			newItem:  domain.Contact{},
 			listTmpl: "contacts.html", formTmpl: "contact_form.html",
 		},
 		resource[domain.VLAN]{
 			name: "vlans", sing: "vlan", title: "VLANs", heading: "VLAN",
+			search: []string{"e.name", "e.vid", "e.notes"},
+			query: inventoryQuery("vlans", "e.name", "e.vid",
+				sqlField("VLAN ID", "e.vid"),
+			),
 			repo:  vlans,
 			parse: parseVLAN,
 			label: func(v domain.VLAN) string { return v.Name },
@@ -661,14 +731,17 @@ func New(cfg Config) http.Handler {
 			fields: func(v domain.VLAN) []fieldRow {
 				return []fieldRow{{"VLAN ID", strconv.Itoa(v.VID)}}
 			},
-			search: func(v domain.VLAN) []string {
-				return []string{v.Name, strconv.Itoa(v.VID), v.Notes}
-			},
 			newItem:  domain.VLAN{},
 			listTmpl: "vlans.html", formTmpl: "vlan_form.html",
 		},
 		resource[domain.Reservation]{
 			name: "reservations", sing: "reservation", title: "Reservations", heading: "Reservation",
+			search: []string{"e.name", "e.start_ip", "e.end_ip", "e.notes"},
+			query: inventoryQuery("ip_reservations", "e.name", "e.name",
+				sqlField("Network", sqlReference("networks", "network_id", "r.name")),
+				sqlField("Start IP", "e.start_ip"),
+				sqlField("End IP", "e.end_ip"),
+			),
 			repo:  reservations,
 			parse: parseReservation,
 			label: func(v domain.Reservation) string { return v.Name },
@@ -681,9 +754,6 @@ func New(cfg Config) http.Handler {
 					{"Start IP", v.StartIP},
 					{"End IP", v.EndIP},
 				}
-			},
-			search: func(v domain.Reservation) []string {
-				return []string{v.Name, v.StartIP, v.EndIP, v.Notes}
 			},
 			loadExtras: func() (map[string]any, error) {
 				list, err := networks.List()
@@ -723,6 +793,7 @@ func New(cfg Config) http.Handler {
 	r.Use(injectLogger(logger))
 	r.Use(recoverer(logger))
 	r.Use(securityHeaders)
+	r.Use(passwordWorkLimit(4))
 	r.Use(auditRetention(authEvents, cfg.AuthAuditRetentionDays, time.Now))
 	if cfg.Kuma.Enabled {
 		r.Use(markKumaEnabled)
@@ -812,6 +883,8 @@ func New(cfg Config) http.Handler {
 			r.Get("/account/tokens", listTokens(tokens))
 			r.Post("/account/tokens", createToken(tokens))
 			r.Post("/account/tokens/{id}/delete", deleteToken(tokens))
+			r.Post("/account/tokens/{id}/rotate", rotateToken(db, tokens))
+			r.Post("/account/tokens/{id}/finish-rotation", finishTokenRotation(db, tokens))
 			r.Get("/account/2fa", account2FA(totp))
 			r.Post("/account/2fa/setup", setup2FA(totp))
 			r.Post("/account/2fa/confirm", confirm2FA(totp, db))
@@ -888,7 +961,7 @@ func New(cfg Config) http.Handler {
 			r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
 			r.Get("/health-report", healthReport(repos, relationships, cat, changelog, cfg.StaleAfterDays))
 			r.Post("/health-report/acknowledge", acknowledgeStale(cat, changelog))
-			r.Get("/search", searchEntities(cat, tags, customFields))
+			r.Get("/search", searchEntities(cat, db))
 			r.Get("/api/docs", apiDocsPage(resources, cfg.Version))
 			r.Get("/data", showData(cat))
 			r.Get("/export", exportData(db))
@@ -939,7 +1012,7 @@ func New(cfg Config) http.Handler {
 			rs.mountAPI(r, deps)
 		}
 		r.Get("/api/host-types", hostTypesJSON(hostTypes))
-		r.Get("/api/search", apiSearch(cat, customFields))
+		r.Get("/api/search", apiSearch(cat, db))
 		r.Get("/api/relationships", apiRelationships(relationships))
 		r.Get("/api/openapi.json", openAPISpec(resources, cfg.Version))
 		// /metrics is a GET: reachable with a bearer API token (Prometheus) or a

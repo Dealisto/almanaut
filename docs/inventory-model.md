@@ -103,6 +103,11 @@ already occupies it. Overlapping reservations count once. IPv4 network and
 broadcast addresses are excluded from usable capacity, except on /31 and /32
 networks; they are not subtracted again when a reservation includes them.
 
+Reservation counts remain exact for networks with up to 30 host bits, including
+networks too large for the next-free search. That search is limited to 65,536
+addresses; larger networks leave the suggestion empty. Networks with 31 or more
+host bits show unbounded capacity instead of a numeric free-address count.
+
 ## Tags
 
 Tags are free-form labels on any entity. Each name is normalized before it is

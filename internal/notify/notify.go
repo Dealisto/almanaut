@@ -5,8 +5,10 @@ package notify
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
@@ -109,10 +111,14 @@ func (n *Notifier) gather(now time.Time) ([]Item, error) {
 // Run performs one full pass: notify newly-expiring items, clear items that are
 // no longer expiring. A single failed send is logged and skipped (its state is
 // left unmarked so it retries next pass); it does not abort the pass.
+// Delivery errors are returned after the remaining items have been attempted.
 //
 // Deliberately not transactional: Run is the sole writer of notification_state
 // and runs single-threaded, so a tx would just hold a DB tx open across Send.
 func (n *Notifier) Run(ctx context.Context, now time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	expiring, err := n.gather(now)
 	if err != nil {
 		return err
@@ -133,16 +139,21 @@ func (n *Notifier) Run(ctx context.Context, now time.Time) error {
 			return err
 		}
 	}
+	var runErr error
 	for _, it := range toNotify {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(runErr, err)
+		}
 		if err := n.sender.Send(ctx, message(it, now)); err != nil {
 			log.Printf("notify: send %s %d: %v", it.Kind, it.ID, err)
+			runErr = errors.Join(runErr, fmt.Errorf("send %s %d notification: %w", it.Kind, it.ID, err))
 			continue
 		}
 		if err := n.state.Mark(string(it.Kind), it.ID, now); err != nil {
-			return err
+			return errors.Join(runErr, err)
 		}
 	}
-	return nil
+	return errors.Join(runErr, ctx.Err())
 }
 
 var titles = map[Kind]string{
@@ -163,11 +174,15 @@ func message(it Item, now time.Time) Notification {
 // humanizeWhen renders a coarse "expires in N days" phrase from a YYYY-MM-DD
 // date relative to now.
 func humanizeWhen(date string, now time.Time) string {
-	d, err := time.Parse("2006-01-02", date)
+	d, err := time.Parse(domain.DateLayout, strings.TrimSpace(date))
 	if err != nil {
 		return "expiring soon"
 	}
-	days := int(d.Sub(now).Hours() / 24)
+	// Compare calendar dates in the caller's timezone, independent of the
+	// time of day and daylight-saving transitions.
+	year, month, day := now.Date()
+	today := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+	days := int(d.Sub(today).Hours() / 24)
 	switch {
 	case days < 0:
 		return "expired"

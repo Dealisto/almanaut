@@ -203,3 +203,55 @@ func TestPanicIsRecordedAndJobKeepsRunning(t *testing.T) {
 		t.Fatalf("LastErr after a clean pass = %q, want empty", got)
 	}
 }
+
+func TestManualPassResetsActualScheduleAndClearsNextRunWhileRunning(t *testing.T) {
+	interval := 120 * time.Millisecond
+	started := make(chan time.Time, 4)
+	release := make(chan struct{})
+	var calls int
+	r := New(discardLogger())
+	r.Register(Definition{Name: "a", Interval: interval, Run: func(ctx context.Context) error {
+		calls++
+		started <- time.Now()
+		if calls == 2 {
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		return nil
+	}})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { r.Start(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+	<-started
+	eventually(t, func() bool { return !statusOf(r, "a").NextRun.IsZero() })
+	r.Trigger("a")
+	<-started
+	if !statusOf(r, "a").NextRun.IsZero() {
+		t.Fatal("running job still advertises obsolete schedule")
+	}
+	// Cross the original ticker deadline while the manual run is in progress.
+	time.Sleep(interval + 20*time.Millisecond)
+	close(release)
+	eventually(t, func() bool { return statusOf(r, "a").Runs == 2 })
+	next := statusOf(r, "a").NextRun
+	if time.Until(next) < interval/2 {
+		t.Fatalf("next run not delayed after manual completion: %v", next)
+	}
+	select {
+	case at := <-started:
+		if at.Before(next) {
+			t.Fatalf("ran at %v before advertised %v", at, next)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("scheduled run did not occur")
+	}
+	cancel()
+	<-done
+	if !statusOf(r, "a").NextRun.IsZero() {
+		t.Fatal("stopped job advertises a future run")
+	}
+}

@@ -20,6 +20,8 @@ import (
 // host write survives a losing report) and the handler answers identically.
 var errAgentConflict = errors.New("agent report conflict")
 
+var errAgentAmbiguous = errors.New("multiple unbound hosts match the reported hostname or IP addresses; resolve the duplicate names or IPs in inventory before retrying")
+
 // invalidHostError marks a merged-host validation failure as bad input rather
 // than a server fault. A report's own fields are checked by rep.Validate()
 // before any merge happens, but the host produced by merging a report onto an
@@ -169,6 +171,9 @@ func agentReport(d agentDeps) http.HandlerFunc {
 			}
 
 			decision := agentapi.Resolve(rep, existing, refs)
+			if decision.Kind == agentapi.DecideAmbiguous {
+				return errAgentAmbiguous
+			}
 			if decision.Kind == agentapi.DecideConflict {
 				// Nothing has been written yet, so this is a plain rollback (of a
 				// read-only transaction); errAgentConflict just routes the response.
@@ -218,6 +223,10 @@ func agentReport(d agentDeps) http.HandlerFunc {
 			}
 			return agents.RecordReport(hostID, rep.AgentID, now, rep.AgentVersion, rep.SchemaVersion, raw)
 		})
+		if errors.Is(err, errAgentAmbiguous) {
+			writeJSONError(w, http.StatusUnprocessableEntity, errAgentAmbiguous.Error())
+			return
+		}
 		if errors.Is(err, errAgentConflict) {
 			// The transaction rolled back, so nothing about this report was
 			// persisted. Stamp the contested binding with a separate write so

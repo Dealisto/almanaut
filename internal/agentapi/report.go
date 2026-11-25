@@ -93,13 +93,16 @@ func (r Report) Fingerprint() string {
 // addresses, a zone ("fe80::1%eth0"); net.ParseIP rejects both forms outright.
 // Sanitizing here, in the package shared by the server and the future agent
 // binary, keeps the two from ever disagreeing on what counts as a usable IP.
-// Loopback and link-local addresses are dropped as noise: they are present on
-// every machine and never distinguish one host from another.
+// Only unicast addresses that can identify a host are retained. Loopback,
+// link-local, unspecified, multicast and broadcast addresses are noise. Repeated
+// addresses across interfaces are emitted once, preserving first-seen order.
 func (r Report) ReportedIPs() []string {
 	out := []string{}
+	seen := make(map[string]bool)
 	for _, i := range r.Interfaces {
 		for _, a := range i.Addrs {
-			if ip, ok := sanitizeReportedIP(a); ok {
+			if ip, ok := sanitizeReportedIP(a); ok && !seen[ip] {
+				seen[ip] = true
 				out = append(out, ip)
 			}
 		}
@@ -108,7 +111,7 @@ func (r Report) ReportedIPs() []string {
 }
 
 // sanitizeReportedIP strips a CIDR suffix and an IPv6 zone from a, then
-// reports the bare address if it parses and is not loopback or link-local.
+// reports the bare address if it is global unicast (including private ranges).
 func sanitizeReportedIP(a string) (string, bool) {
 	a = strings.TrimSpace(a)
 	if a == "" {
@@ -124,7 +127,7 @@ func sanitizeReportedIP(a string) (string, bool) {
 	if ip == nil {
 		return "", false
 	}
-	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+	if !ip.IsGlobalUnicast() {
 		return "", false
 	}
 	return ip.String(), true

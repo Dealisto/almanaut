@@ -2,6 +2,7 @@ package notify
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -181,10 +182,68 @@ func TestNotifierRunSendFailureDoesNotMarkState(t *testing.T) {
 	n := New(certs, store.NewHardwareRepo(db), store.NewSubscriptionRepo(db), state, sender, 30)
 
 	now := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
-	if err := n.Run(context.Background(), now); err != nil {
-		t.Fatalf("Run: %v", err)
+	if err := n.Run(context.Background(), now); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Run error = %v, want delivery error", err)
 	}
 	if s, _ := state.Sent(); len(s) != 0 {
 		t.Fatalf("failed send must not mark state, got %v", s)
+	}
+	sender.err = nil
+	if err := n.Run(context.Background(), now); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if len(sender.sent) != 1 {
+		t.Fatalf("retry sent %d notifications, want 1", len(sender.sent))
+	}
+}
+
+type senderFunc func(context.Context, Notification) error
+
+func (f senderFunc) Send(ctx context.Context, n Notification) error { return f(ctx, n) }
+
+func TestNotifierContinuesAfterDeliveryFailureAndRetriesOnlyFailedItems(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := store.Migrate(db, dbPath); err != nil {
+		t.Fatal(err)
+	}
+	certs := store.NewCertificateRepo(db)
+	for _, subject := range []string{"a.com", "b.com"} {
+		if _, err := certs.Create(domain.Certificate{Subject: subject, ExpiresOn: "2026-07-06"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deliveryErr := errors.New("delivery failed")
+	attempts := 0
+	sender := senderFunc(func(context.Context, Notification) error {
+		attempts++
+		if attempts == 1 {
+			return deliveryErr
+		}
+		return nil
+	})
+	state := store.NewNotificationRepo(db)
+	n := New(certs, store.NewHardwareRepo(db), store.NewSubscriptionRepo(db), state, sender, 30)
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	if err := n.Run(context.Background(), now); !errors.Is(err, deliveryErr) {
+		t.Fatalf("Run error = %v, want delivery error", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want both notifications attempted", attempts)
+	}
+	if err := n.Run(context.Background(), now); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts after retry = %d, want only failed item retried", attempts)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := n.Run(ctx, now); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled run = %v, want context.Canceled", err)
 	}
 }

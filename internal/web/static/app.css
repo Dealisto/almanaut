@@ -461,3 +461,6 @@ form.stack .check input{flex:none;width:18px;height:18px;margin:2px 0 0}.check-g
   form.stack input,form.stack select,form.stack textarea,.topbar .search input{font-size:16px}
   .topbar .search input{width:100%}
 }
+
+.pagination{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:16px 0;font-size:12px;color:var(--muted)}
+.pagination>span{margin-right:auto}

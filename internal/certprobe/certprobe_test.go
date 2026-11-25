@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/big"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -289,5 +290,45 @@ func TestProbeOneDiscardsObsoleteResults(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestRunReportsStorageFailuresAndContinuesOtherCertificates(t *testing.T) {
+	db := testDB(t)
+	certs := store.NewCertificateRepo(db)
+	ids := make(map[string]int64)
+	for _, subject := range []string{"a-failed.example.com", "b-failed.example.com", "z-healthy.example.com"} {
+		id, err := certs.Create(domain.Certificate{Subject: subject, ExpiresOn: "2020-01-01", ProbeTarget: subject + ":443"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[subject] = id
+	}
+	// Fail persistence for two targets while allowing the third to update.
+	if _, err := db.Exec(`CREATE TRIGGER reject_failed_certificate_update
+		BEFORE UPDATE ON certificates WHEN OLD.subject LIKE '%failed%'
+		BEGIN SELECT RAISE(FAIL, 'probe storage unavailable'); END`); err != nil {
+		t.Fatal(err)
+	}
+	dial := func(_ context.Context, addr string) (*x509.Certificate, error) {
+		return leaf(time.Date(2027, 6, 1, 0, 0, 0, 0, time.UTC), "Test CA", 1, strings.TrimSuffix(addr, ":443")), nil
+	}
+	state := store.NewCertProbeRepo(db)
+	p := New(certs, state, db, dial, time.Second, nil, nil)
+	err := p.Run(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "probe storage unavailable") {
+		t.Fatalf("Run error = %v, want storage failure", err)
+	}
+	for _, subject := range []string{"a-failed.example.com", "b-failed.example.com"} {
+		if !strings.Contains(err.Error(), fmt.Sprintf("probe certificate %d:", ids[subject])) {
+			t.Fatalf("error omits failed certificate %s: %v", subject, err)
+		}
+		if _, err := state.Get(ids[subject]); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("failed probe must roll back its state: %v", err)
+		}
+	}
+	got, err := certs.Get(ids["z-healthy.example.com"])
+	if err != nil || got.ExpiresOn != "2027-06-01" {
+		t.Fatalf("remaining certificate not updated: %+v, err = %v", got, err)
 	}
 }

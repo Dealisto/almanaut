@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"strconv"
 
@@ -21,9 +22,9 @@ func (rs resource[T]) addAttachment(d handlerDeps) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		// The csrfProtect middleware has already parsed the multipart form (via
-		// FormValue) using net/http's default 32 MiB maxMemory, so this call is
-		// effectively an idempotent safety net; limitBody caps the whole request
+		// The csrfProtect middleware has already parsed the multipart form with
+		// a 32 MiB maxMemory, so this call is an idempotent safety net.
+		// limitBody caps the whole request
 		// at 32 MiB and the per-file cap is enforced on the read below.
 		if err := req.ParseMultipartForm(domain.MaxAttachmentBytes); err != nil {
 			http.Error(w, "could not parse upload", http.StatusBadRequest)
@@ -108,7 +109,7 @@ func downloadAttachment(d handlerDeps) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", ct)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", att.Filename))
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": att.Filename}))
 		w.Header().Set("Content-Length", strconv.FormatInt(att.Size, 10))
 		_, _ = w.Write(att.Content)
 	}

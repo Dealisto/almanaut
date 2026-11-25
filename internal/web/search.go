@@ -1,12 +1,9 @@
 package web
 
 import (
-	"fmt"
+	"database/sql"
 	"net/http"
-	"sort"
 	"strings"
-
-	"github.com/Dealisto/almanaut/internal/store"
 )
 
 // searchHit is one matching entity on the search results page.
@@ -23,108 +20,45 @@ type searchGroup struct {
 
 // searchPageData backs search.html.
 type searchPageData struct {
-	Title  string
-	Query  string
-	Groups []searchGroup
-	Total  int
+	Title      string
+	Query      string
+	Groups     []searchGroup
+	Total      int
+	Pagination pagination
 }
 
 // searchEntry is one entity projected into the fields the search handler needs,
 // produced uniformly by every resource so the handler carries no per-type code.
 type searchEntry struct {
-	Type   string   `json:"type"`
-	ID     int64    `json:"id"`
-	Label  string   `json:"label"`
-	Path   string   `json:"path"`
-	Fields []string `json:"-"`
+	Type  string `json:"type"`
+	ID    int64  `json:"id"`
+	Label string `json:"label"`
+	Path  string `json:"path"`
 }
 
-// matchesQuery reports whether any field contains q, case-insensitively.
-func matchesQuery(fields []string, q string) bool {
-	lq := strings.ToLower(q)
-	for _, f := range fields {
-		if strings.Contains(strings.ToLower(f), lq) {
-			return true
-		}
-	}
-	return false
-}
-
-// searchEntities renders the global search results for ?q=…: every entity
-// whose searchable fields contain the query, plus entities carrying a matching
-// tag, grouped by type and linked to their detail pages. It drives every type
-// off the resource catalog, so adding an entity needs no change here — only a
-// search field list on its resource definition.
-func searchEntities(cat entityCatalog, tags *store.TagRepo, cf *store.CustomFieldRepo) http.HandlerFunc {
-	key := func(typ string, id int64) string { return fmt.Sprintf("%s:%d", typ, id) }
+// searchEntities renders bounded, catalog-ordered search results, including tags.
+func searchEntities(cat entityCatalog, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		q := strings.TrimSpace(req.URL.Query().Get("q"))
-		data := searchPageData{Title: "Search", Query: q}
-		if q == "" {
-			render(w, req, "search.html", data)
+		p, err := parsePagination(req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
-		type bucket struct {
-			heading string
-			hits    []searchHit
-		}
-		seen := map[string]bool{}      // dedupe by "type:id"
-		labelOf := map[string]string{} // "type:id" -> label, to resolve tag hits
-		buckets := map[string]*bucket{}
-		order := make([]*bucket, 0, len(cat.resources)) // groups in catalog order
-		add := func(b *bucket, typ string, id int64, label, path string) {
-			k := key(typ, id)
-			if seen[k] {
-				return
-			}
-			seen[k] = true
-			b.hits = append(b.hits, searchHit{Label: label, URL: path})
-		}
-
-		for _, rs := range cat.resources {
-			entries, err := rs.searchEntries(cf)
-			if err != nil {
-				serverError(w, req, err)
-				return
-			}
-			b := &bucket{heading: rs.searchHeading()}
-			buckets[rs.singular()] = b
-			order = append(order, b)
-			for _, e := range entries {
-				labelOf[key(e.Type, e.ID)] = e.Label
-				if matchesQuery(e.Fields, q) {
-					add(b, e.Type, e.ID, e.Label, e.Path)
-				}
-			}
-		}
-
-		// Fold in tag matches: a matching tag pulls its entity into that group.
-		tagged, err := tags.Search(q)
+		entries, p, err := searchPage(req, db, cat, p)
 		if err != nil {
 			serverError(w, req, err)
 			return
 		}
-		for _, tg := range tagged {
-			b, ok := buckets[tg.EntityType]
-			if !ok {
-				continue
+		data := searchPageData{Title: "Search", Query: strings.TrimSpace(req.URL.Query().Get("q")), Total: p.Total, Pagination: p}
+		for _, entry := range entries {
+			rs, _ := cat.resource(entry.Type)
+			if len(data.Groups) == 0 || data.Groups[len(data.Groups)-1].Heading != rs.searchHeading() {
+				data.Groups = append(data.Groups, searchGroup{Heading: rs.searchHeading()})
 			}
-			label, ok := labelOf[key(tg.EntityType, tg.EntityID)]
-			if !ok {
-				continue // orphan tag (entity deleted) — out of scope, see #28
-			}
-			add(b, tg.EntityType, tg.EntityID, label, cat.path(tg.EntityType, tg.EntityID))
+			group := &data.Groups[len(data.Groups)-1]
+			group.Hits = append(group.Hits, searchHit{Label: entry.Label, URL: entry.Path})
 		}
-
-		for _, b := range order {
-			if len(b.hits) == 0 {
-				continue
-			}
-			sort.Slice(b.hits, func(i, j int) bool { return b.hits[i].Label < b.hits[j].Label })
-			data.Groups = append(data.Groups, searchGroup{Heading: b.heading, Hits: b.hits})
-			data.Total += len(b.hits)
-		}
+		p.headers(w)
 		render(w, req, "search.html", data)
 	}
 }

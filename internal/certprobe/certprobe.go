@@ -11,6 +11,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"runtime/debug"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
@@ -29,6 +32,9 @@ type Prober struct {
 	timeout time.Duration
 	log     *slog.Logger
 	now     func() time.Time
+	workers int
+	runGate chan struct{}
+	nextID  int64 // first certificate not started during the previous pass
 }
 
 // New builds a Prober. dial may be nil to use the default TLS dialer; log may
@@ -44,7 +50,7 @@ func New(certs *store.CertificateRepo, state *store.CertProbeRepo, db *sql.DB,
 	if now == nil {
 		now = time.Now
 	}
-	return &Prober{certs, state, db, dial, timeout, log, now}
+	return &Prober{certs: certs, state: state, db: db, dial: dial, timeout: timeout, log: log, now: now, workers: 8, runGate: make(chan struct{}, 1)}
 }
 
 // defaultDialTLS dials with verification disabled so metadata is readable even
@@ -69,23 +75,76 @@ func defaultDialTLS(ctx context.Context, addr string) (*x509.Certificate, error)
 }
 
 // Run probes every certificate that has a probe target. A single certificate's
-// error is logged and does not abort the pass. It returns nil unless the
-// context ended.
+// storage error is logged and does not abort the pass. Storage failures are
+// returned together after the remaining certificates have been probed.
 func (p *Prober) Run(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case p.runGate <- struct{}{}:
+	}
+	defer func() { <-p.runGate }()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	certs, err := p.certs.List()
 	if err != nil {
 		return fmt.Errorf("list certificates: %w", err)
 	}
+	targets := certs[:0]
 	for _, c := range certs {
-		if c.ProbeTarget == "" {
-			continue
+		if c.ProbeTarget != "" {
+			targets = append(targets, c)
 		}
-		if err := p.ProbeOne(ctx, c); err != nil {
-			p.log.Error("cert probe", "id", c.ID, "err", err)
-		}
+	}
+	// IDs provide a stable rotation even if names change. An interrupted pass
+	// resumes with targets it did not start, rather than starving the same tail.
+	sort.Slice(targets, func(i, j int) bool { return targets[i].ID < targets[j].ID })
+	start := sort.Search(len(targets), func(i int) bool { return targets[i].ID >= p.nextID })
+	if start == len(targets) {
+		start = 0
+	}
+	sem := make(chan struct{}, max(1, p.workers))
+	failures := make([]error, len(targets))
+	var wg sync.WaitGroup
+dispatch:
+	for i := range targets {
+		c := targets[(start+i)%len(targets)]
+		p.nextID = c.ID
 		if ctx.Err() != nil {
-			return ctx.Err()
+			break
 		}
+		select {
+		case <-ctx.Done():
+			break dispatch
+		case sem <- struct{}{}:
+			if ctx.Err() != nil {
+				<-sem
+				break dispatch
+			}
+			p.nextID = targets[(start+i+1)%len(targets)].ID
+			wg.Go(func() {
+				defer func() { <-sem }()
+				failures[i] = p.safeProbe(ctx, c)
+			})
+		}
+	}
+	wg.Wait()
+	return errors.Join(append(failures, ctx.Err())...)
+}
+
+// Worker panics need their own recovery; the scheduler can only recover the
+// Run goroutine. A malformed target must not terminate the whole process.
+func (p *Prober) safeProbe(ctx context.Context, c domain.Certificate) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			p.log.Error("cert probe panic", "id", c.ID, "panic", recovered, "stack", string(debug.Stack()))
+			err = fmt.Errorf("probe certificate %d panicked: %v", c.ID, recovered)
+		}
+	}()
+	if err := p.ProbeOne(ctx, c); err != nil {
+		p.log.Error("cert probe", "id", c.ID, "err", err)
+		return fmt.Errorf("probe certificate %d: %w", c.ID, err)
 	}
 	return nil
 }

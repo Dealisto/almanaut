@@ -75,7 +75,14 @@ func proxyAuth(header string, allow []*net.IPNet, autoProvision bool, defaultRol
 					next.ServeHTTP(w, r) // unknown identity, provisioning off → fall back to login
 					return
 				}
-				u, err = provisionProxyUser(users, username, defaultRole)
+				release, ok := acquirePasswordWork(w, r)
+				if !ok {
+					return
+				}
+				func() {
+					defer release()
+					u, err = provisionProxyUser(users, username, defaultRole)
+				}()
 			}
 			if err != nil {
 				serverError(w, r, err)

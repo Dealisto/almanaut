@@ -52,6 +52,11 @@ func listUsers(users *store.UserRepo) http.HandlerFunc {
 
 func createUser(users *store.UserRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		release, ok := acquirePasswordWork(w, r)
+		if !ok {
+			return
+		}
+		defer release()
 		username := strings.TrimSpace(r.FormValue("username"))
 		password := r.FormValue("password")
 		role := domain.Role(strings.TrimSpace(r.FormValue("role")))
@@ -243,6 +248,11 @@ func writePasswordAndRevoke(users *store.UserRepo, sessions *store.SessionRepo, 
 
 func resetUserPassword(users *store.UserRepo, sessions *store.SessionRepo, db *sql.DB, audit *store.AuthEventRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		release, ok := acquirePasswordWork(w, r)
+		if !ok {
+			return
+		}
+		defer release()
 		id, ok := userIDParam(w, r)
 		if !ok {
 			return
@@ -274,6 +284,11 @@ func changePasswordForm(w http.ResponseWriter, r *http.Request) {
 
 func changePassword(users *store.UserRepo, sessions *store.SessionRepo, db *sql.DB, audit *store.AuthEventRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		release, ok := acquirePasswordWork(w, r)
+		if !ok {
+			return
+		}
+		defer release()
 		u, ok := userFrom(r.Context())
 		if !ok {
 			serverError(w, r, errors.New("no authenticated user in context"))

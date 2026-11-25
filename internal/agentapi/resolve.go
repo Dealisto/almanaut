@@ -1,6 +1,9 @@
 package agentapi
 
-import "strings"
+import (
+	"net"
+	"strings"
+)
 
 // DecisionKind is what the server should do with an incoming report.
 type DecisionKind int
@@ -16,6 +19,9 @@ const (
 	// DecideConflict: the agent_id is bound, but the machine behind it is a
 	// different one — a cloned VM that copied the agent's state file.
 	DecideConflict
+	// DecideAmbiguous: several unbound hosts match the reported name or IPs.
+	// Refuse to modify any candidate until the inventory is disambiguated.
+	DecideAmbiguous
 )
 
 // Binding is an existing agent_id -> host_id link with its last fingerprint.
@@ -32,7 +38,7 @@ type HostRef struct {
 	IPs  []string
 }
 
-// Decision is Resolve's verdict. HostID is 0 for DecideCreate.
+// Decision is Resolve's verdict. HostID is 0 for creation or ambiguity.
 type Decision struct {
 	Kind   DecisionKind
 	HostID int64
@@ -53,7 +59,9 @@ func Resolve(r Report, existing *Binding, hosts []HostRef) Decision {
 		}
 		return Decision{Kind: DecideUpdate, HostID: existing.HostID}
 	}
-	if id, ok := matchHost(r, hosts); ok {
+	if id, ambiguous := matchHost(r, hosts); ambiguous {
+		return Decision{Kind: DecideAmbiguous}
+	} else if id != 0 {
 		return Decision{Kind: DecideAdopt, HostID: id}
 	}
 	return Decision{Kind: DecideCreate}
@@ -88,27 +96,33 @@ func splitFingerprint(fp string) (string, []string) {
 	return name, strings.Split(macs, ",")
 }
 
-// matchHost finds an existing host for an unbound agent: by normalized name
-// first, then by any shared IP.
+// matchHost accepts exactly one candidate across normalized names and shared
+// IPs. Conflicting signals must not let input order choose which host to edit.
+// The boolean reports ambiguity, not whether a match was found.
 func matchHost(r Report, hosts []HostRef) (int64, bool) {
 	want := normalizeName(r.Hostname)
-	for _, h := range hosts {
-		if normalizeName(h.Name) == want {
-			return h.ID, true
-		}
-	}
 	reported := map[string]bool{}
 	for _, ip := range r.ReportedIPs() {
 		reported[ip] = true
 	}
+	var matched int64
 	for _, h := range hosts {
-		for _, ip := range h.IPs {
-			if reported[ip] {
-				return h.ID, true
+		matches := want != "" && normalizeName(h.Name) == want
+		for _, raw := range h.IPs {
+			ip := net.ParseIP(strings.TrimSpace(raw))
+			if ip != nil && reported[ip.String()] {
+				matches = true
+				break
 			}
 		}
+		if matches {
+			if matched != 0 && matched != h.ID {
+				return 0, true
+			}
+			matched = h.ID
+		}
 	}
-	return 0, false
+	return matched, false
 }
 
 // normalizeName mirrors discovery.NormalizeName. It is duplicated rather than

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"time"
 )
@@ -79,6 +80,27 @@ func csrfProtect(forceSecure bool) func(http.Handler) http.Handler {
 			}
 
 			if !csrfSafeMethod(r.Method) {
+				// Parse explicitly: FormValue suppresses decoding errors and can
+				// otherwise pass a partial form through to a destructive handler.
+				err := r.ParseForm()
+				if err == nil {
+					err = r.ParseMultipartForm(32 << 20)
+					if errors.Is(err, http.ErrNotMultipart) {
+						err = nil
+					}
+				}
+				if r.MultipartForm != nil {
+					defer r.MultipartForm.RemoveAll()
+				}
+				if err != nil {
+					var tooLarge *http.MaxBytesError
+					if errors.As(err, &tooLarge) {
+						http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+					} else {
+						http.Error(w, "invalid form body", http.StatusBadRequest)
+					}
+					return
+				}
 				// The token alphabet is URL-safe base64 (base64.RawURLEncoding → [A-Za-z0-9-_]),
 				// so r.FormValue's percent-decoding is a no-op vs the raw cookie value.
 				// Any future encoding change (e.g. standard base64 with +/=) must reconsider

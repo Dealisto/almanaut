@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -348,10 +349,65 @@ func TestCheckerRecoversPanickingCheck(t *testing.T) {
 	}
 	state := newFakeState()
 	c := New(hosts, noServices{}, state, &countingSender{}, dial, time.Second, nil, nil)
-	if err := c.Run(context.Background()); err != nil {
-		t.Fatal(err)
+	if err := c.Run(context.Background()); err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("Run error = %v, want recovered panic", err)
 	}
 	if _, err := state.Get("host", 2); err != nil {
 		t.Fatal("the healthy target was not checked after another one panicked")
+	}
+}
+
+type failingState struct {
+	*fakeState
+	err error
+}
+
+func (s failingState) RecordCheck(typ string, id int64, addr string, status domain.LivenessStatus) (*domain.LivenessStatus, bool, error) {
+	if id == 1 {
+		return nil, false, s.err
+	}
+	return s.fakeState.RecordCheck(typ, id, addr, status)
+}
+
+type senderFunc func(context.Context, notify.Notification) error
+
+func (f senderFunc) Send(ctx context.Context, n notify.Notification) error { return f(ctx, n) }
+
+func TestCheckerReturnsStorageAndDeliveryErrorsAfterCheckingOtherTargets(t *testing.T) {
+	storageErr := errors.New("storage failed")
+	deliveryErr := errors.New("delivery failed")
+	state := newFakeState()
+	now := time.Now()
+	for _, id := range []int64{1, 2, 3} {
+		if err := state.Upsert("host", id, domain.LivenessStatus{Status: domain.LivenessDown, CheckedAt: now.Add(-time.Minute)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hosts := hostList{
+		{ID: 1, Name: "storage", CheckAddress: "storage:1"},
+		{ID: 2, Name: "delivery", CheckAddress: "delivery:1"},
+		{ID: 3, Name: "healthy", CheckAddress: "healthy:1"},
+	}
+	sent := &countingSender{}
+	sender := senderFunc(func(ctx context.Context, n notify.Notification) error {
+		if strings.Contains(n.Title, "delivery") {
+			return deliveryErr
+		}
+		return sent.Send(ctx, n)
+	})
+	c := New(hosts, noServices{}, failingState{state, storageErr}, sender,
+		func(context.Context, string) error { return nil }, time.Second, nil, func() time.Time { return now })
+	err := c.Run(context.Background())
+	if !errors.Is(err, storageErr) || !errors.Is(err, deliveryErr) {
+		t.Fatalf("Run error = %v, want both failures", err)
+	}
+	if sent.count() != 1 {
+		t.Fatalf("successful deliveries = %d, want 1", sent.count())
+	}
+	for _, id := range []int64{2, 3} {
+		got, err := state.Get("host", id)
+		if err != nil || got.Status != domain.LivenessUp {
+			t.Fatalf("host %d status = %+v, err = %v; want persisted up observation", id, got, err)
+		}
 	}
 }

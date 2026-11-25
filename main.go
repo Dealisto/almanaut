@@ -356,7 +356,13 @@ func runHealthcheck(addr string) int {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil // A local health probe must not go through an HTTP proxy.
 	defer transport.CloseIdleConnections()
-	client := &http.Client{Timeout: 3 * time.Second, Transport: transport}
+	client := &http.Client{
+		Timeout:   3 * time.Second,
+		Transport: transport,
+		// A login page or another endpoint answering 200 does not establish
+		// that this process's health endpoint is healthy.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
 	resp, err := client.Get(url)
 	if err != nil {
 		log.Printf("healthcheck: %v", err)

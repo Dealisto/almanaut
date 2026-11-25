@@ -18,6 +18,19 @@ type LivenessStatus struct {
 	LastError string    // probe failure detail; "" when up
 }
 
+// LivenessNotification is a durable, ordered transition awaiting delivery.
+// ObservedAt is retained so a delayed alert identifies the original observation.
+type LivenessNotification struct {
+	ID         int64
+	EntityType string
+	EntityID   int64
+	Label      string
+	Address    string
+	Status     string
+	LastError  string
+	ObservedAt string
+}
+
 // Liveness status constants.
 const (
 	LivenessUp   = "up"

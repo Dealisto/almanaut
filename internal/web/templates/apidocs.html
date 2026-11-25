@@ -13,6 +13,10 @@
   from the same catalog as this page.
 </p>
 
+<p class="notice">Entity lists and search return <strong>50 records per page</strong> by default.
+Use <code>page</code> (starting at 1) and <code>per_page</code> (1–100).
+Responses remain JSON arrays. Follow the <code>Link</code> header to fetch every page;
+<code>X-Total-Count</code> reports the total matching records.</p>
 <h2>Endpoints</h2>
 {{range .Sections}}
 <h3>{{.Name}}</h3>

@@ -130,6 +130,40 @@ func TestRequestLoggerSetsRequestIDHeaderFromContext(t *testing.T) {
 	}
 }
 
+func TestRequestLoggerRecordsCommittedStatus(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		run  http.HandlerFunc
+		want string
+	}{
+		{"empty", func(http.ResponseWriter, *http.Request) {}, "200"},
+		{"first header", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusCreated)
+			w.WriteHeader(http.StatusInternalServerError)
+		}, "201"},
+		{"implicit header", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("ok"))
+			w.WriteHeader(http.StatusInternalServerError)
+		}, "200"},
+		{"flush", func(w http.ResponseWriter, _ *http.Request) {
+			if err := http.NewResponseController(w).Flush(); err != nil {
+				t.Errorf("logger prevents flushing: %v", err)
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+		}, "200"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			h := requestLogger(log.New(&buf, "", 0))(tc.run)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+			if !strings.Contains(buf.String(), "GET / "+tc.want+" ") {
+				t.Errorf("log = %q, want committed status %s", buf.String(), tc.want)
+			}
+		})
+	}
+}
+
 func TestSensitiveResponsesAreNotCached(t *testing.T) {
 	h, db := totpTestHandler(t)
 	check := func(label string, rec *httptest.ResponseRecorder, status int) {

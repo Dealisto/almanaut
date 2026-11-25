@@ -32,9 +32,14 @@ func validateRequiredDate(field, value string) error {
 // DateLayout) is on or before now+withinDays — including already-past dates —
 // sorted by that date ascending. Items with an empty or unparseable date are
 // skipped. It is the shared core of the certificate/warranty/renewal checks so
-// they apply one identical cutoff and ordering rule.
+// they apply one identical cutoff and ordering rule. The cutoff uses calendar
+// dates in the caller's timezone, independent of the time of day.
 func expiringOnOrBefore[T any](items []T, now time.Time, withinDays int, dateOf func(T) string) []T {
-	cutoff := now.AddDate(0, 0, withinDays)
+	// Parsed date-only values use UTC. Represent the caller's calendar date
+	// in that same location before adding days, so a timezone offset cannot
+	// move the boundary into yesterday or tomorrow.
+	year, month, day := now.Date()
+	cutoff := time.Date(year, month, day, 0, 0, 0, 0, time.UTC).AddDate(0, 0, withinDays)
 	out := []T{}
 	for _, it := range items {
 		// Validation accepts surrounding whitespace; reads must apply the same

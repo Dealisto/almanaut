@@ -10,14 +10,14 @@ arrangement under a name, and act on several rows at once.
 Use **Find in this list** to search names, addresses, notes, and custom-field
 values without leaving the current entity type. Searches ignore letter case.
 Combine that search with a tag, a sort order, or **Filter a specific field**,
-then select **Apply**. The header's global search looks across all entity types;
+then select **Apply**. The tag input offers up to 100 suggestions; you can type
+any exact tag name, including one outside those suggestions. The header's global
+search looks across all entity types;
 press **Ctrl+K** (or **Cmd+K**) to focus it.
 
-Each list page can be filtered and sorted by any of its columns — the entity's
-own fields, its tags, and any [custom fields](inventory-model.md#custom-fields)
-defined for that type. No per-type configuration is involved: the columns come
-from the resource's own field labels, so a newly added field is filterable the
-day it exists.
+Each list page can be filtered and sorted by its available field columns,
+including [custom fields](inventory-model.md#custom-fields) defined for that
+type. The separate tag filter can be combined with those controls.
 
 **All of the state lives in the query string**, which is the useful part: a
 filtered, sorted list is a plain URL. You can bookmark it, paste it in a ticket,
@@ -31,13 +31,24 @@ descending order reverses both groups. `NaN` is treated as text.
 
 A "clear" affordance appears only when a filter or sort is actually applied.
 
+## Pagination
+
+Lists and global search show **50 records per page** by default. Entity lists
+also offer a rows-per-page selector; pages accept up to **100 records**. The
+count and Previous/Next links preserve the active filters and sort order.
+Filtering, sorting, and page selection happen in the database before records
+are loaded, so a large inventory does not need to be copied into application
+memory to render one page. Substring filters may still scan matching tables.
+
 ## Saved views (`/views`)
 
 A view you keep coming back to can be saved instead of rebuilt. On a filtered
 list, open **Save view**, give it a name, and it appears in the sidebar, grouped by entity
 type.
 
-Apply your filters before saving: a saved view captures the current page URL.
+Apply your filters before saving: a saved view captures the filters, sort order,
+and page size. It opens at the first page instead of retaining the current page
+number.
 
 Saved views are **per-user**: yours are yours, and another account's views never
 show up in your sidebar. Each one stores the query string, so opening a view is
@@ -50,7 +61,7 @@ longer matches anything still opens — it simply lists nothing.
 ## Bulk actions
 
 Select rows with the checkboxes, open **Bulk actions**, and apply one action to
-all of them. The header checkbox selects every row in the current filtered list;
+all of them. The header checkbox selects every row on the current page;
 the selection count shows how many records the action will affect. Individual
 rows keep their edit and delete controls under **Actions**.
 
@@ -61,7 +72,7 @@ rows keep their edit and delete controls under **Actions**.
 | **Set field** | Overwrites one field on every selected entity, leaving its other fields and custom-field values intact |
 | **Delete** | Deletes every selected entity |
 
-Three things are worth knowing before using them:
+Things to know before using them:
 
 - **The batch is all-or-nothing.** Every action runs in a single transaction, so
   if one row fails, the whole batch rolls back and nothing is changed. You never

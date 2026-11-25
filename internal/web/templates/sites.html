@@ -9,11 +9,12 @@
   </div>
 </div>
 {{template "listcontrols" .Controls}}
+{{template "pagination" .Controls.Pagination}}
 {{if .Items}}
 {{template "bulkactions" .Controls}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th scope="col" class="bulk-col"><span class="sr-only">Selection</span>{{if canWrite}}<input type="checkbox" class="js-only" data-select-all aria-label="Select all rows">{{end}}</th><th scope="col">Name</th><th scope="col">Address</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+  <thead><tr><th scope="col" class="bulk-col"><span class="sr-only">Selection</span>{{if canWrite}}<input type="checkbox" class="js-only" data-select-all aria-label="Select all rows on this page">{{end}}</th><th scope="col">Name</th><th scope="col">Address</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
   <tbody>
   {{range .Items}}
     <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select row {{.ID}}">{{end}}</td>
@@ -37,6 +38,7 @@
 </table>
 </div>
 {{else}}
-<div class="table-wrap"><div class="empty">{{if .Controls.Active}}{{icon "search"}}<strong>No matching records.</strong><p>Try a different search or clear your filters.</p><a class="btn" href="{{.Controls.BasePath}}">Clear filters</a>{{else}}{{icon "box"}}<strong>No sites yet.</strong><p>Add your first record to start documenting your inventory.</p>{{if canWrite}}<a class="btn" href="{{.Controls.BasePath}}/new">Add a record</a>{{end}}{{end}}</div></div>
+<div class="table-wrap"><div class="empty">{{if or .Controls.Active (gt .Controls.Pagination.Total 0)}}{{icon "search"}}<strong>No matching records.</strong><p>Try a different search or clear your filters.</p><a class="btn" href="{{.Controls.BasePath}}">Clear filters</a>{{else}}{{icon "box"}}<strong>No sites yet.</strong><p>Add your first record to start documenting your inventory.</p>{{if canWrite}}<a class="btn" href="{{.Controls.BasePath}}/new">Add a record</a>{{end}}{{end}}</div></div>
 {{end}}
+{{template "pagination" .Controls.Pagination}}
 {{end}}

@@ -1,11 +1,11 @@
 package web
 
 import (
+	"database/sql"
 	"encoding/json"
 	"math"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
@@ -41,27 +41,20 @@ func apiServerError(w http.ResponseWriter, r *http.Request, err error) {
 
 // apiSearch returns a flat JSON array of entities whose searchable fields match
 // q (case-insensitive). An empty q returns an empty array.
-func apiSearch(cat entityCatalog, cf *store.CustomFieldRepo) http.HandlerFunc {
+func apiSearch(cat entityCatalog, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		q := strings.TrimSpace(req.URL.Query().Get("q"))
-		results := []searchEntry{}
-		if q == "" {
-			writeJSON(w, http.StatusOK, results)
+		p, err := parsePagination(req)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		for _, rs := range cat.resources {
-			entries, err := rs.searchEntries(cf)
-			if err != nil {
-				apiServerError(w, req, err)
-				return
-			}
-			for _, e := range entries {
-				if matchesQuery(e.Fields, q) {
-					results = append(results, e)
-				}
-			}
+		entries, p, err := searchPage(req, db, cat, p)
+		if err != nil {
+			apiServerError(w, req, err)
+			return
 		}
-		writeJSON(w, http.StatusOK, results)
+		p.headers(w)
+		writeJSON(w, http.StatusOK, entries)
 	}
 }
 

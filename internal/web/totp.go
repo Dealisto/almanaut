@@ -298,7 +298,12 @@ type challenge2FAData struct {
 // valid pending cookie (set by login after a correct password).
 func challenge2FAForm(totp *store.TOTPRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !hasValidPending2FA(totp, r) {
+		valid, err := hasValidPending2FA(totp, r)
+		if err != nil {
+			serverError(w, r, err)
+			return
+		}
+		if !valid {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}
@@ -306,13 +311,16 @@ func challenge2FAForm(totp *store.TOTPRepo) http.HandlerFunc {
 	}
 }
 
-func hasValidPending2FA(totp *store.TOTPRepo, r *http.Request) bool {
+func hasValidPending2FA(totp *store.TOTPRepo, r *http.Request) (bool, error) {
 	c, err := r.Cookie(pending2FACookieName)
 	if err != nil || c.Value == "" {
-		return false
+		return false, nil
 	}
 	_, err = totp.PendingUser(hashToken(c.Value), nowRFC3339())
-	return err == nil
+	if errors.Is(err, store.ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 var (

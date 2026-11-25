@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -74,5 +75,28 @@ func TestHealthcheckRejectsUnhealthyResponse(t *testing.T) {
 	defer server.Close()
 	if got := runHealthcheck(server.Listener.Addr().String()); got != 1 {
 		t.Fatalf("healthcheck returned %d for unhealthy server", got)
+	}
+}
+
+func TestHealthcheckRejectsRedirects(t *testing.T) {
+	for _, status := range []int{301, 302, 303, 307, 308} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			var redirected atomic.Bool
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/healthz" {
+					http.Redirect(w, r, "/login", status)
+					return
+				}
+				redirected.Store(true)
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+			if got := runHealthcheck(server.Listener.Addr().String()); got != 1 {
+				t.Errorf("healthcheck returned %d for redirect to a healthy page", got)
+			}
+			if redirected.Load() {
+				t.Error("healthcheck followed a redirect")
+			}
+		})
 	}
 }
