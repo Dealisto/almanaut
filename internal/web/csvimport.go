@@ -33,13 +33,17 @@ func csvFields(sample any) map[string]bool {
 // entity's snake_case field names. A row with a non-empty id updates that row;
 // an empty/absent id creates. The import is all-or-nothing: if any row fails to
 // decode, validate, or resolve its id, nothing is written and the returned
-// rowErrs describe every bad row. A non-nil err is an infrastructure failure
-// (bad CSV framing, database error), distinct from per-row validation errors.
+// rowErrs describe invalid CSV syntax or bad rows. A non-nil err is an
+// infrastructure failure (reader or database error).
 func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, int, []string, error) {
 	cr := csv.NewReader(r)
 	cr.FieldsPerRecord = -1 // we length-check each row ourselves for row-level errors
 	records, err := cr.ReadAll()
 	if err != nil {
+		var syntax *csv.ParseError
+		if errors.As(err, &syntax) {
+			return 0, 0, []string{"invalid CSV: " + syntax.Error()}, nil
+		}
 		return 0, 0, nil, err
 	}
 	if len(records) == 0 {
@@ -102,7 +106,11 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 			id, create = parsed, false
 		}
 
-		item := rs.parse(get, id)
+		item, parseErr := rs.parseInput(get, id)
+		if parseErr != nil {
+			rowErrs = append(rowErrs, fmt.Sprintf("row %d: %v", line, parseErr))
+			continue
+		}
 		if verr := item.Validate(); verr != nil {
 			rowErrs = append(rowErrs, fmt.Sprintf("row %d: %v", line, verr))
 			continue

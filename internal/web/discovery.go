@@ -177,7 +177,7 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) 
 			tracked := make(map[string]bool)
 			for _, h := range existing {
 				for _, ip := range h.IPs {
-					tracked[ip] = true
+					tracked[discovery.NormalizeIP(ip)] = true
 				}
 			}
 			seen := make(map[string]bool)
@@ -195,7 +195,8 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) 
 					continue
 				}
 				ip, name, ports := parts[0], parts[1], parts[2]
-				if tracked[ip] {
+				key := discovery.NormalizeIP(ip)
+				if tracked[key] {
 					result.Existing++
 					continue
 				}
@@ -215,7 +216,7 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) 
 				if err := recordImport(cl, "host", newID, h.Name, actor(req)); err != nil {
 					return err
 				}
-				tracked[ip] = true // avoid a duplicate within the same submit
+				tracked[key] = true // avoid a duplicate within the same submit
 				result.Added++
 			}
 			return nil

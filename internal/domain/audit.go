@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // This file holds the fixed audit rules behind the inventory health page. Each
 // rule is a pure function over already-loaded slices so it can be unit-tested
@@ -64,7 +67,7 @@ func ExpiredCertificates(certs []Certificate, now time.Time) []Certificate {
 func HardwareWithoutWarranty(hw []Hardware) []Hardware {
 	out := []Hardware{}
 	for _, h := range hw {
-		if h.WarrantyEnd == "" {
+		if strings.TrimSpace(h.WarrantyEnd) == "" {
 			out = append(out, h)
 		}
 	}
@@ -76,7 +79,7 @@ func HardwareWithoutWarranty(hw []Hardware) []Hardware {
 func SubscriptionsWithoutRenewal(subs []Subscription) []Subscription {
 	out := []Subscription{}
 	for _, s := range subs {
-		if s.RenewalDate == "" {
+		if strings.TrimSpace(s.RenewalDate) == "" {
 			out = append(out, s)
 		}
 	}

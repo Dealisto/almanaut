@@ -42,14 +42,15 @@ type Key struct {
 func (i Item) Key() Key { return Key{Kind: i.Kind, ID: i.ID} }
 
 // decide compares the currently-expiring items against the set already
-// notified. It returns the items to notify now (expiring but not yet notified)
+// notified. It returns the items to notify now (new or changed deadlines)
 // and the keys to clear (previously notified but no longer expiring — renewed
 // or deleted).
-func decide(expiring []Item, sent map[Key]bool) (toNotify []Item, toClear []Key) {
+func decide(expiring []Item, sent map[Key]string) (toNotify []Item, toClear []Key) {
 	current := make(map[Key]bool, len(expiring))
 	for _, it := range expiring {
 		current[it.Key()] = true
-		if !sent[it.Key()] {
+		date, notified := sent[it.Key()]
+		if !notified || strings.TrimSpace(date) != strings.TrimSpace(it.Date) {
 			toNotify = append(toNotify, it)
 		}
 	}
@@ -127,9 +128,9 @@ func (n *Notifier) Run(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	sent := make(map[Key]bool, len(sentRaw))
-	for k := range sentRaw {
-		sent[Key{Kind: Kind(k.Kind), ID: k.ID}] = true
+	sent := make(map[Key]string, len(sentRaw))
+	for k, date := range sentRaw {
+		sent[Key{Kind: Kind(k.Kind), ID: k.ID}] = date
 	}
 
 	toNotify, toClear := decide(expiring, sent)
@@ -149,7 +150,7 @@ func (n *Notifier) Run(ctx context.Context, now time.Time) error {
 			runErr = errors.Join(runErr, fmt.Errorf("send %s %d notification: %w", it.Kind, it.ID, err))
 			continue
 		}
-		if err := n.state.Mark(string(it.Kind), it.ID, now); err != nil {
+		if err := n.state.Mark(string(it.Kind), it.ID, strings.TrimSpace(it.Date), now); err != nil {
 			return errors.Join(runErr, err)
 		}
 	}

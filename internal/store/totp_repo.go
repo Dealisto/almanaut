@@ -151,7 +151,7 @@ func (r *TOTPRepo) CreatePending(tokenHash string, userID int64, expiresAt strin
 func (r *TOTPRepo) PendingUser(tokenHash, now string) (int64, error) {
 	var uid int64
 	err := r.db.QueryRow(
-		`SELECT user_id FROM totp_pending WHERE token_hash = ? AND expires_at > ?`,
+		`SELECT user_id FROM totp_pending WHERE token_hash = ? AND julianday(expires_at) > julianday(?)`,
 		tokenHash, now,
 	).Scan(&uid)
 	if err != nil {
@@ -177,9 +177,9 @@ func (r *TOTPRepo) DeletePendingByUser(userID int64) error {
 	return nil
 }
 
-// DeleteExpiredPending prunes stale pending challenges.
+// DeleteExpiredPending prunes stale challenges and unusable malformed expiries.
 func (r *TOTPRepo) DeleteExpiredPending(now string) error {
-	if _, err := r.db.Exec(`DELETE FROM totp_pending WHERE expires_at <= ?`, now); err != nil {
+	if _, err := r.db.Exec(`DELETE FROM totp_pending WHERE julianday(expires_at) <= julianday(?) OR julianday(expires_at) IS NULL`, now); err != nil {
 		return fmt.Errorf("prune pending 2fa: %w", err)
 	}
 	return nil

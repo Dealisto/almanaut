@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -77,7 +78,7 @@ func TestSendReturnsErrConflictOn409(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "run 'almanaut-agent reset-id' on the clone"})
 	}))
 	defer srv.Close()
-	_, err := Send(context.Background(), srv.Client(), srv.URL, "t", testReport())
+	_, err := Send(context.Background(), srv.Client(), srv.URL, "private-token", testReport())
 	if !errors.Is(err, ErrConflict) {
 		t.Fatalf("err = %v, want ErrConflict", err)
 	}
@@ -166,8 +167,8 @@ func TestSendRejectsZeroHostID(t *testing.T) {
 
 func TestServerMessageDoesNotDrainPastTheExcerpt(t *testing.T) {
 	r := strings.NewReader(strings.Repeat("x", maxErrorBody*2))
-	if got := serverMessage(r); len(got) != maxErrorBody {
-		t.Fatalf("excerpt length = %d, want %d", len(got), maxErrorBody)
+	if got := serverMessage(r); got != "(no structured error message)" {
+		t.Fatalf("unstructured response was exposed: %q", got)
 	}
 	if r.Len() != maxErrorBody {
 		t.Fatalf("read beyond the excerpt: %d bytes remain", r.Len())
@@ -179,6 +180,8 @@ func TestSendValidatesSuccessResponse(t *testing.T) {
 		name, body string
 	}{
 		{"negative host ID", `{"host_id":-1}`},
+		{"HTML login page", `<html>Sign in</html>`},
+		{"invalid host ID type", `{"host_id":"not-an-id"}`},
 		{"trailing response", `{"host_id":1} {"host_id":2}`},
 		{"oversized response", `{"host_id":1,"ignored":"` + strings.Repeat("x", 64<<10) + `"}`},
 	} {
@@ -187,10 +190,60 @@ func TestSendValidatesSuccessResponse(t *testing.T) {
 				_, _ = w.Write([]byte(tc.body))
 			}))
 			defer srv.Close()
-			if _, err := Send(context.Background(), srv.Client(), srv.URL, "t", testReport()); err == nil {
-				t.Fatal("invalid success response was accepted")
+			if _, err := Send(context.Background(), srv.Client(), srv.URL, "t", testReport()); !errors.Is(err, ErrRejected) {
+				t.Fatalf("invalid success response error = %v, want permanent rejection", err)
 			}
 		})
+	}
+}
+
+func TestSendDoesNotExposeCredentialsInResponseErrors(t *testing.T) {
+	const token = "alm_private_token"
+	for _, structured := range []bool{false, true} {
+		for _, status := range []int{400, 409, 422, 429, 500} {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+				message := "request failed: " + r.Header.Get("Authorization") + " " + r.URL.Path
+				if structured {
+					_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
+				} else {
+					_, _ = w.Write([]byte("<html>" + message + "</html>"))
+				}
+			}))
+			_, err := Send(context.Background(), srv.Client(), srv.URL+"/private-path", token, testReport())
+			srv.Close()
+			if err == nil || strings.Contains(err.Error(), token) || strings.Contains(err.Error(), "private-path") || strings.Contains(err.Error(), "<html>") {
+				t.Fatalf("structured=%v status=%d: unsafe response error: %v", structured, status, err)
+			}
+		}
+	}
+}
+
+func TestSendRedactsTransportURLAndPreservesCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := Send(ctx, http.DefaultClient, "https://example.test/private-path", "alm_token", testReport())
+	if !errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "private-path") {
+		t.Fatalf("transport error lost cancellation or exposed URL: %v", err)
+	}
+}
+
+func TestSendRedactsCredentialInMalformedHTTPStatus(t *testing.T) {
+	const token = "alm_reflected_secret"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, buffer, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer conn.Close()
+		_, _ = fmt.Fprintf(buffer, "Bearer %s\r\n\r\n", token)
+		_ = buffer.Flush()
+	}))
+	defer srv.Close()
+	_, err := Send(context.Background(), srv.Client(), srv.URL, token, testReport())
+	if err == nil || strings.Contains(err.Error(), token) || !strings.Contains(err.Error(), "malformed HTTP status") {
+		t.Fatalf("unsafe protocol error: %v", err)
 	}
 }
 

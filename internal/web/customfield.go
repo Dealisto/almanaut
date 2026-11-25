@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -68,12 +69,23 @@ func (d handlerDeps) parseJSONCustomFields(entityType string, raw map[string]jso
 			continue // unknown field name: ignore
 		}
 		var v any
-		if err := json.Unmarshal(rawVal, &v); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(rawVal))
+		decoder.UseNumber()
+		if err := decoder.Decode(&v); err != nil {
 			return nil, customFieldValidationError{fmt.Errorf("%s: invalid value", name)}
 		}
 		switch v.(type) {
 		case []any, map[string]any:
 			return nil, customFieldValidationError{fmt.Errorf("%s: value must be a string, number, boolean, or null", def.Label)}
+		}
+		// Preserve the existing scalar coercion for boolean fields (1.0 and
+		// 1e0 mean true). Text and number fields retain the exact JSON number.
+		if number, ok := v.(json.Number); ok && def.Kind == domain.KindBool {
+			value, err := number.Float64()
+			if err != nil {
+				return nil, customFieldValidationError{fmt.Errorf("%s: invalid boolean value", def.Label)}
+			}
+			v = value
 		}
 		canon, err := domain.ValidateCustomFieldValue(def.Kind, jsonValueToString(v))
 		if err != nil {
@@ -88,6 +100,8 @@ func (d handlerDeps) parseJSONCustomFields(entityType string, raw map[string]jso
 // ValidateCustomFieldValue expects (number→formatted, bool→true/false, else as-is).
 func jsonValueToString(v any) string {
 	switch x := v.(type) {
+	case json.Number:
+		return x.String()
 	case float64:
 		return strconv.FormatFloat(x, 'f', -1, 64)
 	case bool:

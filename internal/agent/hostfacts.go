@@ -32,23 +32,31 @@ func CollectHostFacts(r Root) HostFacts {
 // prettyOSName returns os-release's PRETTY_NAME, falling back to NAME.
 func prettyOSName(r Root) string {
 	f, err := os.Open(r.Path(r.Etc, "os-release"))
+	if os.IsNotExist(err) && r.UsrLib != "" {
+		f, err = os.Open(r.Path(r.UsrLib, "os-release"))
+	}
 	if err != nil {
 		return ""
 	}
 	defer f.Close()
-	var name string
+	var name, pretty string
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		key, value, ok := strings.Cut(sc.Text(), "=")
 		if !ok {
 			continue
 		}
-		value = strings.Trim(strings.TrimSpace(value), `"`)
-		switch strings.TrimSpace(key) {
+		key = strings.TrimSpace(key)
+		if key != "NAME" && key != "PRETTY_NAME" {
+			continue
+		}
+		value, ok = osReleaseValue(value)
+		if !ok {
+			return ""
+		}
+		switch key {
 		case "PRETTY_NAME":
-			if value != "" {
-				return value
-			}
+			pretty = value
 		case "NAME":
 			name = value
 		}
@@ -59,7 +67,46 @@ func prettyOSName(r Root) string {
 		// Report "could not determine" rather than that partial value.
 		return ""
 	}
+	if pretty != "" {
+		return pretty
+	}
 	return name
+}
+
+// osReleaseValue decodes the shell-style quoting allowed by os-release without
+// executing commands or expanding variables. Quoted fragments cannot be joined.
+// https://www.freedesktop.org/software/systemd/man/latest/os-release.html
+func osReleaseValue(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	var quote byte
+	if len(raw) > 0 && (raw[0] == '\'' || raw[0] == '"') {
+		quote, raw = raw[0], raw[1:]
+	}
+	var out strings.Builder
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		if quote != 0 && c == quote {
+			return out.String(), strings.TrimSpace(raw[i+1:]) == ""
+		}
+		if c == '\\' && quote != '\'' {
+			i++
+			if i == len(raw) {
+				return "", false
+			}
+			// Inside double quotes, a backslash only escapes shell-special
+			// characters; e.g. \q remains literal, not a Go escape sequence.
+			if quote == '"' && !strings.ContainsRune("$`\"\\", rune(raw[i])) {
+				out.WriteByte('\\')
+			}
+			out.WriteByte(raw[i])
+			continue
+		}
+		if quote == 0 && (c == '\'' || c == '"' || c == ' ' || c == '\t') {
+			return "", false
+		}
+		out.WriteByte(c)
+	}
+	return out.String(), quote == 0
 }
 
 // readUptimeSeconds reads the whole-seconds part of /proc/uptime.
@@ -85,7 +132,7 @@ var containerRuntimes = map[string]bool{
 // vmVendorMarkers are substrings that identify a hypervisor in DMI strings.
 var vmVendorMarkers = []string{
 	"kvm", "qemu", "vmware", "virtualbox", "innotek", "xen",
-	"microsoft corporation", "bochs", "parallels", "bhyve", "amazon ec2",
+	"hyper-v", "bochs", "parallels", "bhyve", "amazon ec2",
 }
 
 // detectVirtKind returns physical, vm or lxc, or empty when a required
@@ -126,8 +173,15 @@ func detectVirtKind(r Root) string {
 		return ""
 	}
 
-	for _, file := range []string{"class/dmi/id/product_name", "class/dmi/id/sys_vendor"} {
-		v := strings.ToLower(readTrimmed(r.Path(r.Sys, file)))
+	product := strings.ToLower(readTrimmed(r.Path(r.Sys, "class/dmi/id/product_name")))
+	vendor := strings.ToLower(readTrimmed(r.Path(r.Sys, "class/dmi/id/sys_vendor")))
+	// Microsoft also manufactures physical Surface devices. Its vendor string
+	// alone is not evidence of virtualization.
+	if vendor == "microsoft corporation" && product == "virtual machine" {
+		return "vm"
+	}
+	version := strings.ToLower(readTrimmed(r.Path(r.Sys, "class/dmi/id/product_version")))
+	for _, v := range []string{product, vendor, version} {
 		for _, marker := range vmVendorMarkers {
 			if strings.Contains(v, marker) {
 				return "vm"

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -80,6 +81,11 @@ func LoadConfig(path string, getenv func(string) string) (Config, error) {
 	if cfg.Token == "" {
 		return Config{}, fmt.Errorf("%s: token is required (or set %s)", path, TokenEnvVar)
 	}
+	for _, c := range cfg.Token {
+		if c <= ' ' || c >= 0x7f {
+			return Config{}, fmt.Errorf("%s: token must contain only printable ASCII characters without whitespace", path)
+		}
+	}
 	return cfg, nil
 }
 
@@ -90,13 +96,23 @@ func LoadConfig(path string, getenv func(string) string) (Config, error) {
 func validateServerURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("invalid URL: %w", err)
+		// url.Error includes the original URL, which can contain credentials.
+		return fmt.Errorf("invalid URL")
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("scheme must be http or https, got %q", u.Scheme)
 	}
-	if u.Host == "" {
+	if u.Hostname() == "" {
 		return fmt.Errorf("missing host")
+	}
+	if u.User != nil {
+		return fmt.Errorf("URL credentials are not supported; use token instead")
+	}
+	if port := u.Port(); port != "" {
+		n, err := strconv.Atoi(port)
+		if err != nil || n < 1 || n > 65535 {
+			return fmt.Errorf("port must be between 1 and 65535")
+		}
 	}
 	if u.RawQuery != "" || u.ForceQuery || strings.Contains(raw, "#") {
 		return fmt.Errorf("query strings and fragments are not supported")

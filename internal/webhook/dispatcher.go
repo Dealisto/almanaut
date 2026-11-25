@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -34,7 +35,7 @@ type Lister interface {
 // Options configures a Queue. Zero fields fall back to defaults.
 type Options struct {
 	Workers     int           // concurrent delivery workers (default 4)
-	QueueSize   int           // buffered event/job channel size (default 256)
+	QueueSize   int           // event buffer and waiting-delivery capacity (default 256)
 	MaxAttempts int           // delivery attempts before giving up (default 5)
 	BaseDelay   time.Duration // first retry backoff, doubled each attempt (default 2s)
 	Timeout     time.Duration // per-request HTTP timeout (default 10s)
@@ -47,8 +48,9 @@ type Options struct {
 // one HTTP attempt per job. A failed job is re-enqueued after a backoff delay
 // via a timer that never occupies a worker, so a slow/broken receiver cannot
 // block delivery to healthy endpoints or to other events. Retries are bounded;
-// after MaxAttempts the job is dropped and logged. In-flight jobs are lost if
-// the process exits.
+// after MaxAttempts the job is dropped and logged. QueueSize + Workers bounds
+// all retained deliveries, including delayed retries. In-flight jobs are lost
+// if the process exits. Call Shutdown to drain and stop the queue.
 type Queue struct {
 	repo   Lister
 	client *http.Client
@@ -58,6 +60,17 @@ type Queue struct {
 	events chan Event
 	jobs   chan *deliveryJob
 	wg     sync.WaitGroup
+	slots  chan struct{} // all queued, active and delayed deliveries
+
+	ctx      context.Context
+	cancel   context.CancelFunc
+	workers  sync.WaitGroup
+	done     chan struct{}
+	mu       sync.Mutex // serializes admission with shutdown
+	closed   bool
+	stopOnce sync.Once
+	retryMu  sync.Mutex
+	retries  map[*time.Timer]struct{}
 }
 
 type deliveryJob struct {
@@ -86,31 +99,34 @@ func NewQueue(repo Lister, opts Options) *Queue {
 	if opts.Timeout <= 0 {
 		opts.Timeout = 10 * time.Second
 	}
-	client := opts.Client
-	if client == nil {
-		client = &http.Client{
-			Timeout: opts.Timeout,
-			// Refuse to follow redirects: an endpoint answering 3xx would
-			// otherwise turn the signed POST into a bodyless GET that "succeeds".
-			// Returning the 3xx response makes delivery fail honestly and retry.
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+	client := &http.Client{Timeout: opts.Timeout}
+	if opts.Client != nil {
+		copy := *opts.Client
+		client = &copy
+		if client.Timeout <= 0 {
+			client.Timeout = opts.Timeout
 		}
 	}
+	// Keep injected transports while applying the same delivery policy. A
+	// redirect can otherwise turn the signed POST into a bodyless GET.
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	logger := opts.Logger
 	if logger == nil {
 		logger = log.Default()
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	q := &Queue{
 		repo: repo, client: client, log: logger,
 		max: opts.MaxAttempts, base: opts.BaseDelay,
 		events: make(chan Event, opts.QueueSize),
 		jobs:   make(chan *deliveryJob, opts.QueueSize),
+		slots:  make(chan struct{}, opts.QueueSize+opts.Workers),
+		ctx:    ctx, cancel: cancel, done: make(chan struct{}),
+		retries: make(map[*time.Timer]struct{}),
 	}
-	go q.expander()
+	q.workers.Go(q.expander)
 	for i := 0; i < opts.Workers; i++ {
-		go q.deliveryWorker()
+		q.workers.Go(q.deliveryWorker)
 	}
 	return q
 }
@@ -118,6 +134,11 @@ func NewQueue(repo Lister, opts Options) *Queue {
 // Dispatch enqueues events without blocking. A full event queue drops the event
 // (logged) — never blocks the caller's request or transaction.
 func (q *Queue) Dispatch(events ...Event) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.closed {
+		return
+	}
 	for _, e := range events {
 		q.wg.Add(1)
 		select {
@@ -130,14 +151,53 @@ func (q *Queue) Dispatch(events ...Event) {
 }
 
 // Wait blocks until every enqueued event and all of its delivery jobs (including
-// scheduled retries) have terminated. Intended for tests and graceful shutdown.
+// scheduled retries) have terminated. Callers must stop dispatching before
+// waiting. Use Shutdown to also stop admission and release worker goroutines.
 func (q *Queue) Wait() { q.wg.Wait() }
+
+// Shutdown stops accepting events and drains accepted work until ctx ends.
+// At the deadline it cancels HTTP requests and pending retries. It is safe to
+// call again to wait for cleanup; workers and timers stop once accepted work
+// has terminated. Dispatch after shutdown is ignored.
+func (q *Queue) Shutdown(ctx context.Context) error {
+	q.stopOnce.Do(func() {
+		q.mu.Lock()
+		q.closed = true
+		q.mu.Unlock()
+		go func() {
+			q.wg.Wait()
+			q.cancel()
+			close(q.events)
+			close(q.jobs)
+			q.workers.Wait()
+			q.client.CloseIdleConnections()
+			close(q.done)
+		}()
+	})
+	select {
+	case <-q.done:
+		return nil
+	case <-ctx.Done():
+		q.cancel()
+		q.retryMu.Lock()
+		for timer := range q.retries {
+			if timer.Stop() {
+				delete(q.retries, timer)
+				q.finishJob()
+			}
+		}
+		q.retryMu.Unlock()
+		return ctx.Err()
+	}
+}
 
 // expander turns each event into per-endpoint delivery jobs. It runs off the
 // caller so the DB read and signing never block Dispatch.
 func (q *Queue) expander() {
 	for e := range q.events {
-		q.safely("expand "+e.Type, func() { q.expand(e) })
+		if q.ctx.Err() == nil {
+			q.safely("expand "+e.Type, func() { q.expand(e) })
+		}
 		q.wg.Done() // the event's own slot; each job adds its own slot in expand
 	}
 }
@@ -161,16 +221,27 @@ func (q *Queue) expand(e Event) {
 		return
 	}
 	for _, ep := range endpoints {
+		if q.ctx.Err() != nil {
+			return
+		}
 		if !ep.Matches(e.Type, e.Action) {
+			continue
+		}
+		select {
+		case q.slots <- struct{}{}:
+		default:
+			q.log.Printf("webhook: delivery capacity full, dropping %s %s/%d", e.Action, e.Type, e.ID)
 			continue
 		}
 		deliveryID, err := newDeliveryID()
 		if err != nil {
+			<-q.slots
 			q.log.Printf("webhook: %v", err)
 			continue
 		}
 		body, sig, err := buildBody(e, deliveryID, ep.Secret)
 		if err != nil {
+			<-q.slots
 			q.log.Printf("webhook: %v", err)
 			continue
 		}
@@ -185,12 +256,38 @@ func (q *Queue) expand(e Event) {
 // enqueue pushes a job without blocking; a full job queue drops it (logged) and
 // releases its wg slot.
 func (q *Queue) enqueue(j *deliveryJob) {
+	if q.ctx.Err() != nil {
+		q.finishJob()
+		return
+	}
 	select {
 	case q.jobs <- j:
 	default:
-		q.wg.Done()
+		q.finishJob()
 		q.log.Printf("webhook: job queue full, dropping delivery to %s (%s)", redact.URL(j.url), j.logRef)
 	}
+}
+
+func (q *Queue) finishJob() {
+	<-q.slots
+	q.wg.Done()
+}
+
+func (q *Queue) retry(j *deliveryJob, delay time.Duration) {
+	q.retryMu.Lock()
+	defer q.retryMu.Unlock()
+	if q.ctx.Err() != nil {
+		q.finishJob()
+		return
+	}
+	var timer *time.Timer
+	timer = time.AfterFunc(delay, func() {
+		q.retryMu.Lock()
+		delete(q.retries, timer)
+		q.retryMu.Unlock()
+		q.enqueue(j)
+	})
+	q.retries[timer] = struct{}{}
 }
 
 // deliveryWorker makes one HTTP attempt per job. On failure with attempts
@@ -198,29 +295,44 @@ func (q *Queue) enqueue(j *deliveryJob) {
 // holds the job's wg slot across the delay without occupying a worker.
 func (q *Queue) deliveryWorker() {
 	for j := range q.jobs {
+		if q.ctx.Err() != nil {
+			q.finishJob()
+			continue
+		}
 		err := fmt.Errorf("delivery panicked")
 		q.safely("delivery", func() { err = q.post(j.url, j.body, j.sig, j.deliveryID) })
 		if err == nil {
-			q.wg.Done()
+			q.finishJob()
 			continue
 		}
 		q.log.Printf("webhook: deliver to %s attempt %d/%d: %v", redact.URL(j.url), j.attempt, q.max, err)
 		if j.attempt >= q.max {
 			q.log.Printf("webhook: giving up on %s after %d attempts (%s)", redact.URL(j.url), q.max, j.logRef)
-			q.wg.Done()
+			q.finishJob()
 			continue
 		}
-		delay := q.base * time.Duration(int64(1)<<(j.attempt-1))
+		delay := retryDelay(q.base, j.attempt)
 		j.attempt++
-		jb := j // bind for the timer closure (safe on any Go version)
-		time.AfterFunc(delay, func() { q.enqueue(jb) })
+		q.retry(j, delay)
 	}
+}
+
+// Saturate instead of overflowing into a negative delay and a tight retry loop.
+func retryDelay(base time.Duration, attempt int) time.Duration {
+	const maxDelay = time.Duration(1<<63 - 1)
+	for i := 1; i < attempt; i++ {
+		if base > maxDelay/2 {
+			return maxDelay
+		}
+		base *= 2
+	}
+	return base
 }
 
 func (q *Queue) post(url string, body []byte, sig, deliveryID string) error {
 	// Errors carry the endpoint URL, which often embeds a token: redact them,
 	// since the caller logs every failed attempt.
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(q.ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return redact.Error(err)
 	}

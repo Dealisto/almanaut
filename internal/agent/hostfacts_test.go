@@ -23,10 +23,56 @@ func fixtureRoot(t *testing.T, files map[string]string) Root {
 		}
 	}
 	return Root{
-		Proc: filepath.Join(base, "proc"),
-		Sys:  filepath.Join(base, "sys"),
-		Etc:  filepath.Join(base, "etc"),
-		Run:  filepath.Join(base, "run"),
+		Proc:   filepath.Join(base, "proc"),
+		Sys:    filepath.Join(base, "sys"),
+		Etc:    filepath.Join(base, "etc"),
+		Run:    filepath.Join(base, "run"),
+		UsrLib: filepath.Join(base, "usr/lib"),
+	}
+}
+
+func TestOSReleaseSyntaxAndPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		files map[string]string
+		want  string
+	}{
+		{"vendor fallback", map[string]string{"usr/lib/os-release": `PRETTY_NAME="Vendor Linux"`}, "Vendor Linux"},
+		{"etc overrides vendor", map[string]string{"etc/os-release": `NAME="Local Linux"`, "usr/lib/os-release": `PRETTY_NAME="Vendor Linux"`}, "Local Linux"},
+		{"empty etc does not merge vendor", map[string]string{"etc/os-release": "", "usr/lib/os-release": `NAME="Vendor Linux"`}, ""},
+		{"single quotes", map[string]string{"etc/os-release": `PRETTY_NAME='Example Linux'`}, "Example Linux"},
+		{"shell escapes", map[string]string{"etc/os-release": "PRETTY_NAME=\"Example \\\"Edition\\\" \\$HOME \\`literal\\` \\\\path\\q\""}, "Example \"Edition\" $HOME `literal` \\path\\q"},
+		{"last assignment wins", map[string]string{"etc/os-release": "PRETTY_NAME=Old\nPRETTY_NAME=New\n"}, "New"},
+		{"malformed quote", map[string]string{"etc/os-release": "PRETTY_NAME=\"Incomplete\n"}, ""},
+		{"concatenation is unsupported", map[string]string{"etc/os-release": `PRETTY_NAME="One""Two"`}, ""},
+		{"read error after pretty name", map[string]string{"etc/os-release": "PRETTY_NAME=Old\n" + strings.Repeat("x", 100000)}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := prettyOSName(fixtureRoot(t, tc.files)); got != tc.want {
+				t.Fatalf("OS = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMicrosoftHardwareIsNotInferredToBeVirtual(t *testing.T) {
+	for _, tc := range []struct{ product, version, want string }{
+		{"Surface Pro 7", "", "physical"},
+		{"Surface Laptop", "", "physical"},
+		{"Virtual Machine", "", "vm"},
+		{"", "Hyper-V UEFI Release v4.1", "vm"},
+	} {
+		t.Run(tc.product+tc.version, func(t *testing.T) {
+			r := fixtureRoot(t, map[string]string{
+				"proc/1/environ":                   "",
+				"sys/class/dmi/id/sys_vendor":      "Microsoft Corporation",
+				"sys/class/dmi/id/product_name":    tc.product,
+				"sys/class/dmi/id/product_version": tc.version,
+			})
+			if got := detectVirtKind(r); got != tc.want {
+				t.Fatalf("virtualization = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

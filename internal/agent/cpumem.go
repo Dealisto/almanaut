@@ -3,6 +3,7 @@ package agent
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -13,21 +14,23 @@ import (
 // at or above this is not a real limit.
 const v1UnlimitedThreshold = int64(1) << 62
 
-// CollectRAM returns the machine's memory as a human string, preferring the
-// cgroup limit over /proc/meminfo.
+// CollectRAM returns the machine's memory as a human string, capped by the
+// cgroup limit when it is lower than /proc/meminfo.
 //
 // The preference is the point. Proxmox mounts lxcfs, which virtualizes
 // /proc/meminfo to the container's allocation — but lxcfs may be absent, and
 // then /proc/meminfo shows the host's total and every LXC on the box claims
-// 64 GB. The cgroup limit is the true allocation either way.
+// 64 GB. A lower cgroup limit describes the container's allocation. A higher
+// ceiling cannot make more memory available than /proc/meminfo reports.
 //
 // Returns "" when neither source is readable, which the server reads as
 // "could not determine" and leaves the existing value alone.
 func CollectRAM(r Root) string {
-	if bytes, ok := cgroupMemoryLimitBytes(r); ok {
-		return formatBytes(bytes)
+	bytes, ok := procMemTotalBytes(r)
+	if limit, limited := cgroupMemoryLimitBytes(r); limited && (!ok || limit < bytes) {
+		bytes, ok = limit, true
 	}
-	if bytes, ok := procMemTotalBytes(r); ok {
+	if ok {
 		return formatBytes(bytes)
 	}
 	return ""
@@ -41,15 +44,15 @@ func CollectRAM(r Root) string {
 //
 // A cpuset file existing is not enough to say "allocated": cgroup v2 mounts
 // one on every modern host, so cpuset.cpus.effective lists every processor on
-// bare metal too. "Allocated" is only said when the cpuset count differs from
-// /proc/cpuinfo's processor count — the one case where the cgroup is actually
+// bare metal too. "Allocated" is only said when the cpuset count is lower than
+// /proc/cpuinfo's processor count — the case where the cgroup is actually
 // restricting the container to fewer CPUs than the machine has.
 func CollectCPU(r Root) string {
 	model, procs := procCPUInfo(r)
 	if model == "" {
 		return ""
 	}
-	if n, ok := cgroupEffectiveCPUCount(r); ok && n != procs {
+	if n, ok := cgroupEffectiveCPUCount(r); ok && (procs == 0 || n < procs) {
 		return fmt.Sprintf("%s (%d cores allocated)", model, n)
 	}
 	if procs > 0 {
@@ -143,7 +146,7 @@ func procMemTotalBytes(r Root) (int64, bool) {
 			return 0, false
 		}
 		kb, err := strconv.ParseInt(fields[0], 10, 64)
-		if err != nil {
+		if err != nil || kb <= 0 || kb > math.MaxInt64/1024 {
 			return 0, false
 		}
 		return kb * 1024, true

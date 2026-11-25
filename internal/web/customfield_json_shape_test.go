@@ -77,6 +77,7 @@ func TestCustomFieldAPIScalarCompatibility(t *testing.T) {
 	for _, tc := range []struct{ input, want string }{
 		{`{"text":"hello","number":12.5,"flag":true,"date":"2026-11-25"}`, `"custom_fields":{"date":"2026-11-25","flag":true,"number":12.5,"text":"hello"}`},
 		{`{"text":123,"number":"12.5","flag":"yes"}`, `"custom_fields":{"flag":true,"number":12.5,"text":"123"}`},
+		{`{"flag":1e0}`, `"custom_fields":{"flag":true}`},
 		{`{"text":null,"number":null,"flag":null,"date":null}`, `"custom_fields":{"flag":false}`},
 	} {
 		rec := httptest.NewRecorder()

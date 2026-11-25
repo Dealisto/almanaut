@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"context"
 	"io"
 	"log"
 	"net/http"
@@ -39,16 +40,28 @@ func recordingServer(t *testing.T, status int) (*httptest.Server, *[]captured, *
 	return srv, &got, &mu
 }
 
-func testQueue(repo Lister, opts Options) *Queue {
+func testQueue(t *testing.T, repo Lister, opts Options) *Queue {
+	t.Helper()
 	if opts.Logger == nil {
 		opts.Logger = log.New(io.Discard, "", 0)
 	}
-	return NewQueue(repo, opts)
+	q := NewQueue(repo, opts)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_ = q.Shutdown(ctx)
+		select {
+		case <-q.done:
+		case <-time.After(2 * time.Second):
+			t.Error("queue workers did not stop")
+		}
+	})
+	return q
 }
 
 func TestQueueDeliversSignedPost(t *testing.T) {
 	srv, got, mu := recordingServer(t, http.StatusOK)
-	q := testQueue(fakeLister{hooks: []domain.Webhook{
+	q := testQueue(t, fakeLister{hooks: []domain.Webhook{
 		{URL: srv.URL, Secret: "sek", Enabled: true},
 	}}, Options{Workers: 1})
 
@@ -68,7 +81,7 @@ func TestQueueDeliversSignedPost(t *testing.T) {
 
 func TestQueueHonoursFilter(t *testing.T) {
 	srv, got, mu := recordingServer(t, http.StatusOK)
-	q := testQueue(fakeLister{hooks: []domain.Webhook{
+	q := testQueue(t, fakeLister{hooks: []domain.Webhook{
 		{URL: srv.URL, Secret: "s", Enabled: true, EntityTypes: []string{"service"}},
 	}}, Options{Workers: 1})
 
@@ -91,7 +104,7 @@ func TestQueueRetriesThenGivesUp(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	q := testQueue(fakeLister{hooks: []domain.Webhook{{URL: srv.URL, Secret: "s", Enabled: true}}},
+	q := testQueue(t, fakeLister{hooks: []domain.Webhook{{URL: srv.URL, Secret: "s", Enabled: true}}},
 		Options{Workers: 1, MaxAttempts: 3, BaseDelay: time.Millisecond})
 
 	e, _ := NewEvent("host", 1, ActionCreated, "a", "t", map[string]string{})
@@ -112,7 +125,7 @@ func TestQueueOneFailingEndpointDoesNotBlockSibling(t *testing.T) {
 	}))
 	t.Cleanup(failSrv.Close)
 
-	q := testQueue(fakeLister{hooks: []domain.Webhook{
+	q := testQueue(t, fakeLister{hooks: []domain.Webhook{
 		{URL: failSrv.URL, Secret: "s", Enabled: true},
 		{URL: okSrv.URL, Secret: "s", Enabled: true},
 	}}, Options{Workers: 1, MaxAttempts: 3, BaseDelay: time.Millisecond})
@@ -153,7 +166,7 @@ func TestQueueLogsDoNotLeakEndpointURL(t *testing.T) {
 
 	var mu sync.Mutex
 	var logs strings.Builder
-	q := NewQueue(fakeLister{hooks: []domain.Webhook{{URL: dead + "/hook/SECRETTOKEN?key=SECRETKEY", Secret: "s", Enabled: true}}},
+	q := testQueue(t, fakeLister{hooks: []domain.Webhook{{URL: dead + "/hook/SECRETTOKEN?key=SECRETKEY", Secret: "s", Enabled: true}}},
 		Options{Workers: 1, MaxAttempts: 2, BaseDelay: time.Millisecond, Logger: log.New(lockedWriter{&mu, &logs}, "", 0)})
 
 	e, _ := NewEvent("host", 1, ActionCreated, "a", "t", map[string]string{})
@@ -190,7 +203,7 @@ func (panickingTransport) RoundTrip(*http.Request) (*http.Response, error) { pan
 // TestQueueRecoversPanickingDelivery: a panic during delivery is logged and
 // treated as a failed attempt; the worker survives and Wait still returns.
 func TestQueueRecoversPanickingDelivery(t *testing.T) {
-	q := testQueue(fakeLister{hooks: []domain.Webhook{{URL: "http://example.invalid/h", Secret: "s", Enabled: true}}},
+	q := testQueue(t, fakeLister{hooks: []domain.Webhook{{URL: "http://example.invalid/h", Secret: "s", Enabled: true}}},
 		Options{Workers: 1, MaxAttempts: 2, BaseDelay: time.Millisecond, Client: &http.Client{Transport: panickingTransport{}}})
 	e, _ := NewEvent("host", 1, ActionCreated, "a", "t", map[string]string{})
 	q.Dispatch(e, e)

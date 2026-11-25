@@ -75,6 +75,49 @@ func TestCollectRAMEmptyWhenNothingReadable(t *testing.T) {
 	}
 }
 
+func TestCollectRAMDoesNotExceedProcTotal(t *testing.T) {
+	for _, path := range []string{"sys/fs/cgroup/memory.max", "sys/fs/cgroup/memory/memory.limit_in_bytes"} {
+		t.Run(path, func(t *testing.T) {
+			r := fixtureRoot(t, map[string]string{
+				"proc/meminfo": "MemTotal: 4194304 kB\n",
+				path:           "8589934592\n",
+			})
+			if got := CollectRAM(r); got != "4.0 GB" {
+				t.Fatalf("CollectRAM = %q, want available memory below the cgroup ceiling", got)
+			}
+		})
+	}
+}
+
+func TestCollectRAMRejectsInvalidProcTotals(t *testing.T) {
+	for _, value := range []string{"0", "-1", "9223372036854775807"} {
+		t.Run(value, func(t *testing.T) {
+			r := fixtureRoot(t, map[string]string{"proc/meminfo": "MemTotal: " + value + " kB\n"})
+			if got := CollectRAM(r); got != "" {
+				t.Fatalf("CollectRAM = %q, want unknown for invalid memory", got)
+			}
+		})
+	}
+}
+
+func TestCollectRAMUsesCgroupWhenProcUnavailable(t *testing.T) {
+	r := fixtureRoot(t, map[string]string{"sys/fs/cgroup/memory.max": "4294967296\n"})
+	if got := CollectRAM(r); got != "4.0 GB" {
+		t.Fatalf("CollectRAM = %q, want readable cgroup limit", got)
+	}
+}
+
+func TestCollectCPUDoesNotExceedProcCount(t *testing.T) {
+	r := fixtureRoot(t, map[string]string{
+		"proc/cpuinfo":                        cpuinfo4Core,
+		"sys/fs/cgroup/cpuset.cpus.effective": "0-15\n",
+	})
+	want := "AMD Ryzen 9 5950X 16-Core Processor (4 cores)"
+	if got := CollectCPU(r); got != want {
+		t.Fatalf("CollectCPU = %q, want %q", got, want)
+	}
+}
+
 func TestCollectCPUUsesModelAndCgroupCoreCount(t *testing.T) {
 	r := fixtureRoot(t, map[string]string{
 		"proc/cpuinfo":                        cpuinfo4Core,

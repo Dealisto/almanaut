@@ -3,8 +3,10 @@ package web
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"strconv"
@@ -27,10 +29,14 @@ func (rs resource[T]) bulk(d handlerDeps) http.HandlerFunc {
 			return
 		}
 		action := req.FormValue("action")
-		ids := parseIDs(req.Form["ids"])
+		ids, err := parseIDs(req.Form["ids"])
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		if len(ids) == 0 {
 			// Nothing selected: nothing to do, just return to the list.
-			http.Redirect(w, req, rs.basePath(), http.StatusSeeOther)
+			http.Redirect(w, req, rs.listReturnPath(req), http.StatusSeeOther)
 			return
 		}
 
@@ -59,7 +65,7 @@ func (rs resource[T]) bulk(d handlerDeps) http.HandlerFunc {
 
 		actor := actor(req)
 		var events []webhook.Event
-		err := store.WithTx(d.db, func(tx *sql.Tx) error {
+		err = store.WithTx(d.db, func(tx *sql.Tx) error {
 			for _, id := range ids {
 				var err error
 				switch action {
@@ -77,13 +83,49 @@ func (rs resource[T]) bulk(d handlerDeps) http.HandlerFunc {
 			return nil
 		})
 		if err != nil {
-			serverError(w, req, err)
+			var validation bulkValidationError
+			if errors.As(err, &validation) {
+				http.Error(w, validation.Error(), http.StatusBadRequest)
+			} else if c := constraintError(err); c != nil {
+				http.Error(w, c.Error(), http.StatusBadRequest)
+			} else {
+				notFoundOrServerError(w, req, rs.sing, err)
+			}
 			return
 		}
 		d.webhooks.Dispatch(events...)
-		http.Redirect(w, req, rs.basePath(), http.StatusSeeOther)
+		http.Redirect(w, req, rs.listReturnPath(req), http.StatusSeeOther)
 	}
 }
+
+// listReturnPath preserves the originating list's filters, sort and page after
+// a bulk action. Only query state on this resource's canonical route is accepted;
+// submitted external URLs or another resource's route cannot become redirects.
+func (rs resource[T]) listReturnPath(req *http.Request) string {
+	base := rs.basePath()
+	u, err := url.Parse(req.PostFormValue("return_to"))
+	if err != nil || u.IsAbs() || u.Host != "" || u.User != nil || u.Path != base {
+		return base
+	}
+	query, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return base
+	}
+	retained := make(url.Values)
+	for _, key := range []string{"q", "tag", "sort", "dir", "field", "value", "page", "per_page"} {
+		if query.Has(key) {
+			retained.Set(key, query.Get(key))
+		}
+	}
+	if len(retained) == 0 {
+		return base
+	}
+	return base + "?" + retained.Encode()
+}
+
+// bulkValidationError distinguishes invalid submitted values from storage
+// failures while preserving the all-or-nothing transaction boundary.
+type bulkValidationError struct{ error }
 
 // bulkTag adds or removes a tag on one entity and records the change in history.
 func (rs resource[T]) bulkTag(tx *sql.Tx, d handlerDeps, id int64, action, tag, actor string) error {
@@ -138,23 +180,30 @@ func (rs resource[T]) bulkSetField(tx *sql.Tx, d handlerDeps, id int64, field, v
 	}
 	rs.setID(&updated, id)
 	if err := updated.Validate(); err != nil {
-		return err
+		return bulkValidationError{err}
 	}
 	// nil custom-field map: SetForEntity only touches keys it is given, so the
 	// entity's existing custom-field values are preserved.
 	return rs.updateEntityTx(tx, d, updated, nil, actor, events)
 }
 
-// parseIDs turns the repeated "ids" form values into int64s, skipping malformed
-// ones.
-func parseIDs(raw []string) []int64 {
+// parseIDs validates the entire selection before any mutation and removes
+// duplicates so every selected entity is changed exactly once.
+func parseIDs(raw []string) ([]int64, error) {
 	out := make([]int64, 0, len(raw))
+	seen := make(map[int64]bool, len(raw))
 	for _, s := range raw {
-		if id, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64); err == nil {
-			out = append(out, id)
+		id, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+		if err != nil || id <= 0 {
+			return nil, fmt.Errorf("selected entity ids must be positive integers")
 		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
 	}
-	return out
+	return out, nil
 }
 
 // mergeField returns a copy of item with one JSON field set to value, via a

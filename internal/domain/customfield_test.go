@@ -1,6 +1,32 @@
 package domain
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestCustomFieldBooleanRequiresRecognizedValue(t *testing.T) {
+	for _, tc := range []struct {
+		inputs []string
+		want   string
+	}{
+		{[]string{"on", "true", "1", "yes", "y"}, "true"},
+		{[]string{"", "off", "false", "0", "no", "n"}, "false"},
+	} {
+		for _, raw := range tc.inputs {
+			for _, input := range []string{raw, " \t" + strings.ToUpper(raw) + "\n"} {
+				if got, err := ValidateCustomFieldValue(KindBool, input); err != nil || got != tc.want {
+					t.Errorf("bool %q = %q, %v; want %q", input, got, err, tc.want)
+				}
+			}
+		}
+	}
+	for _, input := range []string{"tru", "flase", "enabled", "2", "-1", "null", "[]"} {
+		if got, err := ValidateCustomFieldValue(KindBool, input); err == nil || got != "" {
+			t.Errorf("invalid bool %q silently became %q: %v", input, got, err)
+		}
+	}
+}
 
 func TestSlugifyCustomField(t *testing.T) {
 	cases := map[string]string{

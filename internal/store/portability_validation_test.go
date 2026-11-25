@@ -18,6 +18,8 @@ func TestImportRejectsInvalidCustomFieldValuesWithoutReplacingInventory(t *testi
 		{"nan", domain.KindNumber, "NaN"},
 		{"infinite", domain.KindNumber, "+Inf"},
 		{"invalid date", domain.KindDate, "2026-02-30"},
+		{"boolean typo", domain.KindBool, "tru"},
+		{"invalid boolean number", domain.KindBool, "2"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			db := newTestDB(t)
@@ -42,6 +44,31 @@ func TestImportRejectsInvalidCustomFieldValuesWithoutReplacingInventory(t *testi
 				t.Fatalf("invalid custom field import changed inventory: err=%v", err)
 			}
 		})
+	}
+}
+
+func TestImportInvalidCustomBooleanPreservesStoredTrue(t *testing.T) {
+	db := newTestDB(t)
+	snap := Snapshot{
+		Version:           1,
+		Hosts:             []domain.Host{{ID: 1, Name: "keep", Type: "vm"}},
+		CustomFieldDefs:   []domain.CustomFieldDef{{ID: 1, EntityType: "host", Name: "enabled", Label: "Enabled", Kind: domain.KindBool}},
+		CustomFieldValues: []domain.CustomFieldValueRow{{ID: 1, EntityType: "host", EntityID: 1, DefID: 1, Value: "true"}},
+	}
+	if err := Import(db, snap); err != nil {
+		t.Fatal(err)
+	}
+	before, err := Export(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap.CustomFieldValues[0].Value = "tru"
+	if err := Import(db, snap); err == nil || !strings.Contains(err.Error(), "custom field value 1") {
+		t.Fatalf("import typo must fail with field context: %v", err)
+	}
+	after, err := Export(db)
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatalf("boolean typo changed existing inventory: error=%v values=%+v", err, after.CustomFieldValues)
 	}
 }
 
@@ -76,6 +103,40 @@ func TestImportNormalizesCustomFieldValuesWithoutChangingInput(t *testing.T) {
 		if values[i].Value != want {
 			t.Errorf("custom value %d = %q, want %q", i+1, values[i].Value, want)
 		}
+	}
+}
+
+func TestImportEmptyCustomFieldsMatchNormalWrites(t *testing.T) {
+	db := newTestDB(t)
+	snap := Snapshot{Version: 1, Hosts: []domain.Host{{ID: 1, Name: "real host name", Type: "vm"}}}
+	for i, kind := range []domain.CustomFieldKind{domain.KindText, domain.KindNumber, domain.KindDate, domain.KindBool} {
+		id := int64(i + 1)
+		label := string(kind)
+		if kind == domain.KindText {
+			label = "Name" // A present custom value would override the standard column.
+		}
+		snap.CustomFieldDefs = append(snap.CustomFieldDefs, domain.CustomFieldDef{ID: id, EntityType: "host", Name: string(kind), Label: label, Kind: kind})
+		snap.CustomFieldValues = append(snap.CustomFieldValues, domain.CustomFieldValueRow{ID: id, EntityType: "host", EntityID: 1, DefID: id, Value: " \t "})
+	}
+	before := append([]domain.CustomFieldValueRow(nil), snap.CustomFieldValues...)
+	if err := Import(db, snap); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(before, snap.CustomFieldValues) {
+		t.Fatal("import modified caller-owned values")
+	}
+	repo := NewCustomFieldRepo(db)
+	values, err := repo.ListForEntity("host", 1)
+	if err != nil || len(values) != 1 || values[0].Kind != domain.KindBool || values[0].Value != "false" {
+		t.Fatalf("empty imported values must be absent except canonical false: %+v, %v", values, err)
+	}
+	// Re-applying the same values through the normal write path must be a no-op.
+	if err := repo.SetForEntity("host", 1, map[int64]string{1: "", 2: "", 3: "", 4: "false"}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := repo.ListForEntity("host", 1)
+	if err != nil || !reflect.DeepEqual(values, after) {
+		t.Fatalf("import and normal write differ: before=%+v after=%+v error=%v", values, after, err)
 	}
 }
 

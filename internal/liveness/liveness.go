@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"runtime/debug"
+	"sort"
 	"sync"
 	"time"
 
@@ -58,6 +59,8 @@ type Checker struct {
 	now      func() time.Time
 	workers  int           // concurrent dials per pass
 	runGate  chan struct{} // context-aware admission for concurrent Run callers
+	nextType string        // first target not started during the previous pass
+	nextID   int64
 }
 
 // New builds a Checker. dial may be nil to use the default TCP dialer; log may
@@ -125,6 +128,21 @@ func (c *Checker) Run(ctx context.Context) error {
 			targets = append(targets, target{"service", s.ID, s.Name, s.CheckAddress})
 		}
 	}
+	// Rotate by stable identity rather than name so a pass deadline cannot
+	// leave the same hosts or all services unchecked on every run.
+	sort.Slice(targets, func(i, j int) bool {
+		if targets[i].entityType != targets[j].entityType {
+			return targets[i].entityType < targets[j].entityType
+		}
+		return targets[i].id < targets[j].id
+	})
+	start := sort.Search(len(targets), func(i int) bool {
+		return targets[i].entityType > c.nextType ||
+			(targets[i].entityType == c.nextType && targets[i].id >= c.nextID)
+	})
+	if start == len(targets) {
+		start = 0
+	}
 
 	// Delivery and observation progress independently: a slow notification
 	// endpoint must not consume the whole pass before any TCP checks start.
@@ -139,12 +157,23 @@ func (c *Checker) Run(ctx context.Context) error {
 	checkErrors := make([]error, len(targets))
 	var wg sync.WaitGroup
 dispatch:
-	for i, t := range targets {
+	for i := range targets {
+		t := targets[(start+i)%len(targets)]
+		c.nextType, c.nextID = t.entityType, t.id
+		if ctx.Err() != nil {
+			break
+		}
 		select {
 		case <-ctx.Done():
 			break dispatch // the pass is over: start no further dials
 		case sem <- struct{}{}:
 		}
+		if ctx.Err() != nil {
+			<-sem
+			break
+		}
+		next := targets[(start+i+1)%len(targets)]
+		c.nextType, c.nextID = next.entityType, next.id
 		wg.Go(func() {
 			defer func() { <-sem }()
 			checkErrors[i] = c.safeCheck(ctx, t)

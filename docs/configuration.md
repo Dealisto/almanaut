@@ -54,6 +54,10 @@ liveness, certificate probing and discovery — are covered in more depth in
 | `ALMANAUT_DISCOVERY_XO_INTERVAL` | (unset) | Interval for scheduled Xen Orchestra discovery (Go duration); requires XO URL and token; unset/0 disables it |
 | `ALMANAUT_STALE_AFTER_DAYS`   | `90`                 | Staleness window (days) for the inventory-health stale-entity rule; `0` disables that rule |
 
+On Unix, new data directories use owner-only permissions (`0700`), and new
+database files and pre-migration backups use `0600`. Existing directory,
+database, and backup permissions are preserved.
+
 ## Multiple discovery sources
 
 Set `ALMANAUT_DISCOVERY_SOURCES_FILE` to a JSON file readable by Almanaut:

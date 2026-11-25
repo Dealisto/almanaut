@@ -4,13 +4,18 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
 
 	_ "modernc.org/sqlite" // registers the pure-Go "sqlite" driver
 )
 
 // Open opens (creating if needed) the SQLite database at dbPath with
-// WAL journaling and foreign keys enabled.
+// WAL journaling and foreign keys enabled. New persistent files are private
+// (0600); permissions of existing database files are preserved.
 //
 // The connection pool is deliberately left at its default (multiple
 // connections). WAL mode allows one writer concurrently with readers, and
@@ -46,7 +51,38 @@ import (
 // Open also pings the database so an unwritable data directory or corrupt file
 // surfaces immediately instead of on the first query.
 func Open(dbPath string) (*sql.DB, error) {
-	dsn := dbPath + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_txlock=immediate"
+	// A filesystem path is not a DSN: query markers in a directory or file
+	// name must not truncate the path or become SQLite connection options.
+	filename := dbPath
+	if filename == "" {
+		// An empty SQLite URI opens a temporary database. Without the URI
+		// prefix, the driver treats a leading '?' as a literal filename.
+		filename = "file:"
+	}
+	if dbPath != "" && dbPath != ":memory:" {
+		absolute, err := filepath.Abs(dbPath)
+		if err != nil {
+			return nil, fmt.Errorf("resolve database path: %w", err)
+		}
+		// SQLite's default creation mode is 0644. Reserve a new file privately
+		// before the driver opens it, without truncating or chmodding an
+		// existing deployment. O_EXCL also makes concurrent initial opens safe.
+		file, err := os.OpenFile(absolute, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil && !errors.Is(err, os.ErrExist) {
+			return nil, fmt.Errorf("create database file: %w", err)
+		}
+		if err == nil {
+			if err := file.Close(); err != nil {
+				return nil, fmt.Errorf("close database file: %w", err)
+			}
+		}
+		path := filepath.ToSlash(absolute)
+		if filepath.VolumeName(absolute) != "" && path[0] != '/' {
+			path = "/" + path
+		}
+		filename = (&url.URL{Scheme: "file", Path: path}).String()
+	}
+	dsn := filename + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_txlock=immediate"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)

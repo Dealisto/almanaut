@@ -18,39 +18,38 @@ func NewNotificationRepo(db *sql.DB) *NotificationRepo {
 
 // SentKey identifies one already-notified entity.
 //
-// State is keyed on (kind, entity_id): if an entity is deleted while marked
-// and a new one reuses its rowid before the next pass, the first notification
-// could be suppressed — the clear-on-absence design in Run self-heals this on
-// a later pass, once the old key is no longer in the expiring set.
+// The state also records the notified deadline so renewing an item within
+// the alert window re-arms delivery without requiring an intervening pass.
 type SentKey struct {
 	Kind string
 	ID   int64
 }
 
-// Sent returns the set of entities that have already been notified.
-func (r *NotificationRepo) Sent() (map[SentKey]bool, error) {
-	rows, err := r.db.Query(`SELECT kind, entity_id FROM notification_state`)
+// Sent returns the last successfully notified deadline for each entity.
+func (r *NotificationRepo) Sent() (map[SentKey]string, error) {
+	rows, err := r.db.Query(`SELECT kind, entity_id, notified_date FROM notification_state`)
 	if err != nil {
 		return nil, fmt.Errorf("list notification state: %w", err)
 	}
 	defer rows.Close()
-	out := map[SentKey]bool{}
+	out := map[SentKey]string{}
 	for rows.Next() {
 		var k SentKey
-		if err := rows.Scan(&k.Kind, &k.ID); err != nil {
+		var date string
+		if err := rows.Scan(&k.Kind, &k.ID, &date); err != nil {
 			return nil, fmt.Errorf("scan notification state: %w", err)
 		}
-		out[k] = true
+		out[k] = date
 	}
 	return out, rows.Err()
 }
 
-// Mark records that (kind, id) has been notified at t. It is idempotent.
-func (r *NotificationRepo) Mark(kind string, id int64, t time.Time) error {
+// Mark records that (kind, id)'s deadline was notified at t. It is idempotent.
+func (r *NotificationRepo) Mark(kind string, id int64, date string, t time.Time) error {
 	_, err := r.db.Exec(
-		`INSERT OR REPLACE INTO notification_state (kind, entity_id, notified_at)
-		 VALUES (?, ?, ?)`,
-		kind, id, t.UTC().Format(time.RFC3339),
+		`INSERT OR REPLACE INTO notification_state (kind, entity_id, notified_date, notified_at)
+		 VALUES (?, ?, ?, ?)`,
+		kind, id, date, t.UTC().Format(time.RFC3339),
 	)
 	if err != nil {
 		return fmt.Errorf("mark notification: %w", err)

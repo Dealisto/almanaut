@@ -93,6 +93,85 @@ func TestNotifierRunNotifiesOnceThenReArms(t *testing.T) {
 	}
 }
 
+func TestNotifierRenewsWithinWindowAndRetriesAcrossRestarts(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notifications.db")
+	db, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if db != nil {
+			db.Close()
+		}
+	})
+	if err := store.Migrate(db, path); err != nil {
+		t.Fatal(err)
+	}
+	certs, hw, subs := store.NewCertificateRepo(db), store.NewHardwareRepo(db), store.NewSubscriptionRepo(db)
+	state := store.NewNotificationRepo(db)
+	certID, err := certs.Create(domain.Certificate{Subject: "weekly certificate", ExpiresOn: "2026-07-06"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hwID, err := hw.Create(domain.Hardware{Name: "server", WarrantyEnd: "2026-07-06"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	subID, err := subs.Create(domain.Subscription{Name: "weekly subscription", RenewalDate: "2026-07-06"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sender := &fakeSender{}
+	now := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	n := New(certs, hw, subs, state, sender, 30)
+	if err := n.Run(context.Background(), now); err != nil {
+		t.Fatal(err)
+	}
+	if len(sender.sent) != 3 {
+		t.Fatalf("initial deliveries = %d, want 3", len(sender.sent))
+	}
+	for _, err := range []error{
+		certs.Update(domain.Certificate{ID: certID, Subject: "weekly certificate", ExpiresOn: "2026-07-13"}),
+		hw.Update(domain.Hardware{ID: hwID, Name: "server", WarrantyEnd: "2026-07-13"}),
+		subs.Update(domain.Subscription{ID: subID, Name: "weekly subscription", RenewalDate: "2026-07-13"}),
+	} {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	deliveryErr := errors.New("notification endpoint unavailable")
+	sender.err = deliveryErr
+	if err := n.Run(context.Background(), now); !errors.Is(err, deliveryErr) {
+		t.Fatalf("renewed deadline error = %v, want failed delivery", err)
+	}
+	sent, err := state.Sent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, date := range sent {
+		if date != "2026-07-06" {
+			t.Fatalf("failed delivery advanced %v deadline to %q", key, date)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sender.err = nil
+	n = New(store.NewCertificateRepo(db), store.NewHardwareRepo(db), store.NewSubscriptionRepo(db), store.NewNotificationRepo(db), sender, 30)
+	for range 2 {
+		if err := n.Run(context.Background(), now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(sender.sent) != 6 {
+		t.Fatalf("deliveries after restart and retry = %d, want each new deadline exactly once", len(sender.sent))
+	}
+}
+
 func TestNotifierRunGathersHardwareAndSubscriptions(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	db, err := store.Open(dbPath)

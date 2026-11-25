@@ -3,14 +3,33 @@ package web
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"io"
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/go-chi/chi/v5/middleware"
 )
+
+// readAPIBody keeps body-limit failures distinct from malformed or interrupted
+// requests, including uploads that omit Content-Length (such as chunked bodies).
+func readAPIBody(w http.ResponseWriter, r *http.Request, invalidMessage string) ([]byte, bool) {
+	body, err := io.ReadAll(r.Body)
+	if err == nil {
+		return body, true
+	}
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		writeJSONError(w, http.StatusRequestEntityTooLarge, "request body too large")
+	} else {
+		writeJSONError(w, http.StatusBadRequest, invalidMessage)
+	}
+	return nil, false
+}
 
 // writeJSON marshals v to a buffer first (so an encode error never yields a
 // half-written body), then writes it with the given status.
@@ -59,14 +78,20 @@ func apiSearch(cat entityCatalog, db *sql.DB) http.HandlerFunc {
 }
 
 // customFieldsObject builds the JSON "custom_fields" object {name: typed value}
-// from an entity's set values: number→float, bool→bool, text/date→string.
+// from an entity's set values: number→JSON number, bool→bool, text/date→string.
 func customFieldsObject(vals []domain.CustomFieldValue) map[string]any {
 	obj := make(map[string]any, len(vals))
 	for _, v := range vals {
 		switch v.Kind {
 		case domain.KindNumber:
 			if f, err := strconv.ParseFloat(v.Value, 64); err == nil && !math.IsNaN(f) && !math.IsInf(f, 0) {
-				obj[v.Name] = f
+				if raw := strings.TrimSpace(v.Value); json.Valid([]byte(raw)) {
+					obj[v.Name] = json.Number(raw)
+				} else {
+					// Legacy/form values can use non-JSON spellings such as
+					// +1, .5 or 0x1p2, which still need conversion for encoding.
+					obj[v.Name] = f
+				}
 				continue
 			}
 			obj[v.Name] = v.Value // Preserve invalid legacy values without breaking JSON responses.

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/Dealisto/almanaut/internal/agentapi"
+	"github.com/Dealisto/almanaut/internal/redact"
 )
 
 // ErrConflict reports that the server has this agent id bound to a different
@@ -41,7 +42,10 @@ func Send(ctx context.Context, hc *http.Client, serverURL, token string, rep age
 	url := strings.TrimRight(serverURL, "/") + "/api/agent/report"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return SendResult{}, fmt.Errorf("build request: %w", err)
+		return SendResult{}, fmt.Errorf("build request: %w", redact.ErrorWithSecrets(err, token, serverURL))
+	}
+	safeError := func(err error) error {
+		return redact.ErrorWithSecrets(err, url, serverURL, req.URL.Path, req.URL.EscapedPath(), token)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -56,9 +60,12 @@ func Send(ctx context.Context, hc *http.Client, serverURL, token string, rep age
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return SendResult{}, fmt.Errorf("post report: %w", err)
+		return SendResult{}, fmt.Errorf("post report: %w", safeError(err))
 	}
 	defer resp.Body.Close()
+	message := func() string {
+		return serverMessage(resp.Body, url, serverURL, req.URL.Path, req.URL.EscapedPath(), token)
+	}
 
 	switch {
 	case resp.StatusCode == http.StatusOK:
@@ -66,37 +73,37 @@ func Send(ctx context.Context, hc *http.Client, serverURL, token string, rep age
 		const maxResponseBody = 64 << 10
 		raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody+1))
 		if err != nil {
-			return SendResult{}, fmt.Errorf("read response: %w", err)
+			return SendResult{}, fmt.Errorf("read response: %w", safeError(err))
 		}
 		if len(raw) > maxResponseBody {
 			return SendResult{}, fmt.Errorf("%w: response exceeds 64 KiB", ErrRejected)
 		}
 		if err := json.Unmarshal(raw, &res); err != nil {
-			return SendResult{}, fmt.Errorf("decode response: %w", err)
+			return SendResult{}, fmt.Errorf("%w: invalid JSON response from /api/agent/report", ErrRejected)
 		}
 		if res.HostID <= 0 {
-			return SendResult{}, fmt.Errorf("%w: server returned 200 but no host_id at %s", ErrRejected, url)
+			return SendResult{}, fmt.Errorf("%w: server returned 200 but no host_id at /api/agent/report", ErrRejected)
 		}
 		return res, nil
 	case resp.StatusCode == http.StatusConflict:
-		return SendResult{}, fmt.Errorf("%w: %s", ErrConflict, serverMessage(resp.Body))
+		return SendResult{}, fmt.Errorf("%w: %s", ErrConflict, message())
 	case resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusTooManyRequests:
-		return SendResult{}, fmt.Errorf("server returned %d: %s", resp.StatusCode, serverMessage(resp.Body))
+		return SendResult{}, fmt.Errorf("server returned %d: %s", resp.StatusCode, message())
 	case resp.StatusCode >= 300 && resp.StatusCode < 400:
 		// Redirect bodies may echo destination URLs containing credentials.
 		return SendResult{}, fmt.Errorf("%w: server redirected the report (status %d); configure the final server URL", ErrRejected, resp.StatusCode)
 	case resp.StatusCode >= 400 && resp.StatusCode < 500:
-		return SendResult{}, fmt.Errorf("%w (%d): %s", ErrRejected, resp.StatusCode, serverMessage(resp.Body))
+		return SendResult{}, fmt.Errorf("%w (%d): %s", ErrRejected, resp.StatusCode, message())
 	default:
 		// 5xx and anything unexpected is transient: the timer runs again in an
 		// hour, and the next report carries fresh facts anyway.
-		return SendResult{}, fmt.Errorf("server returned %d: %s", resp.StatusCode, serverMessage(resp.Body))
+		return SendResult{}, fmt.Errorf("server returned %d: %s", resp.StatusCode, message())
 	}
 }
 
-// serverMessage extracts {"error": "..."} from a response body, falling back
-// to the raw text so an unexpected proxy error is still legible.
-func serverMessage(r io.Reader) string {
+// serverMessage retains structured API diagnostics without reflecting the
+// request's credentials. HTML and other proxy response bodies are omitted.
+func serverMessage(r io.Reader, secrets ...string) string {
 	raw, err := io.ReadAll(io.LimitReader(r, maxErrorBody))
 	if err != nil || len(raw) == 0 {
 		return "(no message)"
@@ -105,7 +112,12 @@ func serverMessage(r io.Reader) string {
 		Error string `json:"error"`
 	}
 	if json.Unmarshal(raw, &payload) == nil && payload.Error != "" {
+		for _, secret := range secrets {
+			if secret != "" {
+				payload.Error = strings.ReplaceAll(payload.Error, secret, "[redacted]")
+			}
+		}
 		return payload.Error
 	}
-	return strings.TrimSpace(string(raw))
+	return "(no structured error message)"
 }
