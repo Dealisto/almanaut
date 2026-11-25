@@ -26,6 +26,8 @@ or send it to a colleague, and they see exactly the same view.
 Sorting is numeric-aware where it matters — a column holding `9` and `10` sorts
 `10` after `9`, not before it, as a plain string sort would. Values that are not
 numbers sort case-insensitively.
+When a column mixes numbers and text, ascending order places numbers first;
+descending order reverses both groups. `NaN` is treated as text.
 
 A "clear" affordance appears only when a filter or sort is actually applied.
 

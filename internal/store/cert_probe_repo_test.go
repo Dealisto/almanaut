@@ -15,7 +15,7 @@ func TestCertProbeRepoUpsertGet(t *testing.T) {
 		t.Fatal("want ErrNotFound before any upsert")
 	}
 
-	t0 := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	t0 := time.Date(2026, 7, 10, 12, 0, 0, 123456789, time.UTC)
 	s := domain.CertProbeStatus{
 		ProbedAt: t0, Success: true, Serial: "ab12", Issuer: "Test CA",
 		SANs: []string{"example.com", "*.example.com"}, NotAfter: "2027-01-01",

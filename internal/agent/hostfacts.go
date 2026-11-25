@@ -11,7 +11,7 @@ import (
 type HostFacts struct {
 	OS            string
 	Kernel        string
-	VirtKind      string // physical | vm | lxc
+	VirtKind      string // physical | vm | lxc; empty when detection is inconclusive
 	UptimeSeconds int64
 }
 
@@ -88,7 +88,8 @@ var vmVendorMarkers = []string{
 	"microsoft corporation", "bochs", "parallels", "bhyve", "amazon ec2",
 }
 
-// detectVirtKind returns physical, vm or lxc.
+// detectVirtKind returns physical, vm or lxc, or empty when a required
+// container signal cannot be read safely.
 //
 // Container detection comes first and wins: a container running on a VM is a
 // container as far as the inventory is concerned, and its DMI would otherwise
@@ -113,8 +114,16 @@ func detectVirtKind(r Root) string {
 	if cgroupContent != "" && detectContainerFromCgroup(cgroupContent) {
 		return "lxc"
 	}
-	if detectContainerFromEnviron(r) {
+	container, readable := detectContainerFromEnviron(r)
+	if container {
 		return "lxc"
+	}
+	if !readable {
+		// DMI can describe the containing host even inside a container. Missing
+		// access to the remaining container signal is uncertainty, not evidence
+		// that the machine owns those devices. CollectDisks handles unknown
+		// virtualization conservatively by reporting only this process's rootfs.
+		return ""
 	}
 
 	for _, file := range []string{"class/dmi/id/product_name", "class/dmi/id/sys_vendor"} {
@@ -134,8 +143,10 @@ func detectVirtKind(r Root) string {
 // containerRuntimes be recognized here instead of only "lxc".
 const containerEnvironPrefix = "container="
 
-// detectContainerFromEnviron examines /proc/1/environ for a container=
-// marker, a NUL-separated "KEY=value" environment dump. This is the fallback
+// detectContainerFromEnviron returns whether a container marker was found and
+// whether the environment could be read. Permission errors must stay distinct
+// from a readable environment with no marker. It examines /proc/1/environ, a
+// NUL-separated "KEY=value" dump, for a container= marker. This is the fallback
 // for a container whose init is not systemd and whose cgroup path names no
 // runtime — true for LXC with a non-systemd init (Alpine/OpenRC, common on
 // Proxmox), and equally true for Podman and systemd-nspawn under a private
@@ -152,17 +163,17 @@ const containerEnvironPrefix = "container="
 // "container=" (not merely contain it), so a field like "MY_container=lxc"
 // cannot match: field is one complete NUL-separated entry, and the prefix
 // check anchors at its start.
-func detectContainerFromEnviron(r Root) bool {
+func detectContainerFromEnviron(r Root) (container, readable bool) {
 	raw, err := os.ReadFile(r.Path(r.Proc, "1/environ"))
 	if err != nil {
-		return false
+		return false, false
 	}
 	for _, field := range strings.Split(string(raw), "\x00") {
 		if value, ok := strings.CutPrefix(field, containerEnvironPrefix); ok && value != "" {
-			return true
+			return true, true
 		}
 	}
-	return false
+	return false, true
 }
 
 // detectContainerFromCgroup examines /proc/1/cgroup to detect container runtimes.

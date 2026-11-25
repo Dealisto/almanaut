@@ -11,7 +11,7 @@
   <label>Name<input name="name" value="{{.Item.Name}}" placeholder="eth0, Port 1" required></label>
   <label>Owner
     <select name="owner">
-      {{range .Extras.Owners}}<option value="{{.Value}}"{{if eq .Value (printf "%s:%d" $.Item.OwnerType $.Item.OwnerID)}} selected{{end}}>{{.Label}}</option>{{end}}
+      {{$ownerValue := printf "%s:%d" .Item.OwnerType .Item.OwnerID}}{{$foundOwner := false}}{{range .Extras.Owners}}{{if eq .Value $ownerValue}}{{$foundOwner = true}}{{end}}<option value="{{.Value}}"{{if eq .Value $ownerValue}} selected{{end}}>{{.Label}}</option>{{end}}{{if and (gt .Item.OwnerID 0) (not $foundOwner)}}<option value="{{$ownerValue}}" selected>{{$ownerValue}} (deleted)</option>{{end}}
     </select>
   </label>
   <label>NIC (host ports only)

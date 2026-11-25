@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -71,11 +72,11 @@ func customFieldsObject(vals []domain.CustomFieldValue) map[string]any {
 	for _, v := range vals {
 		switch v.Kind {
 		case domain.KindNumber:
-			if f, err := strconv.ParseFloat(v.Value, 64); err == nil {
+			if f, err := strconv.ParseFloat(v.Value, 64); err == nil && !math.IsNaN(f) && !math.IsInf(f, 0) {
 				obj[v.Name] = f
 				continue
 			}
-			obj[v.Name] = v.Value // fall back to string if unparseable
+			obj[v.Name] = v.Value // Preserve invalid legacy values without breaking JSON responses.
 		case domain.KindBool:
 			obj[v.Name] = v.Value == "true"
 		default:

@@ -37,6 +37,24 @@ func (f *fakeState) Upsert(t string, id int64, s domain.LivenessStatus) error {
 	return nil
 }
 
+func (f *fakeState) RecordCheck(t string, id int64, _ string, s domain.LivenessStatus) (*domain.LivenessStatus, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var previous *domain.LivenessStatus
+	s.ChangedAt = s.CheckedAt
+	if prior, ok := f.rows[key(t, id)]; ok {
+		if !prior.CheckedAt.Before(s.CheckedAt) {
+			return nil, false, nil
+		}
+		previous = &prior
+		if prior.Status == s.Status {
+			s.ChangedAt = prior.ChangedAt
+		}
+	}
+	f.rows[key(t, id)] = s
+	return previous, true, nil
+}
+
 type countingSender struct {
 	mu    sync.Mutex
 	notes []notify.Notification

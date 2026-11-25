@@ -34,9 +34,16 @@ type ntfyClient struct {
 // an optional bearer for protected topics ("" to omit).
 func NewNtfyClient(url, token string) Sender {
 	return &ntfyClient{
-		url:    url,
-		token:  token,
-		client: &http.Client{Timeout: 15 * time.Second},
+		url:   url,
+		token: token,
+		client: &http.Client{
+			Timeout: 15 * time.Second,
+			// A redirect may replace the notification POST with a bodyless GET.
+			// Treat it as a failed delivery, just like outbound entity webhooks.
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}
 }
 
@@ -59,6 +66,10 @@ func (c *ntfyClient) Send(ctx context.Context, n Notification) error {
 		return fmt.Errorf("post ntfy: %w", redact.Error(err)) // the topic in the URL is its credential
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		// Redirect pages may echo a secret-bearing destination URL.
+		return fmt.Errorf("ntfy status %d", resp.StatusCode)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("ntfy status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))

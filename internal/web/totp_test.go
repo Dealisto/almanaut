@@ -2,6 +2,7 @@ package web
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -12,6 +13,83 @@ import (
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
 )
+
+func TestTOTPDisableRateLimitIsPerUserAndSeparateFromLogin(t *testing.T) {
+	h, db := totpTestHandler(t)
+	session := loginAs(t, h, "admin", "password123")
+	_, recovery := enroll2FA(t, h, db, session, 1)
+	otherSession := seedUserAndLogin(t, h, db, "other", domain.RoleViewer)
+	other, err := store.NewUserRepo(db).GetByUsername("other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, otherRecovery := enroll2FA(t, h, db, otherSession, other.ID)
+	for i := 0; i < loginFailureThreshold; i++ {
+		if rec := postCSRF(t, h, session, "/account/2fa/disable", "code=invalid"); rec.Code != http.StatusBadRequest {
+			t.Fatalf("invalid attempt %d = %d, want 400", i+1, rec.Code)
+		}
+	}
+	if rec := postCSRF(t, h, session, "/account/2fa/disable", "recovery="+recovery[0]); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("attempt during lockout = %d, want 429", rec.Code)
+	}
+	if left, err := store.NewTOTPRepo(db).CountUnusedRecovery(1); err != nil || left != recoveryCodeCount {
+		t.Fatalf("locked request consumed a code: left=%d err=%v", left, err)
+	}
+	if rec := postCSRF(t, h, otherSession, "/account/2fa/disable", "recovery="+otherRecovery[0]); rec.Code != http.StatusSeeOther {
+		t.Fatalf("another user's disable = %d, want 303", rec.Code)
+	}
+	pending := cookieNamed(passwordLogin(t, h, "admin", "password123").Result().Cookies(), pending2FACookieName)
+	if pending == nil {
+		t.Fatal("disable lockout must not block password login")
+	}
+	if rec := submit2FA(t, h, pending, "recovery="+recovery[0]); rec.Code != http.StatusSeeOther {
+		t.Fatalf("login challenge during disable lockout = %d, want 303", rec.Code)
+	}
+}
+
+func TestTOTPDisableFailurePreservesSecondFactor(t *testing.T) {
+	for _, recoveryFactor := range []bool{false, true} {
+		name := "authenticator"
+		if recoveryFactor {
+			name = "recovery"
+		}
+		t.Run(name, func(t *testing.T) {
+			h, db := totpTestHandler(t)
+			session := loginAs(t, h, "admin", "password123")
+			secret, recovery := enroll2FA(t, h, db, session, 1)
+			step := lastUsedStep(t, db, 1)
+			body := "code=" + codeAtStep(t, secret, step+1)
+			if recoveryFactor {
+				body = "recovery=" + recovery[0]
+			}
+			if _, err := db.Exec(`CREATE TRIGGER fail_disable BEFORE DELETE ON user_totp BEGIN SELECT RAISE(ABORT, 'disable unavailable'); END`); err != nil {
+				t.Fatal(err)
+			}
+			if rec := postCSRF(t, h, session, "/account/2fa/disable", body); rec.Code != http.StatusInternalServerError {
+				t.Fatalf("failed disable = %d, want 500", rec.Code)
+			}
+			factor, err := store.NewTOTPRepo(db).Get(1)
+			if err != nil || !factor.Enabled || factor.Secret != secret {
+				t.Fatalf("failed disable changed active factor: %+v, %v", factor, err)
+			}
+			if got := lastUsedStep(t, db, 1); got != step {
+				t.Errorf("failed disable consumed TOTP step: got %d, want %d", got, step)
+			}
+			if left, err := store.NewTOTPRepo(db).CountUnusedRecovery(1); err != nil || left != recoveryCodeCount {
+				t.Errorf("failed disable consumed recovery code: left=%d err=%v", left, err)
+			}
+			if _, err := db.Exec(`DROP TRIGGER fail_disable`); err != nil {
+				t.Fatal(err)
+			}
+			if rec := postCSRF(t, h, session, "/account/2fa/disable", body); rec.Code != http.StatusSeeOther {
+				t.Fatalf("retry with original code = %d, want 303", rec.Code)
+			}
+			if _, err := store.NewTOTPRepo(db).Get(1); !errors.Is(err, store.ErrNotFound) {
+				t.Fatalf("factor remains after successful disable: %v", err)
+			}
+		})
+	}
+}
 
 // postCSRF issues an authenticated POST with a valid CSRF token, returning the
 // full recorder so the caller can inspect body and cookies.

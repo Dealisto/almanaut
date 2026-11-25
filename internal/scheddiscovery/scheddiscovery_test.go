@@ -3,6 +3,7 @@ package scheddiscovery
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -222,9 +223,88 @@ func TestRunReturnsNotificationFailureAndKeepsScanHistory(t *testing.T) {
 	if err := d.RunDocker(context.Background()); !errors.Is(err, sendErr) {
 		t.Fatalf("notification error was lost: %v", err)
 	}
-	latest, err := runs.LatestSuccessful("docker")
-	if err != nil || latest.NewCount != 1 {
-		t.Fatalf("successful scan history was lost: %+v, %v", latest, err)
+	latest, err := runs.Latest("docker")
+	if err != nil || latest.NewCount != 1 || !strings.Contains(latest.Error, sendErr.Error()) {
+		t.Fatalf("scan results and delivery failure must survive in history: %+v, %v", latest, err)
+	}
+	if _, err := runs.LatestSuccessful("docker"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("failed delivery must not advance the notification baseline: %v", err)
+	}
+}
+
+type retrySender struct {
+	calls int
+	err   error
+}
+
+func (s *retrySender) Send(context.Context, notify.Notification) error {
+	s.calls++
+	return s.err
+}
+
+func TestFailedNotificationRetriesUntilDelivered(t *testing.T) {
+	for _, sourceScoped := range []bool{false, true} {
+		for _, withBaseline := range []bool{false, true} {
+			name := fmt.Sprintf("source=%t/baseline=%t", sourceScoped, withBaseline)
+			t.Run(name, func(t *testing.T) {
+				runs := testStore(t)
+				sender := &retrySender{}
+				docker := &mutableDocker{cs: []discovery.Container{{ID: "old", Name: "old"}}}
+				key := "docker"
+				makeRun := func() func(context.Context) error {
+					if sourceScoped {
+						key = "docker:lab"
+						return NewSource(Source{Key: key, Kind: "docker", Docker: docker}, svcList{}, nil, &sourceBindings{}, runs, sender).Run
+					}
+					return New(docker, nil, "", nil, svcList{}, nil, runs, sender, nil, nil).RunDocker
+				}
+				run := makeRun()
+				var baselineID int64
+				if withBaseline {
+					if err := run(context.Background()); err != nil {
+						t.Fatal(err)
+					}
+					baseline, err := runs.LatestSuccessful(key)
+					if err != nil {
+						t.Fatal(err)
+					}
+					baselineID = baseline.ID
+				}
+				docker.set([]discovery.Container{{ID: "old", Name: "old"}, {ID: "new", Name: "new"}}, nil)
+				sender.err = errors.New("temporary delivery outage")
+				if err := run(context.Background()); !errors.Is(err, sender.err) {
+					t.Fatalf("delivery error = %v, want %v", err, sender.err)
+				}
+				latest, err := runs.Latest(key)
+				if err != nil || latest.Error == "" || latest.FoundCount != 2 || latest.NewCount != 2 {
+					t.Fatalf("failed run must preserve scan results and error: %+v, %v", latest, err)
+				}
+				baseline, err := runs.LatestSuccessful(key)
+				if withBaseline {
+					if err != nil || baseline.ID != baselineID {
+						t.Fatalf("failed delivery advanced baseline: %+v, %v", baseline, err)
+					}
+				} else if !errors.Is(err, store.ErrNotFound) {
+					t.Fatalf("failed first delivery created a baseline: %v", err)
+				}
+				attempts := sender.calls
+				sender.err = nil
+				// A fresh detector models a restart: retry state must be durable.
+				run = makeRun()
+				if err := run(context.Background()); err != nil {
+					t.Fatal(err)
+				}
+				if sender.calls != attempts+1 {
+					t.Fatalf("delivery was not retried: attempts=%d, want %d", sender.calls, attempts+1)
+				}
+				if err := run(context.Background()); err != nil {
+					t.Fatal(err)
+				}
+				if sender.calls != attempts+1 {
+					t.Fatal("successful delivery must suppress unchanged findings")
+				}
+			})
+		}
 	}
 }
 

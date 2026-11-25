@@ -17,9 +17,10 @@ import (
 // fakeKuma is an in-process Uptime Kuma lookalike speaking just enough
 // engine.io v4 / socket.io over websocket for the client and syncer tests.
 type fakeKuma struct {
-	t          *testing.T
-	srv        *httptest.Server
-	user, pass string
+	t                   *testing.T
+	srv                 *httptest.Server
+	user, pass          string
+	monitorListOverride string // optional raw JSON payload for protocol validation tests
 
 	mu       sync.Mutex
 	monitors map[int64]map[string]any
@@ -178,6 +179,9 @@ func (f *fakeKuma) handleEvent(msg string, write func(string)) {
 			f.mu.Lock()
 			list, _ := json.Marshal(f.keyedMonitors())
 			f.mu.Unlock()
+			if f.monitorListOverride != "" {
+				list = []byte(f.monitorListOverride)
+			}
 			write(`42["monitorList",` + string(list) + `]`)
 			// Second ping, post-login: exercises the read loop's pong
 			// handling again on a well-established connection (as opposed

@@ -63,6 +63,17 @@ Everything else on the host record — `notes`, `status`, `check_address`,
 rack placement, tags, relationships, and custom fields — the agent never
 writes at all.
 
+Virtualization detection uses container markers before examining DMI. If no
+positive container marker is available and `/proc/1/environ` cannot be read,
+the agent leaves virtualization undetermined and reports only the root
+filesystem instead of enumerating potentially shared host disks. This can also
+limit disk reporting on physical machines or VMs running with restricted
+process-inspection permissions, including an empty capability bounding set.
+Root UID alone does not guarantee access to another process's environment.
+Existing host types remain unchanged by agent updates; a newly created host
+with undetermined virtualization still uses the server's `physical` default
+and can be classified manually.
+
 **`ips` is replaced, not merged**, exactly as described under
 [API tokens](api.md#api-tokens): an out-of-band management address such as
 IPMI, iDRAC, or iLO is invisible from inside the OS, so it disappears from

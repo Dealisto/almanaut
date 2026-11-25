@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -100,8 +101,8 @@ func ValidateCustomFieldValue(kind CustomFieldKind, raw string) (string, error) 
 		if raw == "" {
 			return "", nil
 		}
-		if _, err := strconv.ParseFloat(raw, 64); err != nil {
-			return "", fmt.Errorf("must be a number")
+		if value, err := strconv.ParseFloat(raw, 64); err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+			return "", fmt.Errorf("must be a finite number")
 		}
 		return raw, nil
 	case KindBool:

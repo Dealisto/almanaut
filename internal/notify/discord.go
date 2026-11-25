@@ -31,8 +31,15 @@ type discordClient struct {
 // URL.
 func NewDiscordClient(url string) Sender {
 	return &discordClient{
-		url:    url,
-		client: &http.Client{Timeout: 15 * time.Second},
+		url: url,
+		client: &http.Client{
+			Timeout: 15 * time.Second,
+			// A redirect may replace the notification POST with a bodyless GET.
+			// Treat it as a failed delivery, just like outbound entity webhooks.
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}
 }
 
@@ -70,6 +77,10 @@ func (c *discordClient) Send(ctx context.Context, n Notification) error {
 		return fmt.Errorf("post discord: %w", redact.Error(err)) // the URL holds the webhook token
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		// Redirect pages may echo a secret-bearing destination URL.
+		return fmt.Errorf("discord status %d", resp.StatusCode)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		return fmt.Errorf("discord status %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))

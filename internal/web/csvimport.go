@@ -51,10 +51,17 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 
 	header := records[0]
 	allowed := csvFields(rs.newItem)
-	for _, col := range header {
-		if !allowed[strings.TrimSpace(col)] {
+	seen := make(map[string]bool, len(header))
+	for i, raw := range header {
+		col := strings.TrimSpace(raw)
+		if !allowed[col] {
 			return 0, 0, []string{fmt.Sprintf("unknown column %q for this type", col)}, nil
 		}
+		if seen[col] {
+			return 0, 0, []string{fmt.Sprintf("duplicate column %q", col)}, nil
+		}
+		seen[col] = true
+		header[i] = col
 	}
 
 	type pending struct {
@@ -74,7 +81,7 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 		}
 		row := make(map[string]string, len(header))
 		for j, col := range header {
-			row[strings.TrimSpace(col)] = rec[j]
+			row[col] = rec[j]
 		}
 		get := func(field string) string { return row[field] }
 

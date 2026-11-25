@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/Dealisto/almanaut/internal/domain"
 )
 
 var customFieldDeleteActionRE = regexp.MustCompile(`/custom-fields/(\d+)/delete`)
@@ -86,6 +88,56 @@ func TestCustomFieldsPageCRUD(t *testing.T) {
 	_, body = getBody("/custom-fields")
 	if customFieldDeleteActionRE.MatchString(body) {
 		t.Error("GET /custom-fields still contains a field management action after deleting the only definition")
+	}
+}
+
+func TestCustomFieldAPINonFiniteNumbers(t *testing.T) {
+	srv := newTestServer(t)
+	if rec := postForm(t, srv, "/custom-fields", url.Values{
+		"entity_type": {"host"}, "label": {"Watts"}, "kind": {"number"},
+	}); rec.Code != http.StatusSeeOther {
+		t.Fatalf("create field: %d", rec.Code)
+	}
+	for _, value := range []string{"NaN", "+Inf", "-Inf", "Infinity"} {
+		t.Run(value, func(t *testing.T) {
+			body, err := json.Marshal(map[string]any{
+				"name": "invalid", "type": "physical", "custom_fields": map[string]string{"watts": value},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			rec := httptest.NewRecorder()
+			srv.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/hosts", strings.NewReader(string(body))))
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("non-finite number: status %d, want 400; body %s", rec.Code, rec.Body)
+			}
+		})
+	}
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/hosts", nil))
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Fatalf("invalid creates must leave readable, empty inventory: %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestCustomFieldJSONPreservesLegacyNonFiniteValues(t *testing.T) {
+	for _, value := range []string{"NaN", "+Inf", "-Inf"} {
+		body, err := mergeCustomFields(domain.Host{ID: 1, Name: "nas"}, []domain.CustomFieldValue{
+			{Name: "watts", Kind: domain.KindNumber, Value: value},
+		})
+		if err != nil {
+			t.Errorf("legacy value %q must remain readable: %v", value, err)
+			continue
+		}
+		var decoded struct {
+			CustomFields map[string]any `json:"custom_fields"`
+		}
+		if err := json.Unmarshal(body, &decoded); err != nil {
+			t.Fatal(err)
+		}
+		if decoded.CustomFields["watts"] != value {
+			t.Errorf("legacy value = %v, want %q", decoded.CustomFields["watts"], value)
+		}
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -158,7 +159,7 @@ func loginForm(ssoEnabled bool) http.HandlerFunc {
 // failed attempts for a username are throttled (see loginThrottle): once a
 // username is locked out the request is refused with 429 before any password
 // verification, so an attacker cannot spend the server's bcrypt budget guessing.
-func login(users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPRepo, throttle *loginThrottle, audit *store.AuthEventRepo, forceSecure, ssoEnabled bool) http.HandlerFunc {
+func login(db *sql.DB, users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPRepo, throttle *loginThrottle, audit *store.AuthEventRepo, forceSecure, ssoEnabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := strings.TrimSpace(r.FormValue("username"))
 		password := r.FormValue("password")
@@ -204,41 +205,28 @@ func login(users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPR
 			return
 		}
 
-		// Password OK. If the user has a confirmed second factor, defer the real
-		// session: stash a short-lived pending challenge and send them to /login/2fa.
-		// Throttle state is intentionally NOT reset yet, so 2FA attempts keep
-		// counting toward lockout.
-		if t, terr := totp.Get(u.ID); terr == nil && t.Enabled {
-			ptoken, err := newSessionToken()
-			if err != nil {
-				serverError(w, r, err)
-				return
-			}
-			pnow := now.Format(time.RFC3339)
-			if err := totp.CreatePending(hashToken(ptoken), u.ID, now.Add(pending2FADuration).Format(time.RFC3339)); err != nil {
-				serverError(w, r, err)
-				return
-			}
-			_ = totp.DeleteExpiredPending(pnow)
-			setPending2FACookie(w, r, ptoken, forceSecure)
-			http.Redirect(w, r, "/login/2fa?next="+url.QueryEscape(next), http.StatusSeeOther)
-			return
-		} else if terr != nil && !errors.Is(terr, store.ErrNotFound) {
-			serverError(w, r, terr)
-			return
-		}
-
 		token, err := newSessionToken()
 		if err != nil {
 			serverError(w, r, err)
 			return
 		}
-		nowStr := now.Format(time.RFC3339)
-		expires := now.Add(sessionDuration).Format(time.RFC3339)
-		if _, err := sessions.Create(store.Session{
-			TokenHash: hashToken(token), UserID: u.ID, CreatedAt: nowStr, ExpiresAt: expires,
-		}); err != nil {
+		pending, err := issuePasswordLogin(db, users, sessions, totp, u, hashToken(token), now)
+		if errors.Is(err, errLoginCredentialsChanged) {
+			recordAuth(audit, r, domain.AuthLoginFailure, username, 0, "credentials changed")
+			w.WriteHeader(http.StatusUnauthorized)
+			render(w, r, "login.html", loginData{Title: "Sign in", Next: next, Error: "invalid username or password", SSOEnabled: ssoEnabled})
+			return
+		}
+		if err != nil {
 			serverError(w, r, err)
+			return
+		}
+		nowStr := now.Format(time.RFC3339)
+		if pending {
+			// Keep throttle state until the second factor succeeds.
+			_ = totp.DeleteExpiredPending(nowStr)
+			setPending2FACookie(w, r, token, forceSecure)
+			http.Redirect(w, r, "/login/2fa?next="+url.QueryEscape(next), http.StatusSeeOther)
 			return
 		}
 		throttle.recordSuccess(username)
@@ -248,6 +236,41 @@ func login(users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPR
 		setSessionCookie(w, r, token, forceSecure)
 		http.Redirect(w, r, next, http.StatusSeeOther)
 	}
+}
+
+var errLoginCredentialsChanged = errors.New("login credentials changed")
+
+// issuePasswordLogin revalidates the verified credentials and reads the current
+// second-factor policy under the same write lock as session/challenge creation.
+// Bcrypt stays outside the transaction, so it does not block unrelated writers.
+func issuePasswordLogin(db *sql.DB, users *store.UserRepo, sessions *store.SessionRepo, totp *store.TOTPRepo, verified domain.User, tokenHash string, now time.Time) (bool, error) {
+	pending := false
+	err := store.WithTx(db, func(tx *sql.Tx) error {
+		current, err := users.WithTx(tx).Get(verified.ID)
+		if errors.Is(err, store.ErrNotFound) {
+			return errLoginCredentialsChanged
+		}
+		if err != nil {
+			return err
+		}
+		if current.Username != verified.Username || current.PasswordHash != verified.PasswordHash {
+			return errLoginCredentialsChanged
+		}
+		factor, err := totp.WithTx(tx).Get(current.ID)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return err
+		}
+		if err == nil && factor.Enabled {
+			pending = true
+			return totp.WithTx(tx).CreatePending(tokenHash, current.ID, now.Add(pending2FADuration).Format(time.RFC3339))
+		}
+		_, err = sessions.WithTx(tx).Create(store.Session{
+			TokenHash: tokenHash, UserID: current.ID,
+			CreatedAt: now.Format(time.RFC3339), ExpiresAt: now.Add(sessionDuration).Format(time.RFC3339),
+		})
+		return err
+	})
+	return pending, err
 }
 
 // logout deletes the current session and clears the cookie.

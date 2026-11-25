@@ -62,6 +62,16 @@ func TestValidateCustomFieldValue(t *testing.T) {
 	}
 }
 
+func TestCustomFieldNumberMustBeFinite(t *testing.T) {
+	for _, raw := range []string{"NaN", "nan", "+Inf", "-Inf", "Infinity", "1e999"} {
+		t.Run(raw, func(t *testing.T) {
+			if _, err := ValidateCustomFieldValue(KindNumber, raw); err == nil {
+				t.Fatalf("non-finite number %q accepted", raw)
+			}
+		})
+	}
+}
+
 func TestCustomFieldValueRowValidate(t *testing.T) {
 	ok := CustomFieldValueRow{EntityType: "host", EntityID: 1, DefID: 1, Value: "x"}
 	if err := ok.Validate(); err != nil {

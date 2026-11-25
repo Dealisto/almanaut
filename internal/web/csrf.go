@@ -32,17 +32,25 @@ func generateCSRFToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// csrfProtect is stateless double-submit-cookie CSRF protection. Every request
-// is guaranteed a csrf_token cookie and a context token. Unsafe methods must
-// carry a csrf_token form field equal to the cookie, else they get 403.
+// csrfProtect combines browser origin checks with double-submit cookies. Every
+// safe request gets a csrf_token cookie and a context token. Unsafe methods must
+// pass the origin check and carry a matching csrf_token form field, else 403.
 //
 // forceSecure sets the Secure flag on the cookie unconditionally; it is meant
 // for deployments behind a TLS-terminating reverse proxy, where the connection
 // this process sees is plaintext even though the client speaks HTTPS. A direct
 // TLS connection (r.TLS != nil) sets Secure on its own regardless of the flag.
 func csrfProtect(forceSecure bool) func(http.Handler) http.Handler {
+	origins := http.NewCrossOriginProtection()
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// The browser's origin metadata also protects against matching tokens
+			// supplied through a parent-domain cookie. The standard guard supports
+			// TLS-terminating proxies when they preserve the original Host header.
+			if err := origins.Check(r); err != nil {
+				http.Error(w, "cross-origin request forbidden", http.StatusForbidden)
+				return
+			}
 			token := ""
 			if c, err := r.Cookie(csrfCookieName); err == nil {
 				token = c.Value

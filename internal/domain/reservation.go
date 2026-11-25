@@ -31,6 +31,9 @@ func (r Reservation) Validate() error {
 	if end == nil {
 		return fmt.Errorf("invalid end IP %q", r.EndIP)
 	}
+	if (start.To4() == nil) != (end.To4() == nil) {
+		return fmt.Errorf("start and end IP must use the same address family")
+	}
 	if bytes.Compare(start.To16(), end.To16()) > 0 {
 		return fmt.Errorf("end IP must be greater than or equal to start IP")
 	}

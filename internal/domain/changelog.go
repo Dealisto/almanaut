@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -68,7 +69,9 @@ func toMap(v any) (map[string]any, error) {
 		return nil, fmt.Errorf("marshal for diff: %w", err)
 	}
 	m := map[string]any{}
-	if err := json.Unmarshal(raw, &m); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&m); err != nil {
 		return nil, fmt.Errorf("unmarshal for diff: %w", err)
 	}
 	return m, nil
@@ -94,11 +97,18 @@ func renderValue(v any) string {
 	}
 }
 
-// formatScalar formats a single JSON-decoded scalar. JSON numbers decode to
-// float64, so a large integer field (e.g. a rack position) would otherwise
-// render in scientific notation ("1.5e+06") via fmt's "%v"; FormatFloat with
-// 'f' keeps whole numbers whole and fractional values natural.
+// formatScalar preserves integer identifiers exactly. Other numeric values
+// use fixed-point formatting to keep the history readable without exponents.
 func formatScalar(v any) string {
+	if n, ok := v.(json.Number); ok {
+		if i, err := n.Int64(); err == nil {
+			return strconv.FormatInt(i, 10)
+		}
+		if f, err := n.Float64(); err == nil {
+			return strconv.FormatFloat(f, 'f', -1, 64)
+		}
+		return n.String()
+	}
 	if f, ok := v.(float64); ok {
 		return strconv.FormatFloat(f, 'f', -1, 64)
 	}

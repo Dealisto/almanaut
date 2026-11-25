@@ -37,7 +37,9 @@ func expiringOnOrBefore[T any](items []T, now time.Time, withinDays int, dateOf 
 	cutoff := now.AddDate(0, 0, withinDays)
 	out := []T{}
 	for _, it := range items {
-		d, err := time.Parse(DateLayout, dateOf(it))
+		// Validation accepts surrounding whitespace; reads must apply the same
+		// interpretation to API/imported values without changing stored data.
+		d, err := time.Parse(DateLayout, strings.TrimSpace(dateOf(it)))
 		if err != nil {
 			continue
 		}
@@ -46,6 +48,8 @@ func expiringOnOrBefore[T any](items []T, now time.Time, withinDays int, dateOf 
 		}
 	}
 	// Dates are YYYY-MM-DD, which sorts lexically in chronological order.
-	sort.Slice(out, func(i, j int) bool { return dateOf(out[i]) < dateOf(out[j]) })
+	sort.Slice(out, func(i, j int) bool {
+		return strings.TrimSpace(dateOf(out[i])) < strings.TrimSpace(dateOf(out[j]))
+	})
 	return out
 }

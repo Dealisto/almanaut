@@ -84,7 +84,11 @@ func (r *PortRepo) List() ([]domain.Port, error) {
 }
 
 func (r *PortRepo) listRaw() ([]domain.Port, error) {
-	rows, err := r.db.Query(`SELECT ` + portColumns + ` FROM ports ORDER BY owner_type, owner_id, LENGTH(name), name`)
+	return r.queryRaw(`SELECT ` + portColumns + ` FROM ports ORDER BY owner_type, owner_id, LENGTH(name), name`)
+}
+
+func (r *PortRepo) queryRaw(query string, args ...any) ([]domain.Port, error) {
+	rows, err := r.db.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query ports: %w", err)
 	}
@@ -98,6 +102,26 @@ func (r *PortRepo) listRaw() ([]domain.Port, error) {
 		items = append(items, v)
 	}
 	return items, rows.Err()
+}
+
+// ConnectionPeers returns the existing ports a connection change can modify,
+// excluding the directly edited port. Results contain persisted fields only.
+// Call on a tx-bound repository before connecting or deleting a port.
+func (r *PortRepo) ConnectionPeers(id, peerID int64) ([]domain.Port, error) {
+	if id == 0 {
+		if peerID == 0 {
+			return nil, nil
+		}
+		return r.queryRaw(`SELECT `+portColumns+` FROM ports WHERE id = ?`, peerID)
+	}
+	return r.queryRaw(`SELECT `+portColumns+` FROM ports
+		WHERE id != ? AND (id = ? OR peer_port_id = ?) ORDER BY id`, id, peerID, id)
+}
+
+// ForNIC returns persisted port fields before a NIC move or deletion clears
+// their attribution. Call on the same transaction as that mutation.
+func (r *PortRepo) ForNIC(id int64) ([]domain.Port, error) {
+	return r.queryRaw(`SELECT `+portColumns+` FROM ports WHERE nic_id = ? ORDER BY id`, id)
 }
 
 // Update overwrites the port and connects it to v.PeerPortID (0 disconnects

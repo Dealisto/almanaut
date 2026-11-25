@@ -198,9 +198,12 @@ func New(cfg Config) http.Handler {
 		search: func(n domain.NIC) []string {
 			return []string{n.Name, n.Kind, n.Model, n.Serial, n.HostName, n.Notes}
 		},
-		extras: func() map[string]any {
-			hostList, _ := hosts.List()
-			return map[string]any{"Kinds": domain.NICKinds, "Hosts": hostList}
+		loadExtras: func() (map[string]any, error) {
+			hostList, err := hosts.List()
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"Kinds": domain.NICKinds, "Hosts": hostList}, nil
 		},
 		newItem:  domain.NIC{Kind: "onboard"},
 		listTmpl: "nics.html", formTmpl: "nic_form.html",
@@ -254,18 +257,30 @@ func New(cfg Config) http.Handler {
 		search: func(p domain.Port) []string {
 			return []string{p.Name, p.MAC, p.OwnerName, p.NICName, p.Notes}
 		},
-		extras: func() map[string]any {
-			nicList, _ := nics.List()
-			portList, _ := ports.List()
+		loadExtras: func() (map[string]any, error) {
+			nicList, err := nics.List()
+			if err != nil {
+				return nil, err
+			}
+			portList, err := ports.List()
+			if err != nil {
+				return nil, err
+			}
+			owners, err := ownerOptions(hosts, hardware)
+			if err != nil {
+				return nil, err
+			}
 			return map[string]any{
-				"Owners": ownerOptions(hosts, hardware),
+				"Owners": owners,
 				"NICs":   nicList,
 				"Ports":  portList,
-			}
+			}, nil
 		},
 		newItem:  domain.Port{OwnerType: "hardware"},
 		listTmpl: "ports.html", formTmpl: "port_form.html",
 	}
+	portRS.captureEffects = portConnectionEffects(ports, portRS)
+	nicRS.captureEffects = nicPortEffects(ports, portRS)
 	resources := []mountable{
 		hostRS,
 		resource[domain.Service]{
@@ -310,9 +325,12 @@ func New(cfg Config) http.Handler {
 			search: func(n domain.Network) []string {
 				return []string{n.Name, n.CIDR, n.Gateway, n.Notes}
 			},
-			extras: func() map[string]any {
-				list, _ := vlans.List()
-				return map[string]any{"VLANs": list}
+			loadExtras: func() (map[string]any, error) {
+				list, err := vlans.List()
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"VLANs": list}, nil
 			},
 			newItem:  domain.Network{},
 			listTmpl: "networks.html", formTmpl: "network_form.html",
@@ -438,9 +456,12 @@ func New(cfg Config) http.Handler {
 			children: func(h domain.Hardware, cat entityCatalog) (*childrenSection, error) {
 				return ownedPortsChildren(ports, "hardware", h.ID, cat)
 			},
-			extras: func() map[string]any {
-				rackList, _ := racks.List()
-				return map[string]any{"Racks": rackList}
+			loadExtras: func() (map[string]any, error) {
+				rackList, err := racks.List()
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"Racks": rackList}, nil
 			},
 			newItem:  domain.Hardware{UHeight: 1},
 			listTmpl: "hardware.html", formTmpl: "hardware_form.html",
@@ -559,9 +580,12 @@ func New(cfg Config) http.Handler {
 			search: func(l domain.Location) []string {
 				return []string{l.Name, l.Notes}
 			},
-			extras: func() map[string]any {
-				list, _ := sites.List()
-				return map[string]any{"Sites": list}
+			loadExtras: func() (map[string]any, error) {
+				list, err := sites.List()
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"Sites": list}, nil
 			},
 			newItem:  domain.Location{},
 			listTmpl: "locations.html", formTmpl: "location_form.html",
@@ -583,9 +607,12 @@ func New(cfg Config) http.Handler {
 			search: func(k domain.Rack) []string {
 				return []string{k.Name, k.Notes}
 			},
-			extras: func() map[string]any {
-				list, _ := locations.List()
-				return map[string]any{"Locations": list}
+			loadExtras: func() (map[string]any, error) {
+				list, err := locations.List()
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"Locations": list}, nil
 			},
 			elevation: func(k domain.Rack, cat entityCatalog) (*elevationSection, error) {
 				hs, err := hosts.List()
@@ -658,9 +685,12 @@ func New(cfg Config) http.Handler {
 			search: func(v domain.Reservation) []string {
 				return []string{v.Name, v.StartIP, v.EndIP, v.Notes}
 			},
-			extras: func() map[string]any {
-				list, _ := networks.List()
-				return map[string]any{"Networks": list}
+			loadExtras: func() (map[string]any, error) {
+				list, err := networks.List()
+				if err != nil {
+					return nil, err
+				}
+				return map[string]any{"Networks": list}, nil
 			},
 			newItem:  domain.Reservation{},
 			listTmpl: "reservations.html", formTmpl: "reservation_form.html",
@@ -729,7 +759,7 @@ func New(cfg Config) http.Handler {
 			r.Use(limitLoginBody)
 			r.Use(csrfProtect(cfg.SecureCookies))
 			r.Get("/login", loginForm(ssoAuth != nil))
-			r.Post("/login", login(users, sessions, totp, throttle, authEvents, cfg.SecureCookies, ssoAuth != nil))
+			r.Post("/login", login(db, users, sessions, totp, throttle, authEvents, cfg.SecureCookies, ssoAuth != nil))
 			if ssoAuth != nil {
 				r.With(ssoAuth).Get("/login/sso", ssoLogin)
 			}
@@ -1284,17 +1314,23 @@ func vlanLabel(vlans *store.VLANRepo, id int64) string {
 
 // ownerOptions lists every host and hardware item as port-owner options for
 // the port form's combined owner select ("type:id" values).
-func ownerOptions(hosts *store.HostRepo, hardware *store.HardwareRepo) []entityOption {
+func ownerOptions(hosts *store.HostRepo, hardware *store.HardwareRepo) ([]entityOption, error) {
 	opts := []entityOption{}
-	hs, _ := hosts.List()
+	hs, err := hosts.List()
+	if err != nil {
+		return nil, err
+	}
 	for _, h := range hs {
 		opts = append(opts, entityOptionOf("host", h.ID, h.Name))
 	}
-	hw, _ := hardware.List()
+	hw, err := hardware.List()
+	if err != nil {
+		return nil, err
+	}
 	for _, h := range hw {
 		opts = append(opts, entityOptionOf("hardware", h.ID, h.Name))
 	}
-	return opts
+	return opts, nil
 }
 
 // ownedPortsChildren lists the ports owned by (ownerType, ownerID) as a

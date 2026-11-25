@@ -4,7 +4,6 @@ package liveness
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/notify"
-	"github.com/Dealisto/almanaut/internal/store"
 )
 
 // HostSource / ServiceSource / StateStore are the repo subsets the checker needs.
@@ -25,8 +23,7 @@ type ServiceSource interface {
 	List() ([]domain.Service, error)
 }
 type StateStore interface {
-	Get(entityType string, entityID int64) (domain.LivenessStatus, error)
-	Upsert(entityType string, entityID int64, s domain.LivenessStatus) error
+	RecordCheck(entityType string, entityID int64, address string, s domain.LivenessStatus) (*domain.LivenessStatus, bool, error)
 }
 
 // DialFunc probes one address; nil error means reachable. Overridable in tests.
@@ -142,6 +139,7 @@ func (c *Checker) check(ctx context.Context, entityType string, id int64, label,
 	if ctx.Err() != nil {
 		return
 	}
+	startedAt := c.now()
 	dialCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	probeErr := c.dial(dialCtx, addr)
 	cancel()
@@ -156,27 +154,16 @@ func (c *Checker) check(ctx context.Context, entityType string, id int64, label,
 		lastErr = probeErr.Error()
 	}
 
-	prior, err := c.state.Get(entityType, id)
-	priorKnown := err == nil
-	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		c.log.Error("liveness: read state", "type", entityType, "id", id, "err", err)
-		return
-	}
-
-	now := c.now()
-	changedAt := now
-	if priorKnown && prior.Status == status {
-		changedAt = prior.ChangedAt // status unchanged: keep original change time
-	}
-	if err := c.state.Upsert(entityType, id, domain.LivenessStatus{
-		Status: status, CheckedAt: now, ChangedAt: changedAt, LastError: lastErr,
-	}); err != nil {
-		c.log.Error("liveness: upsert state", "type", entityType, "id", id, "err", err)
+	prior, accepted, err := c.state.RecordCheck(entityType, id, addr, domain.LivenessStatus{
+		Status: status, CheckedAt: startedAt, LastError: lastErr,
+	})
+	if err != nil {
+		c.log.Error("liveness: record check", "type", entityType, "id", id, "err", err)
 		return
 	}
 
 	// Notify only on a real transition (a prior observation existed and differs).
-	if priorKnown && prior.Status != status {
+	if accepted && prior != nil && prior.Status != status {
 		c.notify(ctx, entityType, label, addr, status, lastErr)
 	}
 }

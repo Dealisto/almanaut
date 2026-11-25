@@ -61,8 +61,19 @@ type handlerDeps struct {
 	webhooks     webhook.Dispatcher
 }
 
-// resource describes one entity. Only the genuinely entity-specific behavior
-// lives here; all plumbing is in the generic methods below.
+// mutationEffects records indirect changes after the primary mutation. It runs
+// inside the same transaction; the caller dispatches events only after commit.
+type mutationEffects func(handlerDeps, string, *[]webhook.Event) error
+
+func (record mutationEffects) apply(d handlerDeps, actor string, events *[]webhook.Event) error {
+	if record == nil {
+		return nil
+	}
+	return record(d, actor, events)
+}
+
+// resource describes one entity. Only entity-specific behavior lives here;
+// all plumbing is in the generic methods below.
 type resource[T validatable] struct {
 	name       string // route base, e.g. "hosts"
 	sing       string // singular type key, e.g. "host" (relationships, tags, headings)
@@ -86,6 +97,17 @@ type resource[T validatable] struct {
 	formTmpl   string                                            // "host_form.html"
 	loadExtras func() (map[string]any, error)                    // fallible form lookups, preferred when set
 	extras     func() map[string]any                             // form selects (Types, Kinds…); may be nil
+
+	// captureEffects snapshots related rows before a write. A nil old/new
+	// denotes creation/deletion. Entity-specific behavior stays in the catalog.
+	captureEffects func(tx *sql.Tx, old, next *T) (mutationEffects, error)
+}
+
+func (rs resource[T]) prepareEffects(tx *sql.Tx, old, next *T) (mutationEffects, error) {
+	if rs.captureEffects == nil {
+		return nil, nil
+	}
+	return rs.captureEffects(tx, old, next)
 }
 
 func (rs resource[T]) singular() string { return rs.sing }
@@ -271,11 +293,22 @@ func (rs resource[T]) editForm(d handlerDeps) http.HandlerFunc {
 // The webhook event for the create is appended to events (dispatched by the
 // caller only after the surrounding transaction commits).
 func (rs resource[T]) createEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[int64]string, actor string, events *[]webhook.Event) (int64, error) {
+	effects, err := rs.prepareEffects(tx, nil, &item)
+	if err != nil {
+		return 0, err
+	}
 	id, err := rs.repo.CreateTx(tx, item)
 	if err != nil {
 		return 0, err
 	}
+	rs.setID(&item, id)
 	if err := d.customFields.WithTx(tx).SetForEntity(rs.sing, id, cf); err != nil {
+		return 0, err
+	}
+	// Repositories own normalization and derived fields. Record the stored
+	// entity rather than echoing fields the caller supplied but we never wrote.
+	item, err = rs.repo.GetTx(tx, id)
+	if err != nil {
 		return 0, err
 	}
 	var zero T
@@ -296,6 +329,9 @@ func (rs resource[T]) createEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[i
 		return 0, err
 	}
 	*events = append(*events, ev)
+	if err := effects.apply(d, actor, events); err != nil {
+		return 0, err
+	}
 	return id, nil
 }
 
@@ -303,18 +339,28 @@ func (rs resource[T]) createEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[i
 // in the changelog, atomically, then dispatches the webhook event after commit.
 // cf may be nil.
 func (rs resource[T]) createEntity(d handlerDeps, item T, cf map[int64]string, actor string) (int64, error) {
-	var id int64
+	item, err := rs.createEntityResult(d, item, cf, actor)
+	return rs.id(item), err
+}
+
+// createEntityResult captures the response entity before commit so a failed
+// reload rolls back the write and never publishes an event for it.
+func (rs resource[T]) createEntityResult(d handlerDeps, item T, cf map[int64]string, actor string) (T, error) {
 	var events []webhook.Event
 	err := store.WithTx(d.db, func(tx *sql.Tx) error {
-		var err error
-		id, err = rs.createEntityTx(tx, d, item, cf, actor, &events)
+		id, err := rs.createEntityTx(tx, d, item, cf, actor, &events)
+		if err != nil {
+			return err
+		}
+		item, err = rs.repo.GetTx(tx, id)
 		return err
 	})
 	if err != nil {
-		return id, err
+		var zero T
+		return zero, err
 	}
 	d.webhooks.Dispatch(events...)
-	return id, nil
+	return item, nil
 }
 
 // updateEntityTx overwrites the row identified by rs.id(item), sets its custom
@@ -328,12 +374,29 @@ func (rs resource[T]) updateEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[i
 	if err != nil {
 		return err
 	}
+	effects, err := rs.prepareEffects(tx, &old, &item)
+	if err != nil {
+		return err
+	}
 	if err := rs.repo.UpdateTx(tx, item); err != nil {
 		return err
 	}
 	if err := d.customFields.WithTx(tx).SetForEntity(rs.sing, rs.id(item), cf); err != nil {
 		return err
 	}
+	item, err = rs.repo.GetTx(tx, rs.id(item))
+	if err != nil {
+		return err
+	}
+	if err := rs.recordUpdateTx(tx, d, old, item, actor, events); err != nil {
+		return err
+	}
+	return effects.apply(d, actor, events)
+}
+
+// recordUpdateTx records an actual stored-state change without performing a
+// second mutation, so indirect updates share the same diff/history/event rules.
+func (rs resource[T]) recordUpdateTx(tx *sql.Tx, d handlerDeps, old, item T, actor string, events *[]webhook.Event) error {
 	changes, err := domain.Diff(old, item)
 	if err != nil {
 		return err
@@ -361,15 +424,28 @@ func (rs resource[T]) updateEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[i
 // field values, and records the typed-field diff, atomically, then dispatches
 // the webhook event (if any) after commit. cf may be nil.
 func (rs resource[T]) updateEntity(d handlerDeps, item T, cf map[int64]string, actor string) error {
+	_, err := rs.updateEntityResult(d, item, cf, actor)
+	return err
+}
+
+// updateEntityResult returns the stored entity, including its derived fields,
+// from the same transaction that records the update.
+func (rs resource[T]) updateEntityResult(d handlerDeps, item T, cf map[int64]string, actor string) (T, error) {
 	var events []webhook.Event
 	err := store.WithTx(d.db, func(tx *sql.Tx) error {
-		return rs.updateEntityTx(tx, d, item, cf, actor, &events)
+		if err := rs.updateEntityTx(tx, d, item, cf, actor, &events); err != nil {
+			return err
+		}
+		var err error
+		item, err = rs.repo.GetTx(tx, rs.id(item))
+		return err
 	})
 	if err != nil {
-		return err
+		var zero T
+		return zero, err
 	}
 	d.webhooks.Dispatch(events...)
-	return nil
+	return item, nil
 }
 
 // deleteEntity removes the entity and its relationship/tag/journal/custom-field
@@ -393,6 +469,10 @@ func (rs resource[T]) deleteEntity(d handlerDeps, id int64, actor string) error 
 // after commit. It is the shared core of single and bulk delete.
 func (rs resource[T]) deleteEntityTx(tx *sql.Tx, d handlerDeps, id int64, actor string, events *[]webhook.Event) error {
 	item, err := rs.repo.GetTx(tx, id)
+	if err != nil {
+		return err
+	}
+	effects, err := rs.prepareEffects(tx, &item, nil)
 	if err != nil {
 		return err
 	}
@@ -428,7 +508,7 @@ func (rs resource[T]) deleteEntityTx(tx *sql.Tx, d handlerDeps, id int64, actor 
 		return err
 	}
 	*events = append(*events, ev)
-	return nil
+	return effects.apply(d, actor, events)
 }
 
 func (rs resource[T]) create(d handlerDeps) http.HandlerFunc {
@@ -694,7 +774,12 @@ func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
 		}
 		cf, err := d.parseJSONCustomFields(rs.sing, aux.CustomFields)
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			var validation customFieldValidationError
+			if errors.As(err, &validation) {
+				writeJSONError(w, http.StatusBadRequest, err.Error())
+			} else {
+				apiServerError(w, req, err)
+			}
 			return
 		}
 		rs.setID(&item, 0)
@@ -702,7 +787,7 @@ func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		id, err := rs.createEntity(d, item, cf, actor(req))
+		item, err = rs.createEntityResult(d, item, cf, actor(req))
 		if err != nil {
 			if c := constraintError(err); c != nil {
 				writeJSONError(w, http.StatusBadRequest, c.Error())
@@ -711,8 +796,8 @@ func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
 			apiServerError(w, req, err)
 			return
 		}
-		rs.setID(&item, id)
-		// Reload for the response echo only; the create already committed, so a
+		id := rs.id(item)
+		// Load custom fields for the response only; the create already committed, so a
 		// failure here must not turn a successful write into a 500 (and, for
 		// this POST, risk a client retry creating a duplicate row).
 		vals, _ := d.customFields.ListForEntity(rs.sing, id)
@@ -750,7 +835,12 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 		}
 		cf, err := d.parseJSONCustomFields(rs.sing, aux.CustomFields)
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			var validation customFieldValidationError
+			if errors.As(err, &validation) {
+				writeJSONError(w, http.StatusBadRequest, err.Error())
+			} else {
+				apiServerError(w, req, err)
+			}
 			return
 		}
 		rs.setID(&item, id)
@@ -758,7 +848,8 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if err := rs.updateEntity(d, item, cf, actor(req)); err != nil {
+		item, err = rs.updateEntityResult(d, item, cf, actor(req))
+		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
 				return
@@ -770,7 +861,7 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 			apiServerError(w, req, err)
 			return
 		}
-		// Reload for the response echo only; the update already committed, so a
+		// Load custom fields for the response only; the update already committed, so a
 		// failure here must not turn a successful write into a 500.
 		vals, _ := d.customFields.ListForEntity(rs.sing, id)
 		writeEntityJSON(w, http.StatusOK, item, vals)

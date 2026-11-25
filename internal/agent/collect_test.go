@@ -16,6 +16,7 @@ func TestCollectFillsAReportableStructure(t *testing.T) {
 		"etc/os-release":              "PRETTY_NAME=\"Debian GNU/Linux 12 (bookworm)\"\n",
 		"proc/sys/kernel/osrelease":   "6.1.0-18-amd64\n",
 		"proc/uptime":                 "12345.67 0\n",
+		"proc/1/environ":              "",
 		"proc/meminfo":                "MemTotal:       65805304 kB\n",
 		"proc/cpuinfo":                cpuinfo4Core,
 		"sys/block/nvme0n1/size":      "1953525168\n",

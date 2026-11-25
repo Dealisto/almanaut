@@ -11,7 +11,7 @@
   <label>Name<input name="name" value="{{.Item.Name}}" placeholder="onboard, X540-T2" required></label>
   <label>Host
     <select name="host_id">
-      {{range .Extras.Hosts}}<option value="{{.ID}}"{{if eq .ID $.Item.HostID}} selected{{end}}>{{.Name}}</option>{{end}}
+      {{$foundHostID := false}}{{range .Extras.Hosts}}{{if eq .ID $.Item.HostID}}{{$foundHostID = true}}{{end}}<option value="{{.ID}}"{{if eq .ID $.Item.HostID}} selected{{end}}>{{.Name}}</option>{{end}}{{if and (gt .Item.HostID 0) (not $foundHostID)}}<option value="{{.Item.HostID}}" selected>host:{{.Item.HostID}} (deleted)</option>{{end}}
     </select>
   </label>
   <label>Kind

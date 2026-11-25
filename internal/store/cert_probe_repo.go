@@ -35,7 +35,7 @@ func (r *CertProbeRepo) Upsert(certID int64, s domain.CertProbeStatus) error {
 		   probed_at=excluded.probed_at, success=excluded.success, last_error=excluded.last_error,
 		   serial=excluded.serial, issuer=excluded.issuer, sans=excluded.sans,
 		   not_after=excluded.not_after, mismatches=excluded.mismatches`,
-		certID, s.ProbedAt.UTC().Format(time.RFC3339), boolToInt(s.Success), s.LastError,
+		certID, s.ProbedAt.UTC().Format(time.RFC3339Nano), boolToInt(s.Success), s.LastError,
 		s.Serial, s.Issuer, string(sans), s.NotAfter, string(mism),
 	)
 	if err != nil {

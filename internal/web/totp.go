@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
@@ -203,19 +204,45 @@ func confirm2FA(totp *store.TOTPRepo, db *sql.DB) http.HandlerFunc {
 // disable2FA turns 2FA off after re-verifying a current code or recovery code,
 // so a hijacked session cannot silently remove the second factor.
 func disable2FA(totp *store.TOTPRepo, db *sql.DB) http.HandlerFunc {
+	// Factor changes have their own per-user budget: a successful password
+	// login must not clear failed attempts to remove the second factor.
+	throttle := newLoginThrottle()
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, _ := userFrom(r.Context())
-		t, err := totp.Get(u.ID)
-		if err != nil {
-			notFoundOrServerError(w, r, "2fa", err)
+		key := strconv.FormatInt(u.ID, 10)
+		code, recovery := r.FormValue("code"), r.FormValue("recovery")
+		var t domain.UserTOTP
+		// Verification consumes one-time credentials. Keep consumption and the
+		// delete together so a storage error leaves the credential usable.
+		err := store.WithTx(db, func(tx *sql.Tx) error {
+			now := time.Now().UTC()
+			if ok, _ := throttle.allowed(key, now); !ok {
+				return errTOTPDisableThrottled
+			}
+			tr := totp.WithTx(tx)
+			var err error
+			t, err = tr.Get(u.ID)
+			if err != nil {
+				return err
+			}
+			valid, err := verifySecondFactor(tr, u.ID, t.Secret, code, recovery)
+			if err != nil {
+				return err
+			}
+			if !valid {
+				// Record before releasing the write transaction, so concurrent
+				// attempts observe the lockout before verifying another code.
+				throttle.recordFailure(key, now)
+				throttle.cleanup(now)
+				return errTOTPDisableInvalid
+			}
+			return tr.Disable(u.ID)
+		})
+		if errors.Is(err, errTOTPDisableThrottled) {
+			http.Error(w, "Too many attempts. Try again later.", http.StatusTooManyRequests)
 			return
 		}
-		valid, err := verifySecondFactor(totp, u.ID, t.Secret, r.FormValue("code"), r.FormValue("recovery"))
-		if err != nil {
-			serverError(w, r, err)
-			return
-		}
-		if !valid {
+		if errors.Is(err, errTOTPDisableInvalid) {
 			left, err := totp.CountUnusedRecovery(u.ID)
 			if err != nil {
 				serverError(w, r, err)
@@ -229,13 +256,19 @@ func disable2FA(totp *store.TOTPRepo, db *sql.DB) http.HandlerFunc {
 			})
 			return
 		}
-		if err := store.WithTx(db, func(tx *sql.Tx) error { return totp.WithTx(tx).Disable(u.ID) }); err != nil {
-			serverError(w, r, err)
+		if err != nil {
+			notFoundOrServerError(w, r, "2fa", err)
 			return
 		}
+		throttle.recordSuccess(key)
 		http.Redirect(w, r, "/account/2fa", http.StatusSeeOther)
 	}
 }
+
+var (
+	errTOTPDisableThrottled = errors.New("second-factor removal is rate-limited")
+	errTOTPDisableInvalid   = errors.New("invalid second factor for removal")
+)
 
 // verifySecondFactor checks a TOTP code or, failing that, redeems a single-use
 // recovery code. Returns true on either. A TOTP code is accepted once per time
