@@ -87,17 +87,22 @@ func customFieldsObject(vals []domain.CustomFieldValue) map[string]any {
 
 // mergeCustomFields marshals item, then injects a "custom_fields" key built from
 // vals. There is no marshal hook on the typed entity, so it round-trips through
-// a map. When vals is empty the key is still emitted as {} for a stable shape.
+// raw JSON fields so int64 identifiers never round through float64. When vals
+// is empty the key is still emitted as {} for a stable shape.
 func mergeCustomFields(item any, vals []domain.CustomFieldValue) ([]byte, error) {
 	raw, err := json.Marshal(item)
 	if err != nil {
 		return nil, err
 	}
-	var m map[string]any
+	var m map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return nil, err
 	}
-	m["custom_fields"] = customFieldsObject(vals)
+	custom, err := json.Marshal(customFieldsObject(vals))
+	if err != nil {
+		return nil, err
+	}
+	m["custom_fields"] = custom
 	return json.Marshal(m)
 }
 

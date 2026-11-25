@@ -27,7 +27,7 @@ func apiAuthServer(t *testing.T) (http.Handler, *store.TokenRepo, string) {
 		t.Fatalf("Migrate: %v", err)
 	}
 	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "alice", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "alice", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	u, err := users.GetByUsername("alice")
@@ -192,7 +192,7 @@ func TestAPIWriteAttributedToTokenUser(t *testing.T) {
 		t.Fatalf("Migrate: %v", err)
 	}
 	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "alice", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "alice", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	u, _ := users.GetByUsername("alice")
@@ -217,5 +217,47 @@ func TestAPIWriteAttributedToTokenUser(t *testing.T) {
 	}
 	if actor != "alice" {
 		t.Fatalf("changelog actor = %q, want alice", actor)
+	}
+}
+
+func TestAPIRejectsMalformedCustomFieldsWithoutWriting(t *testing.T) {
+	h, _, raw := apiAuthServer(t)
+	request := func(method, path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+		req.Header.Set("Authorization", "Bearer "+raw)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	rec := request(http.MethodPost, "/api/hosts", `{"name":"original","type":"physical"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("seed host: %d %s", rec.Code, rec.Body)
+	}
+	path := rec.Header().Get("Location")
+	for _, value := range []string{`"text"`, `[]`, `42`, `true`} {
+		for _, method := range []string{http.MethodPost, http.MethodPut} {
+			t.Run(method+"/"+value, func(t *testing.T) {
+				target := "/api/hosts"
+				if method == http.MethodPut {
+					target = path
+				}
+				rec := request(method, target, `{"name":"should-not-save","type":"physical","custom_fields":`+value+`}`)
+				if rec.Code != http.StatusBadRequest {
+					t.Fatalf("malformed custom_fields: %d %s", rec.Code, rec.Body)
+				}
+				var response map[string]string
+				if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil || response["error"] == "" {
+					t.Fatalf("expected JSON error: %s", rec.Body)
+				}
+			})
+		}
+	}
+	rec = request(http.MethodGet, "/api/hosts", "")
+	var hosts []domain.Host
+	if err := json.Unmarshal(rec.Body.Bytes(), &hosts); err != nil {
+		t.Fatal(err)
+	}
+	if len(hosts) != 1 || hosts[0].Name != "original" {
+		t.Fatalf("invalid requests changed the inventory: %+v", hosts)
 	}
 }

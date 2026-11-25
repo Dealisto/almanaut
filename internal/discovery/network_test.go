@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -81,10 +82,36 @@ func TestScanRespectsContextCancellation(t *testing.T) {
 	cancel() // cancel before scanning
 	s := NewNetworkScanner()
 	hosts, err := s.Scan(ctx, "192.168.250.0/24", nil)
-	if err != nil {
-		t.Fatalf("Scan should return cleanly on cancellation, got: %v", err)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled scan must fail rather than record an empty successful scan, got: %v", err)
 	}
 	if len(hosts) != 0 {
 		t.Errorf("cancelled scan should find no hosts, got %d", len(hosts))
+	}
+}
+
+func TestExpandCIDRUsableHostLimits(t *testing.T) {
+	for _, tc := range []struct {
+		cidr  string
+		limit int
+	}{
+		{"192.0.2.0/30", 2},
+		{"192.0.2.0/31", 2},
+		{"192.0.2.1/32", 1},
+		{"2001:db8::/126", 4},
+		{"2001:db8::/128", 1},
+	} {
+		t.Run(tc.cidr, func(t *testing.T) {
+			got, err := ExpandCIDR(tc.cidr, tc.limit)
+			if err != nil || len(got) != tc.limit {
+				t.Fatalf("at limit: got %v, error %v", got, err)
+			}
+			if _, err := ExpandCIDR(tc.cidr, tc.limit-1); err == nil {
+				t.Fatal("over-limit subnet accepted")
+			}
+		})
+	}
+	if _, err := ExpandCIDR("10.0.0.0/12", 1024); err == nil {
+		t.Fatal("over-limit subnet accepted")
 	}
 }

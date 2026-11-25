@@ -23,11 +23,11 @@ type NetworkUsage struct {
 	Conflicts   [][]Allocation // groups of >=2 allocations sharing one IP
 	TotalUsable int            // usable addresses in the subnet (0 when Unbounded)
 	UsedCount   int            // distinct IPs in use
-	FreeCount   int            // TotalUsable - UsedCount, clamped at 0 (0 when Unbounded)
+	FreeCount   int            // usable addresses not occupied by hosts, gateway or reservations
 	Unbounded   bool           // subnet too large to count/enumerate (e.g. IPv6 /64)
 	NextFree    string         // lowest usable address not in use ("" if none or Unbounded)
 
-	ReservedCount int           // reserved addresses not already host-used (0 when Unbounded)
+	ReservedCount int           // usable reserved/gateway addresses not already host-used (0 when Unbounded)
 	Reservations  []Reservation // reservations for this network (for display)
 }
 
@@ -103,11 +103,17 @@ func attribute(networks []Network, hosts []Host, onlyIdx int) (map[int][]Allocat
 	used := make(map[int][]Allocation, len(networks))
 	var unassigned []Allocation
 	for _, h := range hosts {
+		seen := make(map[string]bool, len(h.IPs))
 		for _, raw := range h.IPs {
 			ip := net.ParseIP(raw)
 			if ip == nil {
 				continue
 			}
+			canonical := ip.String()
+			if seen[canonical] {
+				continue // alternate spellings or repeats on one host are not conflicts
+			}
+			seen[canonical] = true
 			best, bestOnes := -1, -1
 			for _, p := range parsed {
 				if p.ipn.Contains(ip) && p.ones > bestOnes {
@@ -116,12 +122,12 @@ func attribute(networks []Network, hosts []Host, onlyIdx int) (map[int][]Allocat
 			}
 			if best < 0 {
 				if onlyIdx < 0 {
-					unassigned = append(unassigned, Allocation{IP: ip.String(), HostID: h.ID, HostName: h.Name})
+					unassigned = append(unassigned, Allocation{IP: canonical, HostID: h.ID, HostName: h.Name})
 				}
 				continue
 			}
 			if onlyIdx < 0 || best == onlyIdx {
-				used[best] = append(used[best], Allocation{IP: ip.String(), HostID: h.ID, HostName: h.Name})
+				used[best] = append(used[best], Allocation{IP: canonical, HostID: h.ID, HostName: h.Name})
 			}
 		}
 	}
@@ -186,11 +192,24 @@ func buildUsage(n Network, used []Allocation, reservations []Reservation) Networ
 		reserved := reservedAddrs(ipn, reservations)
 		for ip := range reserved {
 			taken[ip] = true
+		}
+		// These addresses are already excluded from TotalUsable. Keep any host
+		// allocations visible, but do not subtract subnet endpoints twice.
+		if reservesEnds(ones, bits) {
+			base := ipn.IP.Mask(ipn.Mask)
+			broadcast := make(net.IP, len(base))
+			for i := range base {
+				broadcast[i] = base[i] | ^ipn.Mask[i]
+			}
+			delete(taken, base.String())
+			delete(taken, broadcast.String())
+		}
+		for ip := range taken {
 			if _, isUsed := byIP[ip]; !isUsed {
 				u.ReservedCount++
 			}
 		}
-		if u.FreeCount = u.TotalUsable - u.UsedCount - u.ReservedCount; u.FreeCount < 0 {
+		if u.FreeCount = u.TotalUsable - len(taken); u.FreeCount < 0 {
 			u.FreeCount = 0
 		}
 		u.NextFree = nextFree(ipn, taken)

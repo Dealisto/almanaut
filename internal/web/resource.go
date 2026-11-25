@@ -688,7 +688,10 @@ func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
 		var aux struct {
 			CustomFields map[string]json.RawMessage `json:"custom_fields"`
 		}
-		_ = json.Unmarshal(body, &aux) // custom_fields is optional
+		if err := json.Unmarshal(body, &aux); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "custom_fields must be an object")
+			return
+		}
 		cf, err := d.parseJSONCustomFields(rs.sing, aux.CustomFields)
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
@@ -741,7 +744,10 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 		var aux struct {
 			CustomFields map[string]json.RawMessage `json:"custom_fields"`
 		}
-		_ = json.Unmarshal(body, &aux) // custom_fields is optional
+		if err := json.Unmarshal(body, &aux); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "custom_fields must be an object")
+			return
+		}
 		cf, err := d.parseJSONCustomFields(rs.sing, aux.CustomFields)
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, err.Error())

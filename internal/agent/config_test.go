@@ -213,3 +213,14 @@ func TestLoadConfigAcceptsValidServerURLs(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadConfigRejectsServerURLQueryAndFragment(t *testing.T) {
+	for _, suffix := range []string{"?token=private", "?", "#section", "#"} {
+		t.Run(suffix, func(t *testing.T) {
+			p := writeConfig(t, "server_url = \"https://alm.lan"+suffix+"\"\ntoken = \"t\"\n")
+			if _, err := LoadConfig(p, noEnv); err == nil {
+				t.Fatal("URL that changes the report endpoint was accepted")
+			}
+		})
+	}
+}

@@ -42,14 +42,12 @@ func requestLogger(logger *log.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-// contentSecurityPolicy confines the page to same-origin resources. It keeps
-// 'unsafe-inline' for scripts and styles because the UI relies on an inline
-// <style> block and inline onsubmit="confirm(...)" handlers on the delete
-// forms; raw HTML in user notes is already escaped (see renderMarkdown), so the
-// residual value here is blocking external resource loads, framing, base-uri
-// hijacking, and cross-origin form submission.
+// contentSecurityPolicy confines the page to same-origin resources. Scripts
+// must be external; confirmation handlers live in app.js. Inline styles remain
+// necessary for dynamically sized rack elevations. User notes cannot inject
+// raw HTML (see renderMarkdown).
 const contentSecurityPolicy = "default-src 'self'; " +
-	"script-src 'self' 'unsafe-inline'; " +
+	"script-src 'self'; " +
 	"style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data:; " +
 	"object-src 'none'; " +
@@ -92,13 +90,17 @@ func limitBodyBytes(limit int64, next http.Handler) http.Handler {
 
 // securityHeaders sets conservative response headers on every request: block
 // MIME sniffing, deny framing (clickjacking), suppress the Referer header, and
-// apply the same-origin Content-Security-Policy above.
+// apply the same-origin Content-Security-Policy above. Dynamic responses may
+// contain inventory, API tokens, or authentication secrets, so browsers and
+// shared caches must not store them. Static asset handlers override this policy
+// with their own revalidation headers.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Cache-Control", "no-store")
 		h.Set("Content-Security-Policy", contentSecurityPolicy)
 		next.ServeHTTP(w, r)
 	})

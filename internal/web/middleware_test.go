@@ -7,6 +7,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/Dealisto/almanaut/internal/domain"
+	"github.com/Dealisto/almanaut/internal/store"
 
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -22,6 +26,7 @@ func TestSecurityHeadersSet(t *testing.T) {
 		"X-Content-Type-Options": "nosniff",
 		"X-Frame-Options":        "DENY",
 		"Referrer-Policy":        "no-referrer",
+		"Cache-Control":          "no-store",
 	}
 	for k, v := range want {
 		if got := rec.Header().Get(k); got != v {
@@ -122,5 +127,54 @@ func TestRequestLoggerSetsRequestIDHeaderFromContext(t *testing.T) {
 
 	if rec.Header().Get("X-Request-Id") == "" {
 		t.Fatal("X-Request-Id response header is empty, want a generated id")
+	}
+}
+
+func TestSensitiveResponsesAreNotCached(t *testing.T) {
+	h, db := totpTestHandler(t)
+	check := func(label string, rec *httptest.ResponseRecorder, status int) {
+		t.Helper()
+		if rec.Code != status {
+			t.Fatalf("%s status = %d, want %d", label, rec.Code, status)
+		}
+		if got := rec.Header().Get("Cache-Control"); got != "no-store" {
+			t.Errorf("%s Cache-Control = %q, want no-store", label, got)
+		}
+	}
+	get := func(path string, cookie *http.Cookie) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		if cookie != nil {
+			req.AddCookie(cookie)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	check("login form", get("/login", nil), http.StatusOK)
+	check("unauthenticated redirect", get("/", nil), http.StatusSeeOther)
+	check("unauthenticated API", get("/api/hosts", nil), http.StatusUnauthorized)
+	session := loginAs(t, h, "admin", "password123")
+	for _, path := range []string{"/", "/account/tokens", "/account/2fa", "/api/hosts"} {
+		check(path, get(path, session), http.StatusOK)
+	}
+	check("new token", postCSRF(t, h, session, "/account/tokens", "label=cache-test"), http.StatusOK)
+	check("TOTP setup", postCSRF(t, h, session, "/account/2fa/setup", ""), http.StatusSeeOther)
+	check("TOTP secret", get("/account/2fa", session), http.StatusOK)
+	pending, err := store.NewTOTPRepo(db).Get(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, err := domain.TOTPCode(pending.Secret, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("TOTP recovery codes", postCSRF(t, h, session, "/account/2fa/confirm", "code="+code), http.StatusOK)
+	check("logout", postCSRF(t, h, session, "/logout", ""), http.StatusSeeOther)
+	check("after logout", get("/", session), http.StatusSeeOther)
+	for _, path := range []string{"/static/app.css", "/static/app.js"} {
+		rec := get(path, nil)
+		if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-cache" || rec.Header().Get("ETag") == "" {
+			t.Errorf("%s lost static revalidation headers: status=%d headers=%v", path, rec.Code, rec.Header())
+		}
 	}
 }

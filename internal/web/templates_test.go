@@ -1,19 +1,60 @@
 package web
 
 import (
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/Dealisto/almanaut/internal/domain"
-	"github.com/Dealisto/almanaut/internal/store"
 )
+
+// Tightening the script policy must not silently disable an enhancement on a
+// less frequently visited page, such as an administrative delete form.
+func TestTemplatesDoNotRequireInlineScripts(t *testing.T) {
+	inlineHandler := regexp.MustCompile(`(?i)\s+on[a-z]+\s*=`)
+	inlineScript := regexp.MustCompile(`(?is)<script\b[^>]*>\s*[^\s<]`)
+	err := fs.WalkDir(templatesFS, "templates", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		body, err := templatesFS.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if inlineHandler.Match(body) || inlineScript.Match(body) {
+			t.Errorf("%s requires inline script execution", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDestructiveControlsUseExternalConfirmation(t *testing.T) {
+	srv := newTestServer(t)
+	postForm(t, srv, "/hosts", map[string][]string{"name": {"nas"}, "type": {"physical"}})
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/hosts", nil))
+	if !strings.Contains(rec.Header().Get("Content-Security-Policy"), "script-src 'self';") {
+		t.Fatal("page permits inline script execution")
+	}
+	for _, confirmation := range []string{
+		`data-confirm="Delete this host?"`,
+		`data-confirm="Delete the selected items? This cannot be undone."`,
+	} {
+		if !strings.Contains(rec.Body.String(), confirmation) {
+			t.Errorf("missing confirmation: %s", confirmation)
+		}
+	}
+}
 
 func TestListPageHidesNewForViewer(t *testing.T) {
 	db := rbacDB(t)
-	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	h := newAuthedTestHandler(t, db)
@@ -35,8 +76,7 @@ func TestListPageHidesNewForViewer(t *testing.T) {
 
 func TestCreateUserFormDefaultsToViewer(t *testing.T) {
 	db := rbacDB(t)
-	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	h := newAuthedTestHandler(t, db)
@@ -63,8 +103,7 @@ func TestCreateUserFormDefaultsToViewer(t *testing.T) {
 
 func TestDetailPageHidesMutatorsForViewer(t *testing.T) {
 	db := rbacDB(t)
-	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	h := newAuthedTestHandler(t, db)

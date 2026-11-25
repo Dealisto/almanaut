@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
-	"github.com/Dealisto/almanaut/internal/store"
 )
 
 // failedLogin drives a login POST expected to fail (401).
@@ -32,7 +31,7 @@ func failedLogin(t *testing.T, h http.Handler, username, password string) {
 func auditTestHandler(t *testing.T) (http.Handler, *sql.DB) {
 	t.Helper()
 	db := rbacDB(t)
-	if err := BootstrapAdmin(store.NewUserRepo(db), testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	return newAuthedTestHandler(t, db), db

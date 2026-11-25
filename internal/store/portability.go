@@ -121,6 +121,9 @@ const snapshotVersion = 3
 // Rows outside the snapshot that are keyed by entity id are reconciled with
 // the new inventory: see reconcileSideTables.
 func Import(db *sql.DB, snap Snapshot) error {
+	if snap.Version < 1 {
+		return fmt.Errorf("snapshot version must be at least 1")
+	}
 	if snap.Version > snapshotVersion {
 		return fmt.Errorf("snapshot version %d is newer than this almanaut supports (%d)", snap.Version, snapshotVersion)
 	}
@@ -632,7 +635,16 @@ func keep[T any](items []T, dropped *int, ok func(T) bool) []T {
 // validateAll validates every item, returning the first failure tagged with the
 // entity label and id. id extracts the record id for the error message.
 func validateAll[T interface{ Validate() error }](label string, items []T, id func(T) int64) error {
+	seen := make(map[int64]bool, len(items))
 	for _, it := range items {
+		recordID := id(it)
+		if recordID <= 0 {
+			return fmt.Errorf("%s: id must be positive, got %d", label, recordID)
+		}
+		if seen[recordID] {
+			return fmt.Errorf("%s: duplicate id %d", label, recordID)
+		}
+		seen[recordID] = true
 		if err := it.Validate(); err != nil {
 			return fmt.Errorf("%s %d: %w", label, id(it), err)
 		}

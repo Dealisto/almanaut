@@ -60,8 +60,7 @@ func main() {
 		log.Fatalf("migrate database: %v", err)
 	}
 
-	users := store.NewUserRepo(db)
-	if err := web.BootstrapAdmin(users, log.Default(), cfg.AuthUser, cfg.AuthPass, cfg.ResetAdmin); err != nil {
+	if err := web.BootstrapAdmin(db, log.Default(), cfg.AuthUser, cfg.AuthPass, cfg.ResetAdmin); err != nil {
 		log.Fatalf("bootstrap admin: %v", err)
 	}
 

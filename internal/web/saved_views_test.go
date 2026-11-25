@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/Dealisto/almanaut/internal/domain"
-	"github.com/Dealisto/almanaut/internal/store"
 )
 
 func TestSavedViewCreateShowsInSidebarAndManage(t *testing.T) {
@@ -67,7 +66,7 @@ func TestSavedViewInvalidType(t *testing.T) {
 // saved view.
 func TestSavedViewPrivateToOwner(t *testing.T) {
 	db := rbacDB(t)
-	if err := BootstrapAdmin(store.NewUserRepo(db), testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	h := newAuthedTestHandler(t, db)

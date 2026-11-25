@@ -112,3 +112,33 @@ func TestTOTPPending(t *testing.T) {
 		t.Errorf("after delete = %v, want ErrNotFound", err)
 	}
 }
+
+func TestTOTPSetSecretPreservesEnabledFactor(t *testing.T) {
+	users, totp := newTOTPRepos(t)
+	uid := seedTOTPUser(t, users)
+	if err := totp.SetSecret(uid, "FIRST", "t"); err != nil {
+		t.Fatal(err)
+	}
+	// Pending enrollment can still be restarted.
+	if err := totp.SetSecret(uid, "SECOND", "t"); err != nil {
+		t.Fatal(err)
+	}
+	if err := totp.Enable(uid); err != nil {
+		t.Fatal(err)
+	}
+	if fresh, err := totp.UseStep(uid, 123); err != nil || !fresh {
+		t.Fatalf("record step: fresh=%v err=%v", fresh, err)
+	}
+	// A setup request that read the old pending state before confirmation
+	// must not overwrite the factor after that confirmation commits.
+	if err := totp.SetSecret(uid, "STALE_SETUP", "t"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := totp.Get(uid)
+	if err != nil || !got.Enabled || got.Secret != "SECOND" {
+		t.Fatalf("enabled factor changed: %+v err=%v", got, err)
+	}
+	if fresh, err := totp.UseStep(uid, 123); err != nil || fresh {
+		t.Fatalf("setup reset the replay marker: fresh=%v err=%v", fresh, err)
+	}
+}

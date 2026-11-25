@@ -142,3 +142,22 @@ func TestAPIListEmptyReturnsArray(t *testing.T) {
 		t.Errorf("empty list body = %q, want []", got)
 	}
 }
+
+func TestMergeCustomFieldsPreservesLargeIntegerIDs(t *testing.T) {
+	const id int64 = 9007199254740993
+	want := domain.Host{ID: id, Name: "large-id", Type: "physical", RackID: id + 2}
+	body, err := mergeCustomFields(want, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got domain.Host
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != want.ID || got.RackID != want.RackID {
+		t.Fatalf("integer IDs changed: got id=%d rack_id=%d; want id=%d rack_id=%d", got.ID, got.RackID, want.ID, want.RackID)
+	}
+	if !strings.Contains(string(body), `"custom_fields":{}`) {
+		t.Fatalf("custom_fields missing: %s", body)
+	}
+}

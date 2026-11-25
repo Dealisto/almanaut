@@ -200,3 +200,44 @@ func TestWriteAgentIDLeavesNoTemporaryFiles(t *testing.T) {
 		t.Fatalf("expected agent-id, found %q", entries[0].Name())
 	}
 }
+
+func TestConcurrentFirstReportsShareOneAgentID(t *testing.T) {
+	for range 8 {
+		dir := filepath.Join(t.TempDir(), "state")
+		start := make(chan struct{})
+		type result struct {
+			id  string
+			err error
+		}
+		results := make(chan result, 32)
+		for range cap(results) {
+			go func() {
+				<-start
+				id, err := LoadOrCreateAgentID(dir)
+				results <- result{id, err}
+			}()
+		}
+		close(start)
+		var first string
+		for range cap(results) {
+			r := <-results
+			if r.err != nil {
+				t.Errorf("concurrent creation: %v", r.err)
+			}
+			if first == "" {
+				first = r.id
+			}
+			if r.id != first {
+				t.Errorf("concurrent callers received different IDs: %q and %q", first, r.id)
+			}
+		}
+		stored, err := LoadOrCreateAgentID(dir)
+		if err != nil || stored != first {
+			t.Fatalf("stored ID %q differs from returned ID %q: %v", stored, first, err)
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil || len(entries) != 1 || entries[0].Name() != agentIDFile {
+			t.Fatalf("unexpected remaining files: %v, error %v", entries, err)
+		}
+	}
+}

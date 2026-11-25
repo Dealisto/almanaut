@@ -173,13 +173,16 @@ func (d *Detector) RunXenOrchestra(ctx context.Context) error {
 }
 
 // finish records the run and, on success with newly-appeared keys, notifies.
-// It returns scanErr so the job runner surfaces a failed scan on the tasks page.
+// It returns scan, persistence and delivery errors so the tasks page cannot
+// report success when a required part of the run failed.
 func (d *Detector) finish(ctx context.Context, source string, start time.Time, found int, newKeys []string, scanErr error) error {
+	runErr := scanErr
 	var fresh []string
 	if scanErr == nil {
 		prev, err := d.runs.LatestSuccessful(source)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			d.log.Error("discovery: read latest run", "source", source, "err", err)
+			runErr = errors.Join(runErr, fmt.Errorf("read latest discovery run: %w", err))
 		} else if err == nil {
 			fresh = FreshKeys(prev.NewKeys, newKeys)
 		} else {
@@ -196,6 +199,7 @@ func (d *Detector) finish(ctx context.Context, source string, start time.Time, f
 		FoundCount: found, NewCount: len(newKeys), Error: errStr, NewKeys: newKeys,
 	}); err != nil {
 		d.log.Error("discovery: record run", "source", source, "err", err)
+		runErr = errors.Join(runErr, fmt.Errorf("record discovery run: %w", err))
 	}
 
 	if scanErr == nil && len(fresh) > 0 {
@@ -205,7 +209,8 @@ func (d *Detector) finish(ctx context.Context, source string, start time.Time, f
 		}
 		if err := d.sender.Send(ctx, n); err != nil {
 			d.log.Error("discovery: send notification", "source", source, "err", err)
+			runErr = errors.Join(runErr, fmt.Errorf("send discovery notification: %w", err))
 		}
 	}
-	return scanErr
+	return runErr
 }

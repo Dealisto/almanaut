@@ -76,8 +76,7 @@ func csrfPost(t *testing.T, h http.Handler, cookie *http.Cookie, path, body stri
 
 func TestSessionRoleMatrix(t *testing.T) {
 	db := rbacDB(t)
-	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	h := newAuthedTestHandler(t, db)
@@ -157,8 +156,7 @@ func apiGet(t *testing.T, h http.Handler, raw, path string) int {
 
 func TestAPITokenScopeRoleIntersection(t *testing.T) {
 	db := rbacDB(t)
-	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	h := newAuthedTestHandler(t, db)
@@ -186,7 +184,7 @@ func TestAPITokenScopeRoleIntersection(t *testing.T) {
 func TestAdminCanChangeUserRole(t *testing.T) {
 	db := rbacDB(t)
 	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	h := newAuthedTestHandler(t, db)

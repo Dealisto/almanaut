@@ -7,7 +7,7 @@
   <details class="disclosure"><summary>Manage view<span class="sr-only"> {{.Name}}</span></summary>
     <form class="inline-editor" method="post" action="/views/{{.ID}}/rename">{{ csrfField }}<label>View name<input name="name" value="{{.Name}}" required></label><button class="btn" type="submit">Rename</button></form>
     {{if .Query}}<p class="query-preview"><span class="muted">Saved query:</span> <code>{{.Query}}</code></p>{{end}}
-    <form class="destructive-action" method="post" action="/views/{{.ID}}/delete" onsubmit="return confirm('Delete this saved view? Inventory records will be kept.');">{{ csrfField }}<button class="btn btn-danger" type="submit">Delete view<span class="sr-only"> {{.Name}}</span></button></form>
+    <form class="destructive-action" method="post" action="/views/{{.ID}}/delete" data-confirm="Delete this saved view? Inventory records will be kept.">{{ csrfField }}<button class="btn btn-danger" type="submit">Delete view<span class="sr-only"> {{.Name}}</span></button></form>
   </details>
 </li>{{end}}</ul></section>{{end}}</div>
 <aside class="help-card"><h2>Save another view</h2><ol class="steps"><li>Open an inventory list.</li><li>Choose a search, filters, or sorting and select <strong>Apply</strong>.</li><li>Open <strong>Save view</strong> and give it a name.</li></ol><p>Your saved views also appear in the sidebar.</p></aside></div>

@@ -110,7 +110,7 @@ func TestCreateUserDefaultsToViewer(t *testing.T) {
 		t.Fatalf("Migrate: %v", err)
 	}
 	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	h := newAuthedTestHandler(t, db)
@@ -237,5 +237,35 @@ func TestUserMutationsOnUnknownUserAre404(t *testing.T) {
 		if rec := postCSRF(t, h, admin, path, body); rec.Code != http.StatusNotFound {
 			t.Errorf("POST %s = %d, want 404", path, rec.Code)
 		}
+	}
+}
+
+func TestPasswordChangesInvalidatePending2FA(t *testing.T) {
+	for _, tc := range []struct {
+		name, path, body string
+		status           int
+	}{
+		{"self change", "/account/password", "current_password=password123&new_password=newpassword1", http.StatusOK},
+		{"admin reset", "/users/1/password", "password=newpassword1", http.StatusSeeOther},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, db := totpTestHandler(t)
+			session := loginAs(t, h, "admin", "password123")
+			_, recovery := enroll2FA(t, h, db, session, 1)
+			pending := cookieNamed(passwordLogin(t, h, "admin", "password123").Result().Cookies(), pending2FACookieName)
+			if pending == nil {
+				t.Fatal("missing pending challenge")
+			}
+			if rec := postCSRF(t, h, session, tc.path, tc.body); rec.Code != tc.status {
+				t.Fatalf("password change = %d: %s", rec.Code, rec.Body)
+			}
+			rec := submit2FA(t, h, pending, "recovery="+recovery[0])
+			if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login" || cookieValue(rec, sessionCookieName) != "" {
+				t.Fatalf("old-password challenge completed login: %d %s", rec.Code, rec.Header())
+			}
+			if left, err := store.NewTOTPRepo(db).CountUnusedRecovery(1); err != nil || left != recoveryCodeCount {
+				t.Fatalf("revoked challenge consumed a recovery code: remaining=%d err=%v", left, err)
+			}
+		})
 	}
 }

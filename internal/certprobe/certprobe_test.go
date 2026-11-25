@@ -6,6 +6,7 @@ import (
 	"crypto/x509/pkix"
 	"database/sql"
 	"errors"
+	"fmt"
 	"math/big"
 	"path/filepath"
 	"testing"
@@ -202,5 +203,91 @@ func TestRunSkipsEmptyProbeTargetAndContinuesAfterFailure(t *testing.T) {
 	}
 	if okCert.ExpiresOn != "2027-06-01" {
 		t.Fatalf("ok cert should have been probed and updated despite the other's failure: %q", okCert.ExpiresOn)
+	}
+}
+
+func TestProbeOnePreservesConcurrentEdits(t *testing.T) {
+	db := testDB(t)
+	certs := store.NewCertificateRepo(db)
+	id, err := certs.Create(domain.Certificate{Subject: "old.example.com", ProbeTarget: "example.com:443"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, err := certs.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dial := func(context.Context, string) (*x509.Certificate, error) {
+		edited := cert
+		edited.Subject, edited.Notes, edited.AutoRenew = "new.example.com", "edited during probe", true
+		if err := certs.Update(edited); err != nil {
+			t.Fatal(err)
+		}
+		return leaf(time.Date(2027, 3, 4, 0, 0, 0, 0, time.UTC), "Test CA", 42, "new.example.com"), nil
+	}
+	state := store.NewCertProbeRepo(db)
+	p := New(certs, state, db, dial, time.Second, nil, nil)
+	if err := p.ProbeOne(context.Background(), cert); err != nil {
+		t.Fatal(err)
+	}
+	got, err := certs.Get(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Subject != "new.example.com" || got.Notes != "edited during probe" || !got.AutoRenew || got.ExpiresOn != "2027-03-04" {
+		t.Fatalf("probe overwrote concurrent edits: %+v", got)
+	}
+	st, err := state.Get(id)
+	if err != nil || len(st.Mismatches) != 0 {
+		t.Fatalf("mismatches must use current subject: state=%+v err=%v", st, err)
+	}
+}
+
+func TestProbeOneDiscardsObsoleteResults(t *testing.T) {
+	for _, change := range []string{"target", "delete"} {
+		for _, failed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/failure=%t", change, failed), func(t *testing.T) {
+				db := testDB(t)
+				certs := store.NewCertificateRepo(db)
+				id, err := certs.Create(domain.Certificate{Subject: "example.com", ExpiresOn: "2028-01-01", ProbeTarget: "example.com:443"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				cert, err := certs.Get(id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				dial := func(context.Context, string) (*x509.Certificate, error) {
+					if change == "delete" {
+						err = certs.Delete(id)
+					} else {
+						edited := cert
+						edited.ProbeTarget = "new.example.com:443"
+						err = certs.Update(edited)
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					if failed {
+						return nil, errors.New("connection refused")
+					}
+					return leaf(time.Date(2027, 3, 4, 0, 0, 0, 0, time.UTC), "Test CA", 42, "example.com"), nil
+				}
+				state := store.NewCertProbeRepo(db)
+				p := New(certs, state, db, dial, time.Second, nil, nil)
+				if err := p.ProbeOne(context.Background(), cert); err != nil {
+					t.Fatalf("obsolete probe should be discarded: %v", err)
+				}
+				if _, err := state.Get(id); !errors.Is(err, store.ErrNotFound) {
+					t.Fatalf("obsolete probe result persisted: %v", err)
+				}
+				if change == "target" {
+					got, err := certs.Get(id)
+					if err != nil || got.ProbeTarget != "new.example.com:443" || got.ExpiresOn != "2028-01-01" {
+						t.Fatalf("obsolete probe changed certificate: cert=%+v err=%v", got, err)
+					}
+				}
+			})
+		}
 	}
 }

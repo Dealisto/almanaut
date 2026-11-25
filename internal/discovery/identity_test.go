@@ -74,3 +74,26 @@ func TestMatchCandidatesRecreatedContainerDoesNotDuplicateLinkedService(t *testi
 		t.Fatalf("different source must remain independent: %+v", other[0])
 	}
 }
+
+func TestMatchCandidatesRequiresCompatibleServiceKindForAdoption(t *testing.T) {
+	candidates := []Candidate{{ID: "container-1", EntityType: "service", Service: domain.Service{Name: " DNS ", Kind: "container"}}}
+	for _, kind := range []string{"native", "vm", "container"} {
+		t.Run(kind, func(t *testing.T) {
+			services := []domain.Service{{ID: 1, Name: "dns", Kind: kind}}
+			got := MatchCandidates("docker:lab", candidates, nil, services, nil)[0]
+			if kind == "container" {
+				if got.Ambiguous || got.ExistingID != 1 || got.Bound {
+					t.Fatalf("compatible manual service should be adoptable: %+v", got)
+				}
+			} else if !got.Ambiguous || got.ExistingID != 0 {
+				t.Fatalf("incompatible service must not be adopted: %+v", got)
+			}
+			// A persistent identity still wins after a manual kind edit.
+			bindings := []domain.DiscoveryBinding{{Source: "docker:lab", ExternalID: "container-1", EntityType: "service", EntityID: 1}}
+			got = MatchCandidates("docker:lab", candidates, nil, services, bindings)[0]
+			if !got.Bound || got.ExistingID != 1 || got.Ambiguous {
+				t.Fatalf("explicit binding lost: %+v", got)
+			}
+		})
+	}
+}

@@ -706,6 +706,21 @@ func New(cfg Config) http.Handler {
 	r.Get("/static/app.css", staticCSS(cfg.Version))
 	r.Get("/static/app.js", staticAsset("static/app.js", "text/javascript; charset=utf-8", cfg.Version))
 
+	// Share the same trust boundary between the explicit SSO entry point and
+	// authenticated application routes. Local password login remains public.
+	var ssoAuth func(http.Handler) http.Handler
+	if cfg.AuthEnabled && cfg.ProxyAuthHeader != "" {
+		allow, skipped := parseCIDRList(cfg.ProxyAuthAllowlist)
+		for _, s := range skipped {
+			logger.Printf("proxy-auth: ignoring invalid allowlist entry %q", s)
+		}
+		role := domain.Role(cfg.ProxyAuthDefaultRole)
+		if !role.Valid() {
+			role = domain.RoleViewer
+		}
+		ssoAuth = proxyAuth(cfg.ProxyAuthHeader, allow, cfg.ProxyAuthAutoProvision, role, users, authEvents, ssoLog)
+	}
+
 	// Login routes: CSRF-protected but not session-gated (you cannot have a
 	// session yet). Only present when auth is enabled.
 	if cfg.AuthEnabled {
@@ -713,10 +728,13 @@ func New(cfg Config) http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(limitLoginBody)
 			r.Use(csrfProtect(cfg.SecureCookies))
-			r.Get("/login", loginForm)
-			r.Post("/login", login(users, sessions, totp, throttle, authEvents, cfg.SecureCookies))
+			r.Get("/login", loginForm(ssoAuth != nil))
+			r.Post("/login", login(users, sessions, totp, throttle, authEvents, cfg.SecureCookies, ssoAuth != nil))
+			if ssoAuth != nil {
+				r.With(ssoAuth).Get("/login/sso", ssoLogin)
+			}
 			r.Get("/login/2fa", challenge2FAForm(totp))
-			r.Post("/login/2fa", verify2FA(users, sessions, totp, throttle, authEvents, cfg.SecureCookies))
+			r.Post("/login/2fa", verify2FA(users, sessions, totp, db, throttle, authEvents, cfg.SecureCookies))
 		})
 	}
 
@@ -737,16 +755,8 @@ func New(cfg Config) http.Handler {
 		if cfg.AuthEnabled {
 			// Reverse-proxy SSO runs before session auth: when it resolves an
 			// identity from a trusted proxy, sessionAuth passes the request through.
-			if cfg.ProxyAuthHeader != "" {
-				allow, skipped := parseCIDRList(cfg.ProxyAuthAllowlist)
-				for _, s := range skipped {
-					logger.Printf("proxy-auth: ignoring invalid allowlist entry %q", s)
-				}
-				role := domain.Role(cfg.ProxyAuthDefaultRole)
-				if !role.Valid() {
-					role = domain.RoleViewer
-				}
-				r.Use(proxyAuth(cfg.ProxyAuthHeader, allow, cfg.ProxyAuthAutoProvision, role, users, authEvents, ssoLog))
+			if ssoAuth != nil {
+				r.Use(ssoAuth)
 			}
 			r.Use(sessionAuth(sessions))
 		}

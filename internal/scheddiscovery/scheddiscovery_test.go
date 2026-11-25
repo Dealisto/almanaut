@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -207,5 +208,53 @@ func TestRunDockerScanErrorRecordedAndReturned(t *testing.T) {
 	latest, _ := runs.Latest("docker")
 	if latest.Error == "" {
 		t.Fatalf("scan error not recorded: %+v", latest)
+	}
+}
+
+type failingSender struct{ err error }
+
+func (s failingSender) Send(context.Context, notify.Notification) error { return s.err }
+
+func TestRunReturnsNotificationFailureAndKeepsScanHistory(t *testing.T) {
+	runs := testStore(t)
+	sendErr := errors.New("notification unavailable")
+	d := New(fakeDocker{cs: []discovery.Container{{ID: "c1", Name: "new"}}}, nil, "", nil, svcList{}, nil, runs, failingSender{sendErr}, nil, nil)
+	if err := d.RunDocker(context.Background()); !errors.Is(err, sendErr) {
+		t.Fatalf("notification error was lost: %v", err)
+	}
+	latest, err := runs.LatestSuccessful("docker")
+	if err != nil || latest.NewCount != 1 {
+		t.Fatalf("successful scan history was lost: %+v, %v", latest, err)
+	}
+}
+
+func TestRunReturnsPersistenceFailureWithoutSuppressingNotification(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runs.db")
+	db, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := store.Migrate(db, path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TRIGGER fail_discovery_run BEFORE INSERT ON discovery_runs BEGIN SELECT RAISE(ABORT, 'run storage unavailable'); END`); err != nil {
+		t.Fatal(err)
+	}
+	sender := &countSender{}
+	d := New(fakeDocker{cs: []discovery.Container{{ID: "c1", Name: "new"}}}, nil, "", nil, svcList{}, nil, store.NewDiscoveryRunRepo(db), sender, nil, nil)
+	if err := d.RunDocker(context.Background()); err == nil || !strings.Contains(err.Error(), "run storage unavailable") {
+		t.Fatalf("persistence error was lost: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatal("persistence failure suppressed a valid notification")
+	}
+	scanErr := errors.New("scan unavailable")
+	d.docker = fakeDocker{err: scanErr}
+	if err := d.RunDocker(context.Background()); !errors.Is(err, scanErr) || !strings.Contains(err.Error(), "run storage unavailable") {
+		t.Fatalf("scan and persistence failures must both survive: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatal("failed scan must not notify")
 	}
 }

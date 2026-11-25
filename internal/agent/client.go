@@ -55,10 +55,18 @@ func Send(ctx context.Context, hc *http.Client, serverURL, token string, rep age
 	switch {
 	case resp.StatusCode == http.StatusOK:
 		var res SendResult
-		if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		const maxResponseBody = 64 << 10
+		raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody+1))
+		if err != nil {
+			return SendResult{}, fmt.Errorf("read response: %w", err)
+		}
+		if len(raw) > maxResponseBody {
+			return SendResult{}, fmt.Errorf("%w: response exceeds 64 KiB", ErrRejected)
+		}
+		if err := json.Unmarshal(raw, &res); err != nil {
 			return SendResult{}, fmt.Errorf("decode response: %w", err)
 		}
-		if res.HostID == 0 {
+		if res.HostID <= 0 {
 			return SendResult{}, fmt.Errorf("%w: server returned 200 but no host_id at %s", ErrRejected, url)
 		}
 		return res, nil
@@ -76,7 +84,6 @@ func Send(ctx context.Context, hc *http.Client, serverURL, token string, rep age
 // serverMessage extracts {"error": "..."} from a response body, falling back
 // to the raw text so an unexpected proxy error is still legible.
 func serverMessage(r io.Reader) string {
-	defer io.Copy(io.Discard, r)
 	raw, err := io.ReadAll(io.LimitReader(r, maxErrorBody))
 	if err != nil || len(raw) == 0 {
 		return "(no message)"

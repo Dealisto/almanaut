@@ -2,6 +2,8 @@ package discovery
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -44,19 +46,29 @@ func TestResourcesParsesAndFilters(t *testing.T) {
 	}
 }
 
-func TestResourcesNon200IncludesBodyExcerpt(t *testing.T) {
+func TestResourcesNon200DoesNotExposeResponseBody(t *testing.T) {
+	const secret = "private-token-value"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte("authentication failure - invalid token value"))
+		_, _ = w.Write([]byte("authentication failure: " + secret))
 	}))
 	defer ts.Close()
-	c := NewProxmoxClient(ts.URL, "bad", false)
+	c := NewProxmoxClient(ts.URL, "root@pam!inventory="+secret, false)
 	_, err := c.Resources(context.Background())
 	if err == nil {
 		t.Fatal("expected error on 401, got nil")
 	}
-	if !strings.Contains(err.Error(), "invalid token value") {
-		t.Errorf("error should include the response body excerpt, got: %v", err)
+	if strings.Contains(err.Error(), secret) || !strings.Contains(err.Error(), "401") {
+		t.Errorf("error should report the status without reflected credentials, got: %v", err)
+	}
+}
+
+func TestProxmoxSafeErrorRedactsTokenAndPreservesCause(t *testing.T) {
+	const secret = "private-token-value"
+	c := NewProxmoxClient("https://pve.example", "root@pam!inventory="+secret, false)
+	err := c.safeError(fmt.Errorf("%s (%s): %w", c.token, secret, context.DeadlineExceeded))
+	if strings.Contains(err.Error(), secret) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("unsafe or unclassified error: %v", err)
 	}
 }
 

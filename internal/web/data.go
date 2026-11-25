@@ -79,13 +79,8 @@ func importData(db *sql.DB, cat entityCatalog) http.HandlerFunc {
 			return
 		}
 		defer file.Close()
-		raw, err := io.ReadAll(file)
+		snap, err := decodeSnapshot(file)
 		if err != nil {
-			serverError(w, req, err)
-			return
-		}
-		var snap store.Snapshot
-		if err := yaml.Unmarshal(raw, &snap); err != nil {
 			render(w, req, "data.html", dataPageData{Title: "Data", Types: cat.importTypes(), Error: "invalid YAML: " + err.Error()})
 			return
 		}
@@ -95,6 +90,31 @@ func importData(db *sql.DB, cat entityCatalog) http.HandlerFunc {
 		}
 		http.Redirect(w, req, "/data?imported=1", http.StatusSeeOther)
 	}
+}
+
+// decodeSnapshot rejects ambiguous uploads before the destructive replacement.
+// Unknown fields and additional documents must not be silently discarded.
+func decodeSnapshot(r io.Reader) (store.Snapshot, error) {
+	var snap store.Snapshot
+	decoder := yaml.NewDecoder(r)
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&snap); err != nil {
+		if err == io.EOF {
+			return store.Snapshot{}, fmt.Errorf("the file is empty")
+		}
+		return store.Snapshot{}, err
+	}
+	if snap.Version <= 0 {
+		return store.Snapshot{}, fmt.Errorf("a positive snapshot version is required")
+	}
+	var extra yaml.Node
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err != nil {
+			return store.Snapshot{}, err
+		}
+		return store.Snapshot{}, fmt.Errorf("the file must contain exactly one YAML document")
+	}
+	return snap, nil
 }
 
 func importCSV(cat entityCatalog, deps handlerDeps) http.HandlerFunc {

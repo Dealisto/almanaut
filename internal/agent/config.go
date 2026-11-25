@@ -98,6 +98,9 @@ func validateServerURL(raw string) error {
 	if u.Host == "" {
 		return fmt.Errorf("missing host")
 	}
+	if u.RawQuery != "" || u.ForceQuery || strings.Contains(raw, "#") {
+		return fmt.Errorf("query strings and fragments are not supported")
+	}
 	return nil
 }
 

@@ -44,6 +44,9 @@ func NewNetworkScanner() *NetworkScanner {
 // Scan enumerates the subnet and returns hosts with at least one open port.
 // ports overrides the scanner's default port set when non-empty.
 func (s *NetworkScanner) Scan(ctx context.Context, cidr string, ports []int) ([]ScannedHost, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	ips, err := ExpandCIDR(cidr, maxScanHosts)
 	if err != nil {
 		return nil, err
@@ -114,6 +117,10 @@ func (s *NetworkScanner) Scan(ctx context.Context, cidr string, ports []int) ([]
 	for h := range results {
 		alive = append(alive, h)
 	}
+	// A partial scan must not become the next successful notification baseline.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	sort.Slice(alive, func(i, j int) bool { return ipLess(alive[i].IP, alive[j].IP) })
 	return alive, nil
 }
@@ -134,19 +141,25 @@ func ExpandCIDR(cidr string, maxHosts int) ([]string, error) {
 	if hostBits > 20 {
 		return nil, fmt.Errorf("subnet %q is too large to scan", cidr)
 	}
+	addresses := 1 << hostBits
+	usable := addresses
+	reserveEnds := ipnet.IP.To4() != nil && hostBits >= 2
+	if reserveEnds {
+		usable -= 2
+	}
+	if usable > maxHosts {
+		return nil, fmt.Errorf("subnet %q has %d hosts, exceeds the %d limit", cidr, usable, maxHosts)
+	}
 	base := ipnet.IP.Mask(ipnet.Mask)
 	cur := make(net.IP, len(base))
 	copy(cur, base)
-	var ips []string
+	ips := make([]string, 0, addresses)
 	for ipnet.Contains(cur) {
 		ips = append(ips, cur.String())
 		incIP(cur)
 	}
-	if ipnet.IP.To4() != nil && hostBits >= 2 && len(ips) >= 2 {
+	if reserveEnds {
 		ips = ips[1 : len(ips)-1] // drop network and broadcast
-	}
-	if len(ips) > maxHosts {
-		return nil, fmt.Errorf("subnet %q has %d hosts, exceeds the %d limit", cidr, len(ips), maxHosts)
 	}
 	return ips, nil
 }

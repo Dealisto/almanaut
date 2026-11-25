@@ -2,6 +2,7 @@ package web
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"errors"
 	"log"
@@ -16,8 +17,10 @@ import (
 // exist it does nothing, unless reset is true, in which case it resets the
 // admin's password and makes sure that account is an admin (a lockout recovery
 // valve driven by ALMANAUT_RESET_ADMIN, which must also recover from the last
-// admin having been demoted).
-func BootstrapAdmin(users *store.UserRepo, logger *log.Logger, envUser, envPass string, reset bool) error {
+// admin having been demoted). Resetting also revokes all sessions and pending
+// second-factor challenges, while keeping enrolled 2FA and API tokens.
+func BootstrapAdmin(db *sql.DB, logger *log.Logger, envUser, envPass string, reset bool) error {
+	users := store.NewUserRepo(db)
 	n, err := users.Count()
 	if err != nil {
 		return err
@@ -62,21 +65,6 @@ func BootstrapAdmin(users *store.UserRepo, logger *log.Logger, envUser, envPass 
 		return nil
 	}
 
-	// Reset path: prefer the named user, else the oldest admin, else the
-	// oldest account (no admin left at all).
-	target, err := users.GetByUsername(username)
-	if errors.Is(err, store.ErrNotFound) {
-		list, lerr := users.List()
-		if lerr != nil {
-			return lerr
-		}
-		if len(list) == 0 {
-			return nil
-		}
-		target = oldestUser(list)
-	} else if err != nil {
-		return err
-	}
 	password, _, err := passwordOrGenerated(envPass)
 	if err != nil {
 		return err
@@ -85,13 +73,47 @@ func BootstrapAdmin(users *store.UserRepo, logger *log.Logger, envUser, envPass 
 	if err != nil {
 		return err
 	}
-	if err := users.UpdatePassword(target.ID, hash, nowRFC3339()); err != nil {
-		return err
-	}
-	if target.Role != domain.RoleAdmin {
-		if err := users.UpdateRole(target.ID, domain.RoleAdmin, nowRFC3339()); err != nil {
+	var target domain.User
+	// Resolve the target and replace credentials in the same transaction as
+	// revoking sessions and password-verified second-factor challenges. A
+	// failed reset must not leave a partially updated account behind.
+	err = store.WithTx(db, func(tx *sql.Tx) error {
+		ur := users.WithTx(tx)
+		var err error
+		target, err = ur.GetByUsername(username)
+		if errors.Is(err, store.ErrNotFound) {
+			list, err := ur.List()
+			if err != nil {
+				return err
+			}
+			if len(list) == 0 {
+				return nil
+			}
+			// Prefer the oldest admin, falling back to the oldest account.
+			target = oldestUser(list)
+		} else if err != nil {
 			return err
 		}
+		if err := ur.UpdatePassword(target.ID, hash, nowRFC3339()); err != nil {
+			return err
+		}
+		if target.Role != domain.RoleAdmin {
+			if err := ur.UpdateRole(target.ID, domain.RoleAdmin, nowRFC3339()); err != nil {
+				return err
+			}
+		}
+		if err := store.NewSessionRepo(db).WithTx(tx).DeleteByUser(target.ID); err != nil {
+			return err
+		}
+		return store.NewTOTPRepo(db).WithTx(tx).DeletePendingByUser(target.ID)
+	})
+	if err != nil {
+		return err
+	}
+	if target.ID == 0 {
+		return nil
+	}
+	if target.Role != domain.RoleAdmin {
 		logger.Printf("Almanaut promoted %q to admin (it was %s).", target.Username, target.Role)
 	}
 	logger.Printf("========================================================")

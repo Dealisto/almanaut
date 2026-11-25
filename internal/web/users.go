@@ -199,10 +199,14 @@ func revokeSessions(sessions *store.SessionRepo, r *http.Request, userID int64) 
 
 // setPasswordAndRevoke stores a new password hash for userID and ends their
 // other sessions in one transaction: a session stolen before the change must
-// not outlive it.
+// not outlive it. Pending second-factor challenges also prove the old password
+// and must be invalidated in the same transaction.
 func setPasswordAndRevoke(db *sql.DB, users *store.UserRepo, sessions *store.SessionRepo, r *http.Request, userID int64, hash string) error {
 	return store.WithTx(db, func(tx *sql.Tx) error {
 		if err := users.WithTx(tx).UpdatePassword(userID, hash, nowRFC3339()); err != nil {
+			return err
+		}
+		if err := store.NewTOTPRepo(db).WithTx(tx).DeletePendingByUser(userID); err != nil {
 			return err
 		}
 		return revokeSessions(sessions.WithTx(tx), r, userID)

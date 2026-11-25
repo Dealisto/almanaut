@@ -162,3 +162,33 @@ func TestSendRejectsZeroHostID(t *testing.T) {
 		t.Fatalf("err = %v, want ErrRejected", err)
 	}
 }
+
+func TestServerMessageDoesNotDrainPastTheExcerpt(t *testing.T) {
+	r := strings.NewReader(strings.Repeat("x", maxErrorBody*2))
+	if got := serverMessage(r); len(got) != maxErrorBody {
+		t.Fatalf("excerpt length = %d, want %d", len(got), maxErrorBody)
+	}
+	if r.Len() != maxErrorBody {
+		t.Fatalf("read beyond the excerpt: %d bytes remain", r.Len())
+	}
+}
+
+func TestSendValidatesSuccessResponse(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+	}{
+		{"negative host ID", `{"host_id":-1}`},
+		{"trailing response", `{"host_id":1} {"host_id":2}`},
+		{"oversized response", `{"host_id":1,"ignored":"` + strings.Repeat("x", 64<<10) + `"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+			if _, err := Send(context.Background(), srv.Client(), srv.URL, "t", testReport()); err == nil {
+				t.Fatal("invalid success response was accepted")
+			}
+		})
+	}
+}

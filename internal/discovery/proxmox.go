@@ -3,12 +3,13 @@ package discovery
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/Dealisto/almanaut/internal/redact"
 )
 
 // ProxmoxResource is one node/VM/container row from /cluster/resources.
@@ -74,20 +75,22 @@ func (c *ProxmoxClient) Resources(ctx context.Context) ([]ProxmoxResource, error
 	req.Header.Set("Authorization", "PVEAPIToken="+c.token)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("proxmox request: %w", err)
+		return nil, fmt.Errorf("proxmox request: %w", c.safeError(err))
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, statusError("proxmox", resp)
+		// An authentication gateway may echo all or part of the API token.
+		// Match Xen Orchestra by keeping response bodies out of visible errors.
+		return nil, fmt.Errorf("proxmox API status %d", resp.StatusCode)
 	}
 	var body struct {
 		Data []apiResource `json:"data"`
 	}
-	// Cap the response so a buggy or hostile endpoint cannot exhaust memory; a
-	// real cluster inventory is far below this.
-	const maxBody = 16 << 20 // 16 MiB
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(&body); err != nil {
-		return nil, fmt.Errorf("decode resources: %w", err)
+	if err := decodeInventory(resp.Body, &body); err != nil {
+		return nil, fmt.Errorf("decode resources: %w", c.safeError(err))
+	}
+	if body.Data == nil {
+		return nil, fmt.Errorf("proxmox response must contain a data array")
 	}
 	out := make([]ProxmoxResource, 0, len(body.Data))
 	for _, r := range body.Data {
@@ -99,6 +102,18 @@ func (c *ProxmoxClient) Resources(ctx context.Context) ([]ProxmoxResource, error
 		out = append(out, ProxmoxResource(r))
 	}
 	return out, nil
+}
+
+func (c *ProxmoxClient) safeError(err error) error {
+	err = redact.Error(err)
+	message := err.Error()
+	if c.token != "" {
+		message = strings.ReplaceAll(message, c.token, "[redacted]")
+		if _, secret, ok := strings.Cut(c.token, "="); ok && secret != "" {
+			message = strings.ReplaceAll(message, secret, "[redacted]")
+		}
+	}
+	return &discoveryRequestError{err: err, message: message}
 }
 
 // noRedirect tells an http.Client not to follow redirects. The discovery REST

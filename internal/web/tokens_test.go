@@ -87,7 +87,7 @@ func TestTokenCreateDefaultsToReadWriteScope(t *testing.T) {
 		t.Fatalf("Migrate: %v", err)
 	}
 	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	h := newAuthedTestHandler(t, db)
@@ -135,8 +135,7 @@ func TestTokenCreateDefaultsToReadWriteScope(t *testing.T) {
 
 func TestCreateTokenHonorsScope(t *testing.T) {
 	db := rbacDB(t)
-	users := store.NewUserRepo(db)
-	if err := BootstrapAdmin(users, testLogger(), "admin", "password123", false); err != nil {
+	if err := BootstrapAdmin(db, testLogger(), "admin", "password123", false); err != nil {
 		t.Fatalf("BootstrapAdmin: %v", err)
 	}
 	h := newAuthedTestHandler(t, db)
