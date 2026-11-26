@@ -24,27 +24,42 @@ type InterfaceLister func() ([]NetInterface, error)
 // only way the machine is actually reachable.
 var noisyPrefixes = []string{"docker", "br-", "veth", "virbr", "cni", "flannel", "kube-", "cali"}
 
-// SystemInterfaces lists the real machine's interfaces.
+// SystemInterfaces lists the real machine's reportable interfaces. If any
+// interface's addresses cannot be read, all addresses are left unknown while
+// retaining interface names and MACs for identity. A partial IP set would make
+// the server remove the addresses of the temporarily unreadable interface.
 func SystemInterfaces() ([]NetInterface, error) {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
 	}
+	return systemInterfaces(ifaces, (*net.Interface).Addrs), nil
+}
+
+func systemInterfaces(ifaces []net.Interface, addresses func(*net.Interface) ([]net.Addr, error)) []NetInterface {
 	out := make([]NetInterface, 0, len(ifaces))
+	complete := true
 	for _, i := range ifaces {
-		ni := NetInterface{Name: i.Name, MAC: i.HardwareAddr.String()}
-		if i.Flags&net.FlagLoopback != 0 {
-			ni.Name = "lo" // normalized so the filter below catches it everywhere
+		if i.Flags&net.FlagLoopback != 0 || i.Name == "lo" || isNoisyInterface(i.Name) {
+			continue
 		}
-		addrs, err := i.Addrs()
-		if err == nil {
+		ni := NetInterface{Name: i.Name, MAC: i.HardwareAddr.String()}
+		addrs, err := addresses(&i)
+		if err != nil {
+			complete = false
+		} else {
 			for _, a := range addrs {
 				ni.Addrs = append(ni.Addrs, a.String())
 			}
 		}
 		out = append(out, ni)
 	}
-	return out, nil
+	if !complete {
+		for i := range out {
+			out[i].Addrs = nil
+		}
+	}
+	return out
 }
 
 // CollectInterfaces converts and filters interfaces for the report.

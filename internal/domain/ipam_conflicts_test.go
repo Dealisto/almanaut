@@ -1,6 +1,29 @@
 package domain
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
+
+func TestIPAMOverlapsPreservePairOrderAndCanonicalBlocks(t *testing.T) {
+	networks := []Network{
+		{ID: 1, CIDR: "10.0.0.7/24"},
+		{ID: 2, CIDR: "2001:db8::1/64"},
+		{ID: 3, CIDR: "::ffff:10.0.0.0/120"},
+		{ID: 4, CIDR: "10.0.0.0/25"},
+		{ID: 5, CIDR: "invalid"},
+		{ID: 6, CIDR: "2001:db8::/64"},
+		{ID: 7, CIDR: "10.0.0.0/24"},
+	}
+	var pairs [][2]int64
+	for _, overlap := range overlappingNetworks(networks) {
+		pairs = append(pairs, [2]int64{overlap.A.ID, overlap.B.ID})
+	}
+	want := [][2]int64{{1, 3}, {1, 7}, {2, 6}, {3, 7}}
+	if !reflect.DeepEqual(pairs, want) {
+		t.Fatalf("pairs = %v, want %v", pairs, want)
+	}
+}
 
 func TestIPAMConflictsDuplicateIPs(t *testing.T) {
 	hosts := []Host{

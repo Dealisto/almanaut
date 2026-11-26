@@ -58,11 +58,16 @@ type Session struct {
 // Connect dials, completes the engine.io v4 + socket.io handshake, logs in,
 // and waits for the initial monitorList push. Close the session when done.
 func (c *Client) Connect(ctx context.Context) (*Session, error) {
-	httpClient := http.DefaultClient
+	// The login frame carries credentials after the HTTP upgrade. Following a
+	// redirect would authenticate to a different endpoint, even though net/http
+	// normally strips authorization headers on cross-host redirects.
+	httpClient := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
 	if c.insecure {
-		httpClient = &http.Client{Transport: &http.Transport{
+		httpClient.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}}
+		}
 	}
 	conn, _, err := websocket.Dial(ctx, c.wsURL, &websocket.DialOptions{HTTPClient: httpClient})
 	if err != nil {

@@ -151,3 +151,29 @@ func TestCustomFieldListAllValues(t *testing.T) {
 		t.Errorf("valid row rejected: %v", err)
 	}
 }
+
+func TestCustomFieldSetRollsBackAllValuesOnWriteFailure(t *testing.T) {
+	repo := newCustomFieldRepo(t)
+	values := make(map[int64]string)
+	for _, name := range []string{"first", "second"} {
+		id, err := repo.CreateDef(domain.CustomFieldDef{EntityType: "host", Name: name, Label: name, Kind: domain.KindText})
+		if err != nil {
+			t.Fatal(err)
+		}
+		values[id] = name
+	}
+	// Whichever map entry is visited first succeeds; the second write fails.
+	// The public repository operation must never leave the first value behind.
+	if _, err := repo.db.Exec(`CREATE TRIGGER fail_second_value BEFORE INSERT ON custom_field_values
+		WHEN EXISTS(SELECT 1 FROM custom_field_values)
+		BEGIN SELECT RAISE(ABORT, 'second custom field write failed'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetForEntity("host", 1, values); err == nil {
+		t.Fatal("expected injected write failure")
+	}
+	stored, err := repo.ListAllValues()
+	if err != nil || len(stored) != 0 {
+		t.Fatalf("failed multi-field save left partial data: %+v %v", stored, err)
+	}
+}

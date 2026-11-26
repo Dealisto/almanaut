@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/http"
+	neturl "net/url"
 	"strconv"
 	"strings"
 
@@ -28,11 +29,12 @@ type webhookFormData struct {
 }
 
 type webhooksPageData struct {
-	Title     string
-	Webhooks  []domain.Webhook
-	Form      webhookFormData // empty create form
-	Error     string
-	NewSecret string // generated secret, shown once immediately after create
+	Title             string
+	Webhooks          []domain.Webhook
+	Form              webhookFormData // empty create form
+	Error             string
+	NewSecret         string // generated secret, shown once immediately after create
+	PendingDeliveries int
 }
 
 // webhookFormWith builds form data with the given URL and pre-checked filters.
@@ -47,27 +49,34 @@ func emptyWebhookForm() webhookFormData {
 	return webhookFormWith("", nil, nil)
 }
 
-func renderWebhooks(w http.ResponseWriter, r *http.Request, repo *store.WebhookRepo, form webhookFormData, errMsg, newSecret string) {
+func renderWebhooks(w http.ResponseWriter, r *http.Request, repo *store.WebhookRepo, outbox *store.WebhookOutboxRepo, form webhookFormData, errMsg, newSecret string) {
 	list, err := repo.List()
+	if err != nil {
+		serverError(w, r, err)
+		return
+	}
+	pending, err := outbox.PendingCount()
 	if err != nil {
 		serverError(w, r, err)
 		return
 	}
 	render(w, r, "webhooks.html", webhooksPageData{
 		Title: "Webhooks", Webhooks: list, Form: form,
-		Error: errMsg, NewSecret: newSecret,
+		Error: errMsg, NewSecret: newSecret, PendingDeliveries: pending,
 	})
 }
 
-func listWebhooks(repo *store.WebhookRepo) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { renderWebhooks(w, r, repo, emptyWebhookForm(), "", "") }
+func listWebhooks(repo *store.WebhookRepo, outbox *store.WebhookOutboxRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		renderWebhooks(w, r, repo, outbox, emptyWebhookForm(), "", "")
+	}
 }
 
-func createWebhook(repo *store.WebhookRepo) http.HandlerFunc {
+func createWebhook(repo *store.WebhookRepo, outbox *store.WebhookOutboxRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		url, types, events, perr := parseWebhookForm(r)
 		if perr != nil {
-			renderWebhooks(w, r, repo, webhookFormWith(url, types, events), perr.Error(), "")
+			renderWebhooks(w, r, repo, outbox, webhookFormWith(url, types, events), perr.Error(), "")
 			return
 		}
 		secret, gerr := newWebhookSecret()
@@ -82,7 +91,7 @@ func createWebhook(repo *store.WebhookRepo) http.HandlerFunc {
 			serverError(w, r, err)
 			return
 		}
-		renderWebhooks(w, r, repo, emptyWebhookForm(), "", secret) // reveal once
+		renderWebhooks(w, r, repo, outbox, emptyWebhookForm(), "", secret) // reveal once
 	}
 }
 
@@ -126,21 +135,15 @@ func updateWebhook(repo *store.WebhookRepo) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		wh, err := repo.Get(id)
-		if err != nil {
-			notFoundOrServerError(w, r, "webhook", err)
-			return
-		}
 		url, types, events, perr := parseWebhookForm(r)
 		if perr != nil {
 			render(w, r, "webhook_edit.html", webhookEditData{
-				Title: "Edit webhook", ID: wh.ID, Error: perr.Error(),
+				Title: "Edit webhook", ID: id, Error: perr.Error(),
 				Form: webhookFormWith(url, types, events),
 			})
 			return
 		}
-		wh.URL, wh.EntityTypes, wh.Events = url, types, events // secret, enabled, created_at preserved
-		if err := repo.Update(wh); err != nil {
+		if err := repo.UpdateSettings(id, url, types, events); err != nil {
 			notFoundOrServerError(w, r, "webhook", err)
 			return
 		}
@@ -154,13 +157,7 @@ func toggleWebhook(repo *store.WebhookRepo) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		wh, err := repo.Get(id)
-		if err != nil {
-			notFoundOrServerError(w, r, "webhook", err)
-			return
-		}
-		wh.Enabled = !wh.Enabled
-		if err := repo.Update(wh); err != nil {
+		if err := repo.ToggleEnabled(id); err != nil {
 			notFoundOrServerError(w, r, "webhook", err)
 			return
 		}
@@ -197,6 +194,16 @@ func parseWebhookForm(r *http.Request) (url string, types, events []string, err 
 	}
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		return url, types, events, errors.New("URL must start with http:// or https://")
+	}
+	endpoint, perr := neturl.Parse(url)
+	if perr != nil || endpoint.Hostname() == "" || strings.Contains(url, "#") {
+		return url, types, events, errors.New("URL must have a valid hostname and no fragment")
+	}
+	if port := endpoint.Port(); port != "" {
+		n, perr := strconv.Atoi(port)
+		if perr != nil || n < 1 || n > 65535 {
+			return url, types, events, errors.New("URL port must be between 1 and 65535")
+		}
 	}
 	return url, types, events, nil
 }

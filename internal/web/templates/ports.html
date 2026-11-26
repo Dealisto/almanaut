@@ -17,7 +17,7 @@
   <thead><tr><th scope="col" class="bulk-col"><span class="sr-only">Selection</span>{{if canWrite}}<input type="checkbox" class="js-only" data-select-all aria-label="Select all rows on this page">{{end}}</th><th scope="col">Name</th><th scope="col">Owner</th><th scope="col">NIC</th><th scope="col">MAC</th><th scope="col">Connected to</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
   <tbody>
   {{range .Items}}
-    <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select row {{.ID}}">{{end}}</td>
+    <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select {{.Name}} on {{.OwnerName}}">{{end}}</td>
       <td><a href="/ports/{{.ID}}">{{.Name}}</a>{{if .MgmtOnly}} <span class="muted">[mgmt]</span>{{end}}</td>
       <td>{{.OwnerName}}</td>
       <td>{{.NICName}}</td>

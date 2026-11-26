@@ -3,6 +3,7 @@ package webhook
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"log"
@@ -32,10 +33,10 @@ type Lister interface {
 	ListEnabled() ([]domain.Webhook, error)
 }
 
-// Options configures a Queue. Zero fields fall back to defaults.
+// Options configures Queue or DurableQueue. Zero fields fall back to defaults.
 type Options struct {
 	Workers     int           // concurrent delivery workers (default 4)
-	QueueSize   int           // event buffer and waiting-delivery capacity (default 256)
+	QueueSize   int           // retained-delivery capacity (default 256 in Queue, 10,000 in DurableQueue)
 	MaxAttempts int           // delivery attempts before giving up (default 5)
 	BaseDelay   time.Duration // first retry backoff, doubled each attempt (default 2s)
 	Timeout     time.Duration // per-request HTTP timeout (default 10s)
@@ -330,16 +331,20 @@ func retryDelay(base time.Duration, attempt int) time.Duration {
 }
 
 func (q *Queue) post(url string, body []byte, sig, deliveryID string) error {
+	return postDelivery(q.ctx, q.client, url, body, sig, deliveryID)
+}
+
+func postDelivery(ctx context.Context, client *http.Client, url string, body []byte, sig, deliveryID string) error {
 	// Errors carry the endpoint URL, which often embeds a token: redact them,
 	// since the caller logs every failed attempt.
-	req, err := http.NewRequestWithContext(q.ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return redact.Error(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Almanaut-Signature", sig)
 	req.Header.Set("X-Almanaut-Delivery", deliveryID)
-	resp, err := q.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return redact.Error(err)
 	}
@@ -360,4 +365,24 @@ func (m Multi) Dispatch(events ...Event) {
 	for _, d := range m {
 		d.Dispatch(events...)
 	}
+}
+
+// Stage persists deliveries before the inventory transaction commits. Legacy
+// dispatchers have no durable state and are still notified after commit.
+func Stage(tx *sql.Tx, dispatcher Dispatcher, events ...Event) error {
+	if staged, ok := dispatcher.(interface {
+		Stage(*sql.Tx, ...Event) error
+	}); ok {
+		return staged.Stage(tx, events...)
+	}
+	return nil
+}
+
+func (m Multi) Stage(tx *sql.Tx, events ...Event) error {
+	for _, dispatcher := range m {
+		if err := Stage(tx, dispatcher, events...); err != nil {
+			return err
+		}
+	}
+	return nil
 }

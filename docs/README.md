@@ -18,6 +18,7 @@
 | [Export & import](export-import.md) | Whole-inventory YAML round-trip, additive CSV import |
 | [JSON API](api.md) | Tokens and scopes, endpoints, the OpenAPI 3 spec |
 | [Monitoring](monitoring.md) | Prometheus metrics, `/healthz`, `/version` |
+| [Testing](testing.md) | Go checks and repeatable Chromium browser regressions |
 
 Release notes live in [CHANGELOG.md](../CHANGELOG.md); repository conventions
 for contributors are in [CLAUDE.md](../CLAUDE.md).

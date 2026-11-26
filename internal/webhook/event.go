@@ -1,5 +1,6 @@
 // Package webhook delivers outbound HTTP notifications when almanaut entities
-// change. Delivery is in-memory and non-blocking; see Queue.
+// change. DurableQueue stages signed deliveries atomically with inventory changes
+// and retries them across restarts; Queue is the legacy in-memory implementation.
 package webhook
 
 import (

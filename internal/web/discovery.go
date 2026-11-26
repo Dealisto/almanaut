@@ -9,6 +9,7 @@ import (
 	"github.com/Dealisto/almanaut/internal/discovery"
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
+	"github.com/Dealisto/almanaut/internal/webhook"
 )
 
 // dockerScanner is the subset of the Docker discovery client the web layer uses.
@@ -134,21 +135,33 @@ func scanNetwork(netscan networkScanner, hosts *store.HostRepo, opts NetDiscover
 	}
 }
 
-// recordImport writes an "import" changelog event for an entity created by a
-// discovery import, so the import counts as a sighting for stale detection and
-// shows up in the entity's history. cl must be bound to the import transaction.
-func recordImport(cl *store.ChangelogRepo, entityType string, id int64, label, actor string) error {
-	return cl.Create(store.ChangeEvent{
-		EntityType: entityType,
-		EntityID:   id,
-		Label:      label,
-		Action:     domain.ActionImport,
-		Actor:      actor,
-		CreatedAt:  nowRFC3339(),
-	})
+// recordDiscoveryMutation keeps discovery's import/update history and the
+// corresponding outbound event in the same transaction. Events are delivered
+// only after the caller successfully commits the complete discovery operation.
+func recordDiscoveryMutation(tx *sql.Tx, cl *store.ChangelogRepo, dispatcher webhook.Dispatcher, change store.ChangeEvent, data any, events *[]webhook.Event) error {
+	change.CreatedAt = nowRFC3339()
+	if err := cl.Create(change); err != nil {
+		return err
+	}
+	action := webhook.ActionUpdated
+	if change.Action == domain.ActionImport {
+		action = webhook.ActionCreated
+	}
+	event, err := webhook.NewEvent(change.EntityType, change.EntityID, action, change.Actor, change.CreatedAt, data)
+	if err != nil {
+		return err
+	}
+	if err := webhook.Stage(tx, dispatcher, event); err != nil {
+		return err
+	}
+	*events = append(*events, event)
+	return nil
 }
 
-func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) http.HandlerFunc {
+func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB, dispatcher webhook.Dispatcher) http.HandlerFunc {
+	if dispatcher == nil {
+		dispatcher = webhook.Noop{}
+	}
 	return func(w http.ResponseWriter, req *http.Request) {
 		if !opts.Enabled {
 			http.NotFound(w, req)
@@ -160,6 +173,7 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) 
 		}
 		hostType := req.PostFormValue("type")
 		result := discoveryImportResult{Title: "Discovery import complete", Source: DiscoverySource{ID: "default", Kind: "network", Name: "Network scan"}, InventoryPath: "/hosts"}
+		var events []webhook.Event
 		txErr := store.WithTx(db, func(tx *sql.Tx) error {
 			if err := store.NewHostTypeRepo(db).WithTx(tx).Require(hostType); err != nil {
 				return err
@@ -213,7 +227,14 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) 
 				if err != nil {
 					return err
 				}
-				if err := recordImport(cl, "host", newID, h.Name, actor(req)); err != nil {
+				h, err = hr.Get(newID)
+				if err != nil {
+					return err
+				}
+				if err := recordDiscoveryMutation(tx, cl, dispatcher, store.ChangeEvent{
+					EntityType: "host", EntityID: newID, Label: h.Name,
+					Action: domain.ActionImport, Actor: actor(req),
+				}, h, &events); err != nil {
 					return err
 				}
 				tracked[key] = true // avoid a duplicate within the same submit
@@ -229,6 +250,7 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB) 
 			serverError(w, req, txErr)
 			return
 		}
+		dispatcher.Dispatch(events...)
 		render(w, req, "discovery_import.html", result)
 	}
 }

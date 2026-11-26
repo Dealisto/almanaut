@@ -80,7 +80,7 @@ func BuildNetworkUsage(targetID int64, networks []Network, hosts []Host, reserva
 	if targetIdx < 0 {
 		return NetworkUsage{}, false
 	}
-	// Attribution still scans every network (longest-prefix needs them all), but
+	// Attribution still indexes every network (longest-prefix needs them all), but
 	// only the target's allocations are collected — no slices are built for the
 	// networks we are about to discard.
 	used, _ := attribute(networks, hosts, targetIdx)
@@ -96,22 +96,9 @@ func BuildNetworkUsage(targetID int64, networks []Network, hosts []Host, reserva
 // onlyIdx limits what is collected: -1 keeps every network's allocations plus
 // the unassigned list (the full report); a non-negative value keeps only that
 // network's allocations (the single-network view) and skips the unassigned list,
-// while still scanning all networks so the longest-prefix winner is unchanged.
+// while still indexing all networks so the longest-prefix winner is unchanged.
 func attribute(networks []Network, hosts []Host, onlyIdx int) (map[int][]Allocation, []Allocation) {
-	type parsedNet struct {
-		idx      int
-		ipn      *net.IPNet
-		hostBits int
-	}
-	var parsed []parsedNet
-	for i, n := range networks {
-		_, ipn, err := net.ParseCIDR(n.CIDR)
-		if err != nil {
-			continue // invalid CIDR: this network matches nothing
-		}
-		ones, bits := ipn.Mask.Size()
-		parsed = append(parsed, parsedNet{idx: i, ipn: ipn, hostBits: bits - ones})
-	}
+	index := newNetworkIndex(networks)
 
 	used := make(map[int][]Allocation, len(networks))
 	var unassigned []Allocation
@@ -127,14 +114,7 @@ func attribute(networks []Network, hosts []Host, onlyIdx int) (map[int][]Allocat
 				continue // alternate spellings or repeats on one host are not conflicts
 			}
 			seen[canonical] = true
-			best, bestHostBits := -1, 129
-			for _, p := range parsed {
-				// Compare block sizes so IPv4 /24 and mapped IPv6 /120 tie;
-				// comparing raw prefix lengths would let /120 beat IPv4 /25.
-				if p.ipn.Contains(ip) && p.hostBits < bestHostBits {
-					best, bestHostBits = p.idx, p.hostBits
-				}
-			}
+			best := index.lookup(ip)
 			if best < 0 {
 				if onlyIdx < 0 {
 					unassigned = append(unassigned, Allocation{IP: canonical, HostID: h.ID, HostName: h.Name})

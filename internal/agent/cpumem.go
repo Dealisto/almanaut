@@ -44,21 +44,62 @@ func CollectRAM(r Root) string {
 //
 // A cpuset file existing is not enough to say "allocated": cgroup v2 mounts
 // one on every modern host, so cpuset.cpus.effective lists every processor on
-// bare metal too. "Allocated" is only said when the cpuset count is lower than
-// /proc/cpuinfo's processor count — the case where the cgroup is actually
-// restricting the container to fewer CPUs than the machine has.
+// bare metal too. "Allocated" is only said when the cgroup actually restricts
+// the container below /proc/cpuinfo's processor count, or supplies a count that
+// /proc/cpuinfo could not determine.
+// CPU bandwidth quotas can impose a smaller, fractional allocation without
+// pinning any CPUs; respect the lowest of that quota, cpuset and processor count.
 func CollectCPU(r Root) string {
 	model, procs := procCPUInfo(r)
 	if model == "" {
 		return ""
 	}
-	if n, ok := cgroupEffectiveCPUCount(r); ok && (procs == 0 || n < procs) {
-		return fmt.Sprintf("%s (%d cores allocated)", model, n)
+	available := float64(procs)
+	if n, ok := cgroupEffectiveCPUCount(r); ok && (available == 0 || float64(n) < available) {
+		available = float64(n)
+	}
+	if quota, ok := cgroupCPUQuota(r); ok && (available == 0 || quota < available) {
+		available = quota
+	}
+	if available > 0 && (procs == 0 || available < float64(procs)) {
+		return fmt.Sprintf("%s (%s cores allocated)", model, strconv.FormatFloat(available, 'f', -1, 64))
 	}
 	if procs > 0 {
 		return fmt.Sprintf("%s (%d cores)", model, procs)
 	}
 	return model
+}
+
+// cgroupCPUQuota expresses the container's CPU bandwidth ceiling in equivalent
+// cores. Read the cgroup namespace root, as for RAM/cpuset, rather than any
+// additional service-specific throttling of the reporting process itself.
+func cgroupCPUQuota(r Root) (float64, bool) {
+	if raw := readTrimmed(r.Path(r.Sys, "fs/cgroup/cpu.max")); raw != "" {
+		fields := strings.Fields(raw)
+		if len(fields) != 2 || fields[0] == "max" {
+			return 0, false
+		}
+		return parseCPUQuota(fields[0], fields[1])
+	}
+	for _, controller := range []string{"cpu", "cpu,cpuacct"} {
+		base := "fs/cgroup/" + controller + "/"
+		quota := readTrimmed(r.Path(r.Sys, base+"cpu.cfs_quota_us"))
+		if quota != "" {
+			return parseCPUQuota(quota, readTrimmed(r.Path(r.Sys, base+"cpu.cfs_period_us")))
+		}
+	}
+	return 0, false
+}
+
+func parseCPUQuota(quota, period string) (float64, bool) {
+	q, qerr := strconv.ParseInt(quota, 10, 64)
+	p, perr := strconv.ParseInt(period, 10, 64)
+	// v1 uses -1 for unlimited. Invalid or missing values must not fabricate
+	// a zero allocation or produce an infinite result from a zero period.
+	if qerr != nil || perr != nil || q <= 0 || p <= 0 {
+		return 0, false
+	}
+	return float64(q) / float64(p), true
 }
 
 // cgroupMemoryLimitBytes reads the cgroup v2 then v1 memory limit. The second

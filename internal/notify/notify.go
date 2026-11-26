@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -36,6 +37,10 @@ type Item struct {
 type Key struct {
 	Kind Kind
 	ID   int64
+}
+
+func (k Key) before(other Key) bool {
+	return k.Kind < other.Kind || (k.Kind == other.Kind && k.ID < other.ID)
 }
 
 // Key returns the item's identity key.
@@ -72,11 +77,13 @@ type Notifier struct {
 	state      *store.NotificationRepo
 	sender     Sender
 	withinDays int
+	runGate    chan struct{}
+	next       Key // first item to attempt after an interrupted pass
 }
 
 // New builds a Notifier. withinDays is the "expiring soon" window.
 func New(certs *store.CertificateRepo, hw *store.HardwareRepo, subs *store.SubscriptionRepo, state *store.NotificationRepo, sender Sender, withinDays int) *Notifier {
-	return &Notifier{certs: certs, hw: hw, subs: subs, state: state, sender: sender, withinDays: withinDays}
+	return &Notifier{certs: certs, hw: hw, subs: subs, state: state, sender: sender, withinDays: withinDays, runGate: make(chan struct{}, 1)}
 }
 
 // gather returns every entity expiring within the window, across all kinds.
@@ -114,9 +121,16 @@ func (n *Notifier) gather(now time.Time) ([]Item, error) {
 // left unmarked so it retries next pass); it does not abort the pass.
 // Delivery errors are returned after the remaining items have been attempted.
 //
-// Deliberately not transactional: Run is the sole writer of notification_state
-// and runs single-threaded, so a tx would just hold a DB tx open across Send.
+// Passes are serialized without holding a database transaction across Send.
+// An interrupted pass resumes at the next stable item identity so slow early
+// deliveries cannot indefinitely starve later certificates or other kinds.
 func (n *Notifier) Run(ctx context.Context, now time.Time) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case n.runGate <- struct{}{}:
+	}
+	defer func() { <-n.runGate }()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -136,15 +150,25 @@ func (n *Notifier) Run(ctx context.Context, now time.Time) error {
 	toNotify, toClear := decide(expiring, sent)
 
 	for _, k := range toClear {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := n.state.Clear(string(k.Kind), k.ID); err != nil {
 			return err
 		}
 	}
+	sort.Slice(toNotify, func(i, j int) bool { return toNotify[i].Key().before(toNotify[j].Key()) })
+	start := sort.Search(len(toNotify), func(i int) bool { return !toNotify[i].Key().before(n.next) })
+	if start == len(toNotify) {
+		start = 0
+	}
 	var runErr error
-	for _, it := range toNotify {
+	for i := range toNotify {
 		if err := ctx.Err(); err != nil {
 			return errors.Join(runErr, err)
 		}
+		it := toNotify[(start+i)%len(toNotify)]
+		n.next = toNotify[(start+i+1)%len(toNotify)].Key()
 		if err := n.sender.Send(ctx, message(it, now)); err != nil {
 			log.Printf("notify: send %s %d: %v", it.Kind, it.ID, err)
 			runErr = errors.Join(runErr, fmt.Errorf("send %s %d notification: %w", it.Kind, it.ID, err))

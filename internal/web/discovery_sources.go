@@ -14,6 +14,7 @@ import (
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/job"
 	"github.com/Dealisto/almanaut/internal/store"
+	"github.com/Dealisto/almanaut/internal/webhook"
 )
 
 // DiscoverySource identifies one configured engine without exposing its credentials.
@@ -294,7 +295,10 @@ func scanDiscoverySource(source DiscoverySource, db *sql.DB, cat entityCatalog) 
 	}
 }
 
-func importDiscoverySource(source DiscoverySource, db *sql.DB) http.HandlerFunc {
+func importDiscoverySource(source DiscoverySource, db *sql.DB, dispatcher webhook.Dispatcher) http.HandlerFunc {
+	if dispatcher == nil {
+		dispatcher = webhook.Noop{}
+	}
 	return func(w http.ResponseWriter, req *http.Request) {
 		if !source.available() {
 			http.NotFound(w, req)
@@ -326,12 +330,23 @@ func importDiscoverySource(source DiscoverySource, db *sql.DB) http.HandlerFunc 
 		if source.Containers() {
 			result.InventoryPath = "/services"
 		}
+		var events []webhook.Event
 		err = store.WithTx(db, func(tx *sql.Tx) error {
 			hr := store.NewHostRepo(db).WithTx(tx)
 			sr := store.NewServiceRepo(db).WithTx(tx)
 			br := store.NewDiscoveryBindingRepo(db).WithTx(tx)
 			rr := store.NewRelationshipRepo(db).WithTx(tx)
 			cr := store.NewChangelogRepo(db).WithTx(tx)
+			if source.Containers() && hostID > 0 {
+				// The host selector may have been open while another request
+				// deleted its target. Check under the same write lock as links.
+				if _, err := hr.Get(hostID); err != nil {
+					if errors.Is(err, store.ErrNotFound) {
+						return &store.ConstraintError{Reason: "selected host no longer exists"}
+					}
+					return err
+				}
+			}
 			hosts, err := hr.List()
 			if err != nil {
 				return err
@@ -371,12 +386,17 @@ func importDiscoverySource(source DiscoverySource, db *sql.DB) http.HandlerFunc 
 				id := m.ExistingID
 				if id == 0 {
 					name := ""
+					var data any
 					if m.EntityType == "host" {
 						if err := m.Host.Validate(); err != nil {
 							result.Skipped++
 							continue
 						}
 						id, err = hr.Create(m.Host)
+						if err == nil {
+							m.Host, err = hr.Get(id)
+						}
+						data = m.Host
 						name = m.Host.Name
 					} else {
 						if err := m.Service.Validate(); err != nil {
@@ -384,12 +404,19 @@ func importDiscoverySource(source DiscoverySource, db *sql.DB) http.HandlerFunc 
 							continue
 						}
 						id, err = sr.Create(m.Service)
+						if err == nil {
+							m.Service, err = sr.Get(id)
+						}
+						data = m.Service
 						name = m.Service.Name
 					}
 					if err != nil {
 						return err
 					}
-					if err := recordImport(cr, m.EntityType, id, name, actor(req)); err != nil {
+					if err := recordDiscoveryMutation(tx, cr, dispatcher, store.ChangeEvent{
+						EntityType: m.EntityType, EntityID: id, Label: name,
+						Action: domain.ActionImport, Actor: actor(req),
+					}, data, &events); err != nil {
 						return err
 					}
 					created[m.ID] = id
@@ -443,10 +470,15 @@ func importDiscoverySource(source DiscoverySource, db *sql.DB) http.HandlerFunc 
 			}
 			return nil
 		})
+		if c := constraintError(err); c != nil {
+			http.Error(w, c.Error(), http.StatusBadRequest)
+			return
+		}
 		if err != nil {
 			serverError(w, req, err)
 			return
 		}
+		dispatcher.Dispatch(events...)
 		render(w, req, "discovery_import.html", result)
 	}
 }

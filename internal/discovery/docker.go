@@ -96,7 +96,14 @@ func (c *DockerClient) Containers(ctx context.Context) ([]Container, error) {
 		return nil, fmt.Errorf("container response must be a JSON array")
 	}
 	out := make([]Container, 0, len(raw))
+	seen := make(map[string]bool, len(raw))
 	for _, rc := range raw {
+		// An unusable identity makes the whole snapshot unreliable. A partial
+		// success would advance scheduled discovery's comparison baseline.
+		if strings.TrimSpace(rc.ID) == "" || seen[rc.ID] {
+			return nil, fmt.Errorf("container response contains a missing or duplicate ID")
+		}
+		seen[rc.ID] = true
 		project := rc.Labels["com.docker.compose.project"]
 		if project == "" {
 			project = rc.Labels["io.podman.compose.project"]

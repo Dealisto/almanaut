@@ -24,6 +24,7 @@ var notInSnapshot = map[string]string{
 	"totp_pending":        "credentials",
 	"auth_events":         "per-instance audit log",
 	"webhooks":            "outbound config with secrets",
+	"webhook_outbox":      "immutable pending deliveries; preserved across inventory imports",
 	"saved_views":         "per-user preferences",
 	"changelog":           "history; kept across an import (reconcileSideTables)",
 	"attachments":         "binary content; orphans removed on import (reconcileSideTables)",

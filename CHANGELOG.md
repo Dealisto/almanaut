@@ -11,6 +11,12 @@ details are listed there.
 ## [Unreleased]
 
 ### Added
+- Persist outbound webhook deliveries with inventory mutations in SQLite.
+  Resume retries after restarts with stable delivery IDs, signatures and bodies;
+  show pending deliveries on the Webhooks administration page.
+- Add a dependency-free Chromium regression runner covering navigation, browser
+  history, deep links, bulk selection, accessible row labels and search pages.
+  Run it with `node tests/browser/run.mjs`; see `docs/testing.md`.
 - Paginate inventory lists and global search in the database, including Unicode
   matching, custom-field filters, stable numeric-aware sorting, and visible
   previous/next controls. Saved views open on their first page; bulk selection
@@ -48,6 +54,14 @@ details are listed there.
   when available; discovery never automatically removes inventory records.
 
 ### Changed
+- Start notification channels independently and resume interrupted expiry passes
+  fairly so a slow receiver or early item cannot starve later alerts.
+- Index IPAM network prefixes for address attribution, preserving longest-prefix
+  matching, first-network tie breaking and IPv4-mapped IPv6 behavior without
+  scanning every network for each host address.
+- Bound persisted webhook requests to 10,000 deliveries and 64 MiB. Saturation
+  rolls back inventory changes with a retryable HTTP 503 instead of losing
+  events. Editing, disabling or deleting an endpoint cancels queued deliveries.
 - **API pagination:** inventory collection and search endpoints now default to
   50 records and accept `page` / `per_page` (maximum 100). JSON arrays retain
   their shape; clients needing every result must follow the `Link` header.
@@ -67,6 +81,42 @@ details are listed there.
   requires a pre-upgrade database backup.
 
 ### Fixed
+- Respect fractional cgroup CPU quotas in agent reports and preserve known IP
+  addresses when an interface address lookup returns only partial information.
+- Revalidate custom-field definitions inside inventory write transactions and
+  apply standalone multi-field updates atomically, preventing stale or orphaned
+  values after concurrent definition changes.
+- Return a storage error on the Saved views page instead of a misleading empty
+  list when the database cannot be read.
+- Preserve keyboard focus across mobile navigation changes and search shortcuts;
+  hide the mobile overlay and release scroll locking when printing.
+- Keep webhook settings edits independent of concurrent toggles or secret
+  changes, and preserve retry budget when recovering a worker interrupted by
+  a crash before HTTP delivery.
+- Send transactional webhook events for confirmed discovery imports and reviewed
+  field changes, including Uptime Kuma triggers for changed services. Reject
+  stale host selections before creating container relationships.
+- Reject webhook URLs without a hostname, with invalid ports or with fragments.
+- Use entity names in inventory selection labels and scroll to headings in
+  hidden detail panels after keyboard or browser-history navigation.
+- Refuse redirects during the Uptime Kuma connection handshake so credentials
+  are never sent to a redirected WebSocket endpoint.
+- Keep control characters escaped in HTTP request and error logs, preventing
+  request paths from injecting log lines or terminal escape sequences.
+- Count failed two-factor challenges before releasing the transaction lock so
+  concurrent requests cannot exceed the login failure budget.
+- Reject Docker/Podman and Proxmox snapshots with missing or duplicate resource
+  identities instead of advancing discovery history with an unreliable scan.
+- Preserve numeric sorting precision for large IDs and precise field values.
+- Group identical IPAM blocks before reporting conflicts, avoiding pairwise
+  comparisons across distinct networks while preserving result order.
+- Report custom-field storage failures as server errors rather than misleading
+  duplicate-name validation messages.
+- Preserve modified clicks on detail tabs, avoid redundant tab history entries,
+  and restore bulk selection controls consistently after browser navigation.
+- Label journal entry kinds in text and distinguish rack overlap and capacity
+  warnings for assistive technology. Offer a first-page link when a search
+  page is beyond the available results.
 - Reject ambiguous initial agent adoption with HTTP 422, preserving every
   candidate record until duplicate names or IP assignments are corrected.
 - Enforce the agent's collection deadline even when a system read blocks;

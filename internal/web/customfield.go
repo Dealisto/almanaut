@@ -208,11 +208,11 @@ func createCustomField(repo *store.CustomFieldRepo) http.HandlerFunc {
 			return
 		}
 		if _, err := repo.CreateDef(def); err != nil {
-			// UNIQUE(entity_type, name) violation is the common case, but log
-			// the real error too so a genuine backend failure isn't silently
-			// mislabeled with no server-side trace.
-			loggerFrom(req.Context()).Printf("create custom field def: %v", err)
-			renderCustomFieldsError(w, req, repo, fmt.Errorf("a field named %q already exists for %s", def.Name, def.EntityType))
+			if c := constraintError(err); c != nil {
+				renderCustomFieldsError(w, req, repo, c)
+			} else {
+				serverError(w, req, err)
+			}
 			return
 		}
 		http.Redirect(w, req, "/custom-fields", http.StatusSeeOther)

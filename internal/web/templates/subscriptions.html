@@ -17,7 +17,7 @@
   <thead><tr><th scope="col" class="bulk-col"><span class="sr-only">Selection</span>{{if canWrite}}<input type="checkbox" class="js-only" data-select-all aria-label="Select all rows on this page">{{end}}</th><th scope="col">Name</th><th scope="col">Kind</th><th scope="col">Provider</th><th scope="col">Amount</th><th scope="col">Cycle</th><th scope="col">Renewal</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
   <tbody>
   {{range .Items}}
-    <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select row {{.ID}}">{{end}}</td>
+    <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select {{.Name}}">{{end}}</td>
       <td><a href="/subscriptions/{{.ID}}">{{.Name}}</a></td>
       <td>{{.Kind}}</td>
       <td>{{.Provider}}</td>

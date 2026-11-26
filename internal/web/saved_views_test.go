@@ -31,6 +31,24 @@ func TestSavedViewCreateShowsInSidebarAndManage(t *testing.T) {
 	}
 }
 
+func TestSavedViewsFailureDoesNotMasqueradeAsAnEmptyList(t *testing.T) {
+	handler, db := newTestServerDB(t)
+	if _, err := db.Exec(`DROP TABLE saved_views`); err != nil {
+		t.Fatal(err)
+	}
+	page := httptest.NewRecorder()
+	handler.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/views", nil))
+	if page.Code != http.StatusInternalServerError || page.Body.String() != "internal server error\n" {
+		t.Fatalf("saved views failure must return generic 500, got %d: %s", page.Code, page.Body)
+	}
+	// Sidebar failure must still leave unrelated inventory pages available.
+	inventory := httptest.NewRecorder()
+	handler.ServeHTTP(inventory, httptest.NewRequest(http.MethodGet, "/hosts", nil))
+	if inventory.Code != http.StatusOK {
+		t.Fatalf("sidebar lookup failure blocked inventory: %d", inventory.Code)
+	}
+}
+
 func TestSavedViewRenameAndDelete(t *testing.T) {
 	srv, db := newTestServerDB(t)
 	postForm(t, srv, "/views", url.Values{"entity_type": {"host"}, "name": {"orig"}, "query": {"sort=Name"}})
