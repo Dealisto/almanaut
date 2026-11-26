@@ -1,11 +1,22 @@
 package store
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 )
+
+func TestWebhookNarrowUpdatesReportMissingRows(t *testing.T) {
+	repo := newWebhookTestDB(t)
+	if err := repo.UpdateSettings(999, "https://receiver.example/hook", nil, nil); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("update missing settings = %v, want ErrNotFound", err)
+	}
+	if err := repo.ToggleEnabled(999); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("toggle missing endpoint = %v, want ErrNotFound", err)
+	}
+}
 
 func newWebhookTestDB(t *testing.T) *WebhookRepo {
 	t.Helper()

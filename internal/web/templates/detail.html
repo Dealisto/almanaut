@@ -229,7 +229,7 @@
     {{range .Units}}<div class="rack-elev-u" style="grid-row: {{.Row}};">{{.U}}</div>{{end}}
     {{range .Occupants}}
     <div class="rack-elev-occ{{if .OutOfBounds}} oob{{end}}{{if .Overlap}} overlap{{end}}" style="grid-row: {{.GridRowStart}} / span {{.Span}};">
-      <a href="{{.Path}}">{{.Label}}</a>&nbsp;<span class="rack-elev-meta">U{{.Position}}·{{.UHeight}}U{{if .OutOfBounds}} ⚠{{end}}{{if .Overlap}} ⚠{{end}}</span>
+      <a href="{{.Path}}">{{.Label}}</a>&nbsp;<span class="rack-elev-meta">U{{.Position}}·{{.UHeight}}U{{if .OutOfBounds}} <span title="Outside rack capacity"><span aria-hidden="true">⚠</span><span class="sr-only">Outside rack capacity</span></span>{{end}}{{if .Overlap}} <span title="Overlaps another occupant"><span aria-hidden="true">⚠</span><span class="sr-only">Overlaps another occupant</span></span>{{end}}</span>
     </div>
     {{end}}
   </div>
@@ -293,7 +293,7 @@
   <ul class="journal">
     {{range .JournalEntries}}
     <li class="journal-entry">
-      <span class="jk jk-{{.Kind}}" title="{{.Kind}}"></span>
+      <span class="jk jk-{{.Kind}}" aria-hidden="true"></span><span class="journal-kind">{{.Kind}}</span>
       <div class="journal-body">{{.BodyHTML}}</div>
       <time datetime="{{.CreatedAt}}" title="{{.CreatedAt}}">{{displayTime .CreatedAt}}</time>
       {{if canWrite}}

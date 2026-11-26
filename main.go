@@ -71,9 +71,9 @@ func main() {
 	}
 
 	var dispatcher webhook.Dispatcher = webhook.Noop{}
-	var webhookQueue *webhook.Queue // nil unless enabled; drained at shutdown
+	var webhookQueue *webhook.DurableQueue // nil unless enabled; unfinished deliveries survive shutdown
 	if cfg.WebhooksEnabled {
-		webhookQueue = webhook.NewQueue(store.NewWebhookRepo(db), webhook.Options{
+		webhookQueue = webhook.NewDurableQueue(db, webhook.Options{
 			Timeout:     cfg.WebhookTimeout,
 			MaxAttempts: cfg.WebhookMaxAttempts,
 		})
@@ -310,11 +310,11 @@ func main() {
 		if !waitUntil(shutdownCtx, background.Wait) {
 			log.Println("background jobs still running at the shutdown deadline")
 		}
-		// Deliver what is already queued; retries waiting on a backoff past
-		// the deadline are dropped.
+		// Stop delivery workers before closing the database. Unfinished
+		// requests and delayed retries stay in the outbox for the next startup.
 		if webhookQueue != nil {
 			if err := webhookQueue.Shutdown(shutdownCtx); err != nil {
-				log.Println("webhook deliveries still pending at the shutdown deadline; dropping them")
+				log.Println("webhook shutdown deadline reached; unfinished deliveries remain persisted")
 			}
 		}
 		cancel()

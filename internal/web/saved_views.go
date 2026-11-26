@@ -46,18 +46,20 @@ func currentUserID(ctx context.Context) int64 {
 func savedViewsMiddleware(repo *store.SavedViewRepo, cat entityCatalog) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			groups := loadSavedViewGroups(req, repo, cat)
+			groups, err := loadSavedViewGroups(req, repo, cat)
+			if err != nil {
+				loggerFrom(req.Context()).Printf("saved views: load failed: %v", err)
+			}
 			ctx := context.WithValue(req.Context(), savedViewsCtxKey{}, groups)
 			next.ServeHTTP(w, req.WithContext(ctx))
 		})
 	}
 }
 
-func loadSavedViewGroups(req *http.Request, repo *store.SavedViewRepo, cat entityCatalog) []savedViewGroup {
+func loadSavedViewGroups(req *http.Request, repo *store.SavedViewRepo, cat entityCatalog) ([]savedViewGroup, error) {
 	views, err := repo.ListForUser(currentUserID(req.Context()))
 	if err != nil {
-		loggerFrom(req.Context()).Printf("saved views: load failed: %v", err)
-		return nil
+		return nil, err
 	}
 	var groups []savedViewGroup
 	byType := map[string]int{} // type -> index in groups
@@ -81,7 +83,7 @@ func loadSavedViewGroups(req *http.Request, repo *store.SavedViewRepo, cat entit
 			Views: []savedViewLink{link},
 		})
 	}
-	return groups
+	return groups, nil
 }
 
 // savedViewsFrom returns the grouped saved views placed in the context by the
@@ -176,9 +178,14 @@ type savedViewsPageData struct {
 // rename/delete controls.
 func savedViewsPage(repo *store.SavedViewRepo, cat entityCatalog) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
+		groups, err := loadSavedViewGroups(req, repo, cat)
+		if err != nil {
+			serverError(w, req, err)
+			return
+		}
 		render(w, req, "saved_views.html", savedViewsPageData{
 			Title:  "Saved views",
-			Groups: loadSavedViewGroups(req, repo, cat),
+			Groups: groups,
 		})
 	}
 }

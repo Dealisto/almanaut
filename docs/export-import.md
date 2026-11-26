@@ -21,8 +21,9 @@ and target host/service ID. Records keep their IDs, so references and discovery
 identities survive the round trip.
 
 It does **not** contain anything specific to one instance: users, sessions,
-API tokens and 2FA, webhooks, saved views, the authentication audit log, the
-history (changelog), [attachments](inventory-model.md#attachments), agent
+API tokens and 2FA, webhook endpoints and pending deliveries, saved views, the
+authentication audit log, the history (changelog),
+[attachments](inventory-model.md#attachments), agent
 bindings and reports, Uptime Kuma monitor mappings, and discovery runs.
 Discovery source configuration and credentials are not included. For a complete
 backup, preserve the SQLite database and separately managed configuration and

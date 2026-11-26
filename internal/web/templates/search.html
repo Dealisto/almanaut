@@ -17,6 +17,8 @@
       <h2>{{.Heading}}</h2>
       <ul class="related">{{range .Hits}}<li><a href="{{.URL}}">{{.Label}}</a></li>{{end}}</ul>
     {{end}}
+  {{else if gt .Total 0}}
+    <p>No results on this page. <a href="{{.Pagination.FirstURL}}">Return to the first page</a> to see the matching records.</p>
   {{else}}
     <p><em>No results for "{{.Query}}".</em></p>
   {{end}}

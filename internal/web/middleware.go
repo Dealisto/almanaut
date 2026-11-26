@@ -2,12 +2,14 @@ package web
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"runtime/debug"
 	"strings"
 	"time"
 
+	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
@@ -31,7 +33,9 @@ func requestLogger(logger *log.Logger) func(http.Handler) http.Handler {
 			if status == 0 {
 				status = http.StatusOK // An empty handler still sends 200.
 			}
-			logger.Printf("%s %s %d %s", r.Method, r.URL.Path, status, time.Since(start))
+			// Keep encoded controls in the path escaped so clients cannot inject
+			// log lines or terminal commands. Query strings may carry secrets.
+			logger.Printf("%s %s %d %s", r.Method, r.URL.EscapedPath(), status, time.Since(start))
 		})
 	}
 }
@@ -159,6 +163,17 @@ func loggerFrom(ctx context.Context) *log.Logger {
 // (e.g. database errors) so internal detail is never written to the response.
 func serverError(w http.ResponseWriter, r *http.Request, err error) {
 	id := middleware.GetReqID(r.Context())
-	loggerFrom(r.Context()).Printf("server error: %s %s reqid=%q: %v", r.Method, r.URL.Path, id, err)
-	http.Error(w, "internal server error", http.StatusInternalServerError)
+	loggerFrom(r.Context()).Printf("server error: %s %s reqid=%q: %v", r.Method, r.URL.EscapedPath(), id, err)
+	status, message := serverFailure(err)
+	if status == http.StatusServiceUnavailable {
+		w.Header().Set("Retry-After", "30")
+	}
+	http.Error(w, message, status)
+}
+
+func serverFailure(err error) (int, string) {
+	if errors.Is(err, store.ErrWebhookBacklog) {
+		return http.StatusServiceUnavailable, "webhook delivery backlog is full; no changes were saved; retry later or ask an administrator to check webhook endpoints"
+	}
+	return http.StatusInternalServerError, "internal server error"
 }

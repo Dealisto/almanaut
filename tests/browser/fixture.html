@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Progressive enhancement regression fixture</title>
+<link rel="stylesheet" href="/static/app.css">
+<style>.spacer { height: 2000px; }</style>
+<nav class="detail-tabs" aria-label="Record sections">
+  <a href="#overview">Overview</a>
+  <a href="#connections">Connections</a>
+  <a href="#activity">Activity</a>
+</nav>
+<div id="overview" data-detail-panel><a href="#deep-heading">Read notes</a></div>
+<div id="connections" data-detail-panel>Connections</div>
+<div id="activity" data-detail-panel>
+  <div class="spacer"></div><h2 id="deep-heading">Deep heading</h2>
+</div>
+<form id="bulkform"><button type="submit">Delete selected</button></form>
+<span data-selection-count role="status"></span>
+<table>
+  <tr><td><input type="checkbox" name="ids" value="1" form="bulkform" aria-label="Select first host"></td></tr>
+  <tr><td><input type="checkbox" name="ids" value="2" form="bulkform" aria-label="Select second host"></td></tr>
+</table>
+<input type="checkbox" data-select-all aria-label="Select all rows">
+<script src="/static/app.js"></script>
+</html>

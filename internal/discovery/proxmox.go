@@ -93,12 +93,20 @@ func (c *ProxmoxClient) Resources(ctx context.Context) ([]ProxmoxResource, error
 		return nil, fmt.Errorf("proxmox response must contain a data array")
 	}
 	out := make([]ProxmoxResource, 0, len(body.Data))
+	seen := make(map[string]bool, len(body.Data))
 	for _, r := range body.Data {
+		if strings.TrimSpace(r.Type) == "" {
+			return nil, fmt.Errorf("proxmox response contains a missing resource type")
+		}
 		switch r.Type {
 		case "node", "qemu", "lxc":
 		default:
 			continue
 		}
+		if strings.TrimSpace(r.ID) == "" || seen[r.ID] {
+			return nil, fmt.Errorf("proxmox response contains a missing or duplicate resource ID")
+		}
+		seen[r.ID] = true
 		out = append(out, ProxmoxResource(r))
 	}
 	return out, nil

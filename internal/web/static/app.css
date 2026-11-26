@@ -323,6 +323,7 @@ ul.related li a{font-weight:500}
 .journal-entry{display:flex;align-items:baseline;gap:10px;padding:13px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .journal-entry:last-child{border-bottom:0}
 .journal-body{flex:1;min-width:0;overflow-wrap:anywhere}
+.journal-kind{font-size:11px;color:var(--muted)}
 .journal-body p{margin:0}
 .journal-entry time{font-size:11px;color:var(--muted)}
 .journal-add{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
@@ -452,9 +453,10 @@ form.stack .check input{flex:none;width:18px;height:18px;margin:2px 0 0}.check-g
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 @media print{
-  .sidebar,.topbar,.app-footer,.nav-toggle,.skip-link,.ph-actions,.detail-tabs,.tag-form,.journal-add{display:none!important}
+  .sidebar,.topbar,.app-footer,.nav-control,.nav-overlay,.nav-toggle,.skip-link,.ph-actions,.detail-tabs,.tag-form,.journal-add{display:none!important}
   .app-shell,.detail-top{display:block}main{padding:0;max-width:none}.panel{box-shadow:none;break-inside:avoid}
   body{background:#fff;color:#111}.table-wrap{overflow:visible}a{color:inherit}
+  body.nav-open{overflow:visible}
 }
 
 @media(max-width:640px){

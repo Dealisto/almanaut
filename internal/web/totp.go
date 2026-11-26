@@ -375,6 +375,10 @@ func verify2FA(users *store.UserRepo, sessions *store.SessionRepo, totp *store.T
 				return err
 			}
 			if !valid {
+				// Publish failed attempts before releasing the write lock so
+				// concurrent challenges cannot verify past the failure budget.
+				throttle.recordFailure(u.Username, now)
+				throttle.cleanup(now)
 				return errTOTPLoginInvalid
 			}
 			if err := tr.DeletePending(hashToken(c.Value)); err != nil {
@@ -396,8 +400,6 @@ func verify2FA(users *store.UserRepo, sessions *store.SessionRepo, totp *store.T
 			render(w, r, "2fa_challenge.html", challenge2FAData{Title: "Two-factor authentication", Next: next, Error: "too many attempts — try again later"})
 			return
 		case errors.Is(err, errTOTPLoginInvalid):
-			throttle.recordFailure(u.Username, now)
-			throttle.cleanup(now)
 			recordAuth(audit, r, domain.Auth2FAFailure, u.Username, u.ID, "")
 			w.WriteHeader(http.StatusUnauthorized)
 			render(w, r, "2fa_challenge.html", challenge2FAData{Title: "Two-factor authentication", Next: next, Error: "invalid code"})

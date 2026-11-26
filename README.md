@@ -133,6 +133,7 @@ The full documentation lives in [`docs/`](docs/README.md):
 | [Export & import](docs/export-import.md) | Whole-inventory YAML round-trip, additive CSV import |
 | [JSON API](docs/api.md) | Tokens and scopes, endpoints, the OpenAPI 3 spec |
 | [Monitoring](docs/monitoring.md) | Prometheus metrics, `/healthz`, `/version` |
+| [Testing](docs/testing.md) | Go checks and repeatable Chromium browser regressions |
 
 ## License
 

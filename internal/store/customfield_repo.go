@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -31,6 +32,13 @@ func (r *CustomFieldRepo) CreateDef(d domain.CustomFieldDef) (int64, error) {
 		d.EntityType, d.Name, d.Label, string(d.Kind), d.CreatedAt,
 	)
 	if err != nil {
+		// This INSERT supplies no primary key; the only UNIQUE constraint is
+		// (entity_type, name). Do not misclassify other write failures as duplicates.
+		const sqliteConstraintUnique = 2067
+		var coded interface{ Code() int }
+		if errors.As(err, &coded) && coded.Code() == sqliteConstraintUnique {
+			return 0, &ConstraintError{Reason: fmt.Sprintf("a field named %q already exists for %s", d.Name, d.EntityType)}
+		}
 		return 0, fmt.Errorf("insert custom field def: %w", err)
 	}
 	id, err := res.LastInsertId()
@@ -135,9 +143,43 @@ func (r *CustomFieldRepo) ListForEntity(entityType string, entityID int64) ([]do
 }
 
 // SetForEntity upserts each non-empty value and deletes each empty one for
-// (entityType, entityID). A nil map is a no-op.
+// (entityType, entityID). Definitions are rechecked under the same write lock:
+// form/API parsing can race with definition deletion or inventory replacement.
+// A nil map is a no-op.
 func (r *CustomFieldRepo) SetForEntity(entityType string, entityID int64, values map[int64]string) error {
-	for defID, val := range values {
+	if len(values) == 0 {
+		return nil
+	}
+	if db, ok := r.db.(*sql.DB); ok {
+		return WithTx(db, func(tx *sql.Tx) error {
+			return r.WithTx(tx).SetForEntity(entityType, entityID, values)
+		})
+	}
+	defs, err := r.ListDefs(entityType)
+	if err != nil {
+		return err
+	}
+	byID := make(map[int64]domain.CustomFieldDef, len(defs))
+	for _, def := range defs {
+		byID[def.ID] = def
+	}
+	validated := make(map[int64]string, len(values))
+	for id, raw := range values {
+		def, ok := byID[id]
+		if !ok {
+			return &ConstraintError{Reason: fmt.Sprintf("custom field %d no longer exists for %s; reload the form and retry", id, entityType)}
+		}
+		if raw == "" {
+			validated[id] = "" // Explicit deletion also applies to boolean fields.
+			continue
+		}
+		value, err := domain.ValidateCustomFieldValue(def.Kind, raw)
+		if err != nil {
+			return &ConstraintError{Reason: fmt.Sprintf("%s: %v", def.Label, err)}
+		}
+		validated[id] = value
+	}
+	for defID, val := range validated {
 		if val == "" {
 			if _, err := r.db.Exec(
 				`DELETE FROM custom_field_values WHERE entity_type = ? AND entity_id = ? AND def_id = ?`,

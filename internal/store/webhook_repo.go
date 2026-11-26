@@ -69,6 +69,26 @@ func (r *WebhookRepo) Update(w domain.Webhook) error {
 	return rowsAffectedOrNotFound(res)
 }
 
+// UpdateSettings changes only fields owned by the edit form. Concurrent
+// enable/disable actions and secret rotations must survive a settings edit.
+func (r *WebhookRepo) UpdateSettings(id int64, url string, types, events []string) error {
+	res, err := r.db.Exec(`UPDATE webhooks SET url=?, entity_types=?, events=? WHERE id=?`, url, whJoin(types), whJoin(events), id)
+	if err != nil {
+		return fmt.Errorf("update webhook settings: %w", err)
+	}
+	return rowsAffectedOrNotFound(res)
+}
+
+// ToggleEnabled flips the current database value atomically, without reading
+// and rewriting endpoint credentials or filters from a stale snapshot.
+func (r *WebhookRepo) ToggleEnabled(id int64) error {
+	res, err := r.db.Exec(`UPDATE webhooks SET enabled=1-enabled WHERE id=?`, id)
+	if err != nil {
+		return fmt.Errorf("toggle webhook: %w", err)
+	}
+	return rowsAffectedOrNotFound(res)
+}
+
 func (r *WebhookRepo) Delete(id int64) error {
 	if _, err := r.db.Exec(`DELETE FROM webhooks WHERE id = ?`, id); err != nil {
 		return fmt.Errorf("delete webhook: %w", err)

@@ -293,6 +293,9 @@ func (rs resource[T]) createEntityTx(tx *sql.Tx, d handlerDeps, item T, cf map[i
 	if err != nil {
 		return 0, err
 	}
+	if err := webhook.Stage(tx, d.webhooks, ev); err != nil {
+		return 0, err
+	}
 	*events = append(*events, ev)
 	if err := effects.apply(d, actor, events); err != nil {
 		return 0, err
@@ -379,6 +382,9 @@ func (rs resource[T]) recordUpdateTx(tx *sql.Tx, d handlerDeps, old, item T, act
 	}
 	ev, err := webhook.NewEvent(rs.sing, rs.id(item), webhook.ActionUpdated, actor, now, item)
 	if err != nil {
+		return err
+	}
+	if err := webhook.Stage(tx, d.webhooks, ev); err != nil {
 		return err
 	}
 	*events = append(*events, ev)
@@ -470,6 +476,9 @@ func (rs resource[T]) deleteEntityTx(tx *sql.Tx, d handlerDeps, id int64, actor 
 	}
 	ev, err := webhook.NewEvent(rs.sing, id, webhook.ActionDeleted, actor, now, nil)
 	if err != nil {
+		return err
+	}
+	if err := webhook.Stage(tx, d.webhooks, ev); err != nil {
 		return err
 	}
 	*events = append(*events, ev)

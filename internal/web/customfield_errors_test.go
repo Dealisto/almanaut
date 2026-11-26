@@ -3,12 +3,47 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
 )
+
+func TestCreateCustomFieldDistinguishesDuplicateAndStorageFailure(t *testing.T) {
+	for _, failWrite := range []bool{false, true} {
+		name := "duplicate"
+		if failWrite {
+			name = "storage failure"
+		}
+		t.Run(name, func(t *testing.T) {
+			handler, db := newTestServerDB(t)
+			form := url.Values{"entity_type": {"host"}, "name": {"asset_tag"}, "label": {"Asset tag"}, "kind": {"text"}}
+			if rec := postForm(t, handler, "/custom-fields", form); rec.Code != http.StatusSeeOther {
+				t.Fatalf("create original: status=%d body=%s", rec.Code, rec.Body)
+			}
+			if failWrite {
+				if _, err := db.Exec(`CREATE TRIGGER fail_custom_field_insert BEFORE INSERT ON custom_field_definitions BEGIN SELECT RAISE(ABORT, 'internal write failure'); END`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			form.Set("label", "Changed label")
+			rec := postForm(t, handler, "/custom-fields", form)
+			if failWrite {
+				if rec.Code != http.StatusInternalServerError || rec.Body.String() != "internal server error\n" {
+					t.Errorf("storage failure must return generic 500: status=%d body=%s", rec.Code, rec.Body)
+				}
+			} else if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "already exists for host") {
+				t.Errorf("duplicate must retain actionable form error: status=%d body=%s", rec.Code, rec.Body)
+			}
+			defs, err := store.NewCustomFieldRepo(db).ListDefs("host")
+			if err != nil || len(defs) != 1 || defs[0].Label != "Asset tag" {
+				t.Fatalf("failed creation changed existing definition: %+v, %v", defs, err)
+			}
+		})
+	}
+}
 
 func TestCustomFieldAPIDatabaseFailuresAreServerErrors(t *testing.T) {
 	for _, method := range []string{http.MethodPost, http.MethodPut} {

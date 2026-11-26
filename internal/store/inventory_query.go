@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -62,6 +63,29 @@ func CompareInventoryValues(a, b string) int {
 		}
 		if fa > fb {
 			return 1
+		}
+		// A float64 tie can hide distinct integer IDs or precise custom field
+		// values. Resolve it with enough precision for both input mantissas.
+		// Float's separate exponent avoids expanding tiny values such as 1e-1000
+		// into enormous denominators, as a rational representation would.
+		if a != b && !math.IsInf(fa, 0) {
+			precision := uint(64 + 4*(len(a)+len(b)))
+			aa, _, aerr := big.ParseFloat(strings.TrimSpace(a), 0, precision, big.ToNearestEven)
+			bb, _, berr := big.ParseFloat(strings.TrimSpace(b), 0, precision, big.ToNearestEven)
+			if aerr == nil && berr == nil {
+				return aa.Cmp(bb)
+			}
+			// Extremely small exponents can fit float64 only as zero while
+			// exceeding Float's exponent range. Keep those values in a separate,
+			// deterministic subgroup of the float64 tie: treating every failed
+			// parse as equal to a successful one would break transitivity.
+			if aerr == nil {
+				return -1
+			}
+			if berr == nil {
+				return 1
+			}
+			return strings.Compare(strings.TrimSpace(a), strings.TrimSpace(b))
 		}
 		return 0
 	}

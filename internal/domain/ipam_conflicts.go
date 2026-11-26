@@ -95,21 +95,25 @@ func outsideNetworks(networks []Network, hosts []Host) []Allocation {
 // the remaining overlap is two networks sharing the identical block.
 func overlappingNetworks(networks []Network) []NetworkOverlap {
 	type parsed struct {
-		n   Network
-		ipn *net.IPNet
+		n          Network
+		block      networkBlock
+		groupIndex int
 	}
 	var nets []parsed
+	groups := make(map[networkBlock][]Network, len(networks))
 	for _, n := range networks {
 		if _, ipn, err := net.ParseCIDR(n.CIDR); err == nil {
-			nets = append(nets, parsed{n, ipn})
+			block := blockOf(ipn)
+			nets = append(nets, parsed{n, block, len(groups[block])})
+			groups[block] = append(groups[block], n)
 		}
 	}
 	var out []NetworkOverlap
-	for i := 0; i < len(nets); i++ {
-		for j := i + 1; j < len(nets); j++ {
-			if sameBlock(nets[i].ipn, nets[j].ipn) {
-				out = append(out, NetworkOverlap{A: nets[i].n, B: nets[j].n})
-			}
+	// Only compare members of an identical block. This is linear for distinct
+	// subnets and preserves input pair ordering when duplicate blocks occur.
+	for _, n := range nets {
+		for _, peer := range groups[n.block][n.groupIndex+1:] {
+			out = append(out, NetworkOverlap{A: n.n, B: peer})
 		}
 	}
 	return out
@@ -139,11 +143,19 @@ func NetworkOverlaps(target Network, networks []Network) []Network {
 // and same masked base). Blocks of different sizes are parent/child, not
 // a conflict.
 func sameBlock(a, b *net.IPNet) bool {
-	aOnes, aBits := a.Mask.Size()
-	bOnes, bBits := b.Mask.Size()
-	// IP.Equal treats IPv4 and its IPv6-mapped spelling as the same address.
-	// Compare their block sizes on that same basis (/24 equals mapped /120).
-	return aBits-aOnes == bBits-bOnes && a.IP.Equal(b.IP)
+	return blockOf(a) == blockOf(b)
+}
+
+type networkBlock struct {
+	base     string
+	hostBits int
+}
+
+func blockOf(ipn *net.IPNet) networkBlock {
+	ones, bits := ipn.Mask.Size()
+	// IP.String canonicalizes IPv4 and its IPv6-mapped spelling alike.
+	// Compare block sizes on that same basis (/24 equals mapped /120).
+	return networkBlock{base: ipn.IP.String(), hostBits: bits - ones}
 }
 
 // ipLess orders two IP strings by parsed value, falling back to lexical order

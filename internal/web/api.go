@@ -54,8 +54,12 @@ func writeJSONError(w http.ResponseWriter, status int, msg string) {
 // apiServerError logs like serverError but responds with a JSON body.
 func apiServerError(w http.ResponseWriter, r *http.Request, err error) {
 	id := middleware.GetReqID(r.Context())
-	loggerFrom(r.Context()).Printf("api error: %s %s reqid=%q: %v", r.Method, r.URL.Path, id, err)
-	writeJSONError(w, http.StatusInternalServerError, "internal server error")
+	loggerFrom(r.Context()).Printf("api error: %s %s reqid=%q: %v", r.Method, r.URL.EscapedPath(), id, err)
+	status, message := serverFailure(err)
+	if status == http.StatusServiceUnavailable {
+		w.Header().Set("Retry-After", "30")
+	}
+	writeJSONError(w, status, message)
 }
 
 // apiSearch returns a flat JSON array of entities whose searchable fields match

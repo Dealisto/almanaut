@@ -17,7 +17,7 @@
   <thead><tr><th scope="col" class="bulk-col"><span class="sr-only">Selection</span>{{if canWrite}}<input type="checkbox" class="js-only" data-select-all aria-label="Select all rows on this page">{{end}}</th><th scope="col">Name</th><th scope="col">Kind</th><th scope="col">URL</th><th scope="col">Ports</th><th scope="col">Category</th><th scope="col">Liveness</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
   <tbody>
   {{range .Items}}
-    <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select row {{.ID}}">{{end}}</td>
+    <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select {{.Name}}">{{end}}</td>
       <td><div class="entity-cell"><span class="svc-symbol">{{initials .Name}}</span><a href="/services/{{.ID}}">{{.Name}}</a></div></td>
       <td>{{.Kind}}</td>
       <td>{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener noreferrer">Open service <span class="sr-only">{{.Name}} (opens in a new tab)</span>{{icon "arrow"}}</a>{{else}}<span class="muted">No URL</span>{{end}}</td>

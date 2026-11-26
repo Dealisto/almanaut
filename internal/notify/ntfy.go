@@ -18,7 +18,8 @@ type Notification struct {
 	Tags  string // comma-separated ntfy tags, e.g. "warning"
 }
 
-// Sender delivers notifications. ntfyClient is the production implementation.
+// Sender delivers notifications and must honor context cancellation.
+// Implementations can be shared by concurrent background jobs.
 type Sender interface {
 	Send(ctx context.Context, n Notification) error
 }

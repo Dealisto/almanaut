@@ -14,8 +14,11 @@
   const content = document.getElementById("app-content");
   const mobile = matchMedia("(max-width: 860px)");
   const search = document.getElementById("global-search");
+  let navigationFocusFrame;
   function updateNavigation(moveFocus) {
     if (!toggle || !sidebar || !content) return;
+    // A newer action (such as the search shortcut) owns focus now.
+    cancelAnimationFrame(navigationFocusFrame);
     const open = mobile.matches && toggle.checked;
     sidebar.inert = mobile.matches && !open;
     content.inert = open;
@@ -24,8 +27,8 @@
     if (moveFocus) {
       // Let the checkbox's native click and drawer visibility update finish
       // before placing keyboard focus inside the newly opened navigation.
-      requestAnimationFrame(() => {
-        if (mobile.matches && toggle.checked) sidebar.querySelector("a")?.focus();
+      navigationFocusFrame = requestAnimationFrame(() => {
+        if (!mobile.matches || toggle.checked) sidebar.querySelector("a")?.focus();
         else toggle.focus();
       });
     }
@@ -35,7 +38,26 @@
     toggle.checked = false;
     updateNavigation(true);
   });
-  mobile.addEventListener("change", () => { if (toggle) toggle.checked = false; updateNavigation(false); });
+  // A browser may blur CSS-hidden controls before its media-query callback.
+  // Recover at that point while the element losing focus is still known.
+  sidebar?.addEventListener("focusout", (event) => {
+    if (event.relatedTarget) return;
+    if (mobile.matches && !toggle.checked && getComputedStyle(event.target).visibility === "hidden") {
+      toggle.focus({preventScroll: true});
+    } else if (!mobile.matches && event.target.matches(".nav-close")) {
+      sidebar.querySelector("a")?.focus({preventScroll: true});
+    }
+  });
+  toggle?.addEventListener("focusout", (event) => {
+    if (!event.relatedTarget && !mobile.matches) sidebar?.querySelector("a")?.focus({preventScroll: true});
+  });
+  mobile.addEventListener("change", () => {
+    // Responsive navigation must not leave focus in a newly hidden control.
+    const moveFocus = mobile.matches ? sidebar?.contains(document.activeElement)
+      : document.activeElement === toggle || document.activeElement?.matches(".nav-close");
+    if (toggle) toggle.checked = false;
+    updateNavigation(moveFocus);
+  });
   updateNavigation(false);
   const themeForm = document.querySelector(".theme-switch");
   themeForm?.addEventListener("submit", () => {
@@ -88,6 +110,7 @@
       let target;
       try { target = document.getElementById(decodeURIComponent(location.hash.slice(1))); } catch { /* Ignore malformed fragments. */ }
       const panel = target?.closest("[data-detail-panel]");
+      const revealTarget = panel?.hidden && target !== panel;
       const current = tabs.find((tab) => tab.hash === location.hash || tab.hash === "#" + panel?.id)
         || (location.hash && tabs.find((tab) => tab.getAttribute("aria-selected") === "true")) || tabs[0];
       const previousFocus = document.activeElement;
@@ -103,10 +126,21 @@
       if (previousFocus.closest("[data-detail-panel]")?.hidden) {
         document.getElementById(current.hash.slice(1)).focus({preventScroll: true});
       }
+      if (revealTarget) {
+        // Native fragment scrolling can run while the destination is hidden.
+        // Retry once its panel is visible, unless navigation moved on already.
+        const hash = location.hash;
+        requestAnimationFrame(() => {
+          if (location.hash === hash && !panel.hidden) target.scrollIntoView();
+        });
+      }
       updateTables();
     }
     for (const tab of tabs) tab.addEventListener("click", (event) => {
+      // Section links retain normal browser behavior for a new tab or window.
+      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
+      if (location.hash === tab.hash) return;
       history.pushState(null, "", tab.hash);
       activate();
     });
@@ -152,6 +186,9 @@
   selectAll?.addEventListener("change", () => { for (const checkbox of checks) checkbox.checked = selectAll.checked; updateSelection(); });
   for (const checkbox of checks) checkbox.addEventListener("change", updateSelection);
   updateSelection();
+  // Browsers can restore form values after initialization when returning to
+  // a list. Keep the count, selected rows and destructive buttons in sync.
+  window.addEventListener("pageshow", updateSelection);
 
   // Wide tables can be scrolled with the keyboard without trapping focus.
   function updateTables() {

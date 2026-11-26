@@ -15,6 +15,7 @@ import (
 	"github.com/Dealisto/almanaut/internal/discovery"
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
+	"github.com/Dealisto/almanaut/internal/webhook"
 )
 
 type discoveryChangeField struct {
@@ -189,7 +190,10 @@ func reviewDiscoveryChanges(source DiscoverySource, db *sql.DB, cat entityCatalo
 var errDiscoveryChangesStale = errors.New("discovery or inventory changed; review the source again before applying changes")
 var errDiscoveryChangesSelection = errors.New("select at least one available field to apply")
 
-func applyDiscoveryChanges(source DiscoverySource, db *sql.DB, cat entityCatalog) http.HandlerFunc {
+func applyDiscoveryChanges(source DiscoverySource, db *sql.DB, cat entityCatalog, dispatcher webhook.Dispatcher) http.HandlerFunc {
+	if dispatcher == nil {
+		dispatcher = webhook.Noop{}
+	}
 	return func(w http.ResponseWriter, req *http.Request) {
 		if !source.available() {
 			http.NotFound(w, req)
@@ -218,6 +222,7 @@ func applyDiscoveryChanges(source DiscoverySource, db *sql.DB, cat entityCatalog
 			return
 		}
 		applied := 0
+		var events []webhook.Event
 		err = store.WithTx(db, func(tx *sql.Tx) error {
 			hostRepo, serviceRepo := store.NewHostRepo(db).WithTx(tx), store.NewServiceRepo(db).WithTx(tx)
 			hosts, err := hostRepo.List()
@@ -255,6 +260,7 @@ func applyDiscoveryChanges(source DiscoverySource, db *sql.DB, cat entityCatalog
 				}
 			}
 			var changes []domain.FieldChange
+			var data any
 			if row.EntityType == "service" {
 				s, err := serviceRepo.Get(id)
 				if err != nil {
@@ -277,6 +283,11 @@ func applyDiscoveryChanges(source DiscoverySource, db *sql.DB, cat entityCatalog
 				if err := serviceRepo.Update(s); err != nil {
 					return err
 				}
+				s, err = serviceRepo.Get(id)
+				if err != nil {
+					return err
+				}
+				data = s
 				changes, err = domain.Diff(old, s)
 				if err != nil {
 					return err
@@ -309,15 +320,23 @@ func applyDiscoveryChanges(source DiscoverySource, db *sql.DB, cat entityCatalog
 				if err := hostRepo.Update(h); err != nil {
 					return err
 				}
+				h, err = hostRepo.Get(id)
+				if err != nil {
+					return err
+				}
+				data = h
 				changes, err = domain.Diff(old, h)
 				if err != nil {
 					return err
 				}
 			}
-			if err := store.NewChangelogRepo(db).WithTx(tx).Create(store.ChangeEvent{
+			if len(changes) == 0 {
+				return nil
+			}
+			if err := recordDiscoveryMutation(tx, store.NewChangelogRepo(db).WithTx(tx), dispatcher, store.ChangeEvent{
 				EntityType: row.EntityType, EntityID: id, Label: row.Name,
-				Action: domain.ActionUpdate, Actor: actor(req), Changes: changes, CreatedAt: nowRFC3339(),
-			}); err != nil {
+				Action: domain.ActionUpdate, Actor: actor(req), Changes: changes,
+			}, data, &events); err != nil {
 				return err
 			}
 			applied = len(selected)
@@ -331,6 +350,7 @@ func applyDiscoveryChanges(source DiscoverySource, db *sql.DB, cat entityCatalog
 			serverError(w, req, err)
 			return
 		}
+		dispatcher.Dispatch(events...)
 		render(w, req, "discovery_changes.html", discoveryChangesPage{Title: "Discovery changes applied", Source: source, Applied: applied})
 	}
 }

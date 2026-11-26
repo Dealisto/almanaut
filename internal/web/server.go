@@ -776,6 +776,7 @@ func New(cfg Config) http.Handler {
 	customFields := store.NewCustomFieldRepo(db)
 	attachments := store.NewAttachmentRepo(db)
 	webhooks := store.NewWebhookRepo(db)
+	webhookOutbox := store.NewWebhookOutboxRepo(db)
 	savedViews := store.NewSavedViewRepo(db)
 	authEvents := store.NewAuthEventRepo(db)
 	totp := store.NewTOTPRepo(db)
@@ -904,8 +905,8 @@ func New(cfg Config) http.Handler {
 				r.Post("/users/{id}/role", updateUserRole(users, db))
 				r.Post("/users/{id}/2fa/reset", resetUser2FA(totp, sessions, authEvents, users, db))
 
-				r.Get("/webhooks", listWebhooks(webhooks))
-				r.Post("/webhooks", createWebhook(webhooks))
+				r.Get("/webhooks", listWebhooks(webhooks, webhookOutbox))
+				r.Post("/webhooks", createWebhook(webhooks, webhookOutbox))
 				r.Get("/webhooks/{id}/edit", editWebhookForm(webhooks))
 				r.Post("/webhooks/{id}", updateWebhook(webhooks))
 				r.Post("/webhooks/{id}/toggle", toggleWebhook(webhooks))
@@ -973,24 +974,24 @@ func New(cfg Config) http.Handler {
 					continue
 				}
 				r.Get(source.Path(), scanDiscoverySource(source, db, cat))
-				r.Post(source.Path()+"/import", importDiscoverySource(source, db))
+				r.Post(source.Path()+"/import", importDiscoverySource(source, db, cfg.Webhooks))
 				r.Get(source.Path()+"/rebind", reviewDiscoveryRebind(source, db, cat))
 				r.Post(source.Path()+"/rebind", replaceDiscoveryBinding(source, db, cat))
 				r.Get(source.Path()+"/changes", reviewDiscoveryChanges(source, db, cat))
-				r.Post(source.Path()+"/changes", applyDiscoveryChanges(source, db, cat))
+				r.Post(source.Path()+"/changes", applyDiscoveryChanges(source, db, cat, cfg.Webhooks))
 				canonical := "/discovery/sources/" + source.Kind + "/" + source.ID
 				if canonical != source.Path() {
 					r.Get(canonical, scanDiscoverySource(source, db, cat))
-					r.Post(canonical+"/import", importDiscoverySource(source, db))
+					r.Post(canonical+"/import", importDiscoverySource(source, db, cfg.Webhooks))
 					r.Get(canonical+"/rebind", reviewDiscoveryRebind(source, db, cat))
 					r.Post(canonical+"/rebind", replaceDiscoveryBinding(source, db, cat))
 					r.Get(canonical+"/changes", reviewDiscoveryChanges(source, db, cat))
-					r.Post(canonical+"/changes", applyDiscoveryChanges(source, db, cat))
+					r.Post(canonical+"/changes", applyDiscoveryChanges(source, db, cat, cfg.Webhooks))
 				}
 			}
 			r.Get("/discovery/network", networkForm(netOpts, hostTypes))
 			r.Post("/discovery/network/scan", scanNetwork(netscan, hosts, netOpts, hostTypes))
-			r.Post("/discovery/network/import", importNetwork(hosts, netOpts, db))
+			r.Post("/discovery/network/import", importNetwork(hosts, netOpts, db, cfg.Webhooks))
 			r.Post("/certificates/{id}/probe", probeCertificate(cat, cfg.CertProber, certificates))
 			r.Post("/ports/generate", generatePorts(portRS, ports, deps))
 			r.Post("/hosts/{id}/agent/unbind", unbindAgent(deps, agents, hosts))

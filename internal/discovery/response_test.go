@@ -17,6 +17,12 @@ func TestInventoryClientsRejectMalformedCollections(t *testing.T) {
 		{"null collection", "null", `{"data":null}`},
 		{"trailing JSON", "[] []", `{"data":[]} {"data":[]}`},
 		{"trailing garbage", "[] garbage", `{"data":[]} garbage`},
+		{"null entry", "[null]", `{"data":[null]}`},
+		{"empty entry", "[{}]", `{"data":[{}]}`},
+		{"missing identity", `[{"Names":["/app"]}]`, `{"data":[{"type":"qemu","name":"app"}]}`},
+		{"blank identity", `[{"Id":"  "}]`, `{"data":[{"type":"qemu","id":"  "}]}`},
+		{"duplicate identity", `[{"Id":"one"},{"Id":"one"}]`, `{"data":[{"type":"qemu","id":"qemu/100"},{"type":"qemu","id":"qemu/100"}]}`},
+		{"malformed after valid entry", `[{"Id":"one"},{}]`, `{"data":[{"type":"qemu","id":"qemu/100"},{}]}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -28,11 +34,11 @@ func TestInventoryClientsRejectMalformedCollections(t *testing.T) {
 			}))
 			defer srv.Close()
 			docker := &DockerClient{httpClient: srv.Client(), baseURL: srv.URL}
-			if _, err := docker.Containers(context.Background()); err == nil {
-				t.Fatal("Docker accepted a malformed collection as a successful scan")
+			if got, err := docker.Containers(context.Background()); err == nil || got != nil {
+				t.Fatalf("Docker returned a successful or partial malformed scan: %+v, %v", got, err)
 			}
-			if _, err := NewProxmoxClient(srv.URL, "token", false).Resources(context.Background()); err == nil {
-				t.Fatal("Proxmox accepted a malformed collection as a successful scan")
+			if got, err := NewProxmoxClient(srv.URL, "token", false).Resources(context.Background()); err == nil || got != nil {
+				t.Fatalf("Proxmox returned a successful or partial malformed scan: %+v, %v", got, err)
 			}
 		})
 	}
