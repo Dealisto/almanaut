@@ -38,7 +38,7 @@
 </table>
 </div>
 {{else}}
-<div class="table-wrap"><div class="empty">{{if or .Controls.Active (gt .Controls.Pagination.Total 0)}}{{icon "search"}}<strong>No matching records.</strong><p>Try a different search or clear your filters.</p><a class="btn" href="{{.Controls.BasePath}}">Clear filters</a>{{else}}{{icon "box"}}<strong>No sites yet.</strong><p>Add your first record to start documenting your inventory.</p>{{if canWrite}}<a class="btn" href="{{.Controls.BasePath}}/new">Add a record</a>{{end}}{{end}}</div></div>
+<div class="table-wrap"><div class="empty">{{if gt .Controls.Pagination.Total 0}}{{template "listpageempty" .Controls.Pagination}}{{else if .Controls.Active}}{{icon "search"}}<strong>No matching records.</strong><p>Try a different search or clear your filters.</p><a class="btn" href="{{.Controls.BasePath}}">Clear filters</a>{{else}}{{icon "box"}}<strong>No sites yet.</strong><p>Add your first record to start documenting your inventory.</p>{{if canWrite}}<a class="btn" href="{{.Controls.BasePath}}/new">Add a record</a>{{end}}{{end}}</div></div>
 {{end}}
 {{template "pagination" .Controls.Pagination}}
 {{end}}

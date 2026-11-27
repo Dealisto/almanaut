@@ -37,13 +37,13 @@ func run() error {
 	name := `Browser "quoted" & <script>window.injected = true</script>`
 	if err := store.Import(db, store.Snapshot{
 		Version:       1,
-		Hosts:         []domain.Host{{ID: 1, Name: name, Type: "physical"}},
+		Hosts:         []domain.Host{{ID: 1, Name: name, Type: "physical", RackID: 1, RackPosition: 1, UHeight: 2}},
 		Services:      []domain.Service{{ID: 1, Name: name, Kind: "native"}},
 		Networks:      []domain.Network{{ID: 1, Name: name, CIDR: "192.0.2.0/24"}},
 		Domains:       []domain.Domain{{ID: 1, FQDN: "browser.example.test"}},
 		Certificates:  []domain.Certificate{{ID: 1, Subject: name, ExpiresOn: "2099-01-01"}},
 		Backups:       []domain.Backup{{ID: 1, Source: name}},
-		Hardware:      []domain.Hardware{{ID: 1, Name: name}},
+		Hardware:      []domain.Hardware{{ID: 1, Name: name, RackID: 1, RackPosition: 1, UHeight: 2}},
 		Subscriptions: []domain.Subscription{{ID: 1, Name: name}},
 		Accounts:      []domain.Account{{ID: 1, Name: name}},
 		Sites:         []domain.Site{{ID: 1, Name: name}},

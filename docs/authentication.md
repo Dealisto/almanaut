@@ -94,6 +94,12 @@ Turning 2FA off requires a current TOTP code or a recovery code, not just your
 session. That is deliberate: a hijacked session should not be able to quietly
 remove the second factor it is supposed to be protected by.
 
+Enabling, disabling, or resetting a second factor revokes pending login
+challenges and the user's other sessions. The session performing its own
+factor change remains signed in. The factor change and these revocations
+commit together; a storage failure rolls them all back. API tokens remain
+independent of the second-factor setting.
+
 After five failed removal attempts, further attempts are refused for 15 minutes.
 This per-user limit is separate from login throttling and resets on server
 restart. If saving the removal fails, the submitted one-time credential remains

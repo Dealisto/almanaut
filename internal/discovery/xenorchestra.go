@@ -162,8 +162,7 @@ func (c *XenOrchestraClient) collection(ctx context.Context, collection, fields 
 // Transport errors can contain malformed server responses as well as URLs.
 // Preserve error classification while keeping reflected credentials out of logs.
 func (c *XenOrchestraClient) safeError(err error) error {
-	err = redact.Error(err)
-	return &discoveryRequestError{err: err, message: strings.ReplaceAll(err.Error(), c.token, "[redacted]")}
+	return redact.ErrorWithURL(err, c.baseURL, c.token)
 }
 
 func xenOrchestraIPs(addresses []string) []string {

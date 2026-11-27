@@ -233,6 +233,13 @@
     </div>
     {{end}}
   </div>
+  {{if .HasPlacementIssues}}
+  <h3>Rack occupants</h3>
+  <p class="muted">Some placements overlap or extend outside the rack. All occupants are listed here so you can review and correct their positions.</p>
+  <ul class="related">
+    {{range .Occupants}}<li><a href="{{.Path}}">{{.Label}}</a> — U{{.Position}} · {{.UHeight}}U{{if .OutOfBounds}} — Outside rack capacity{{end}}{{if .Overlap}} — Overlaps another occupant{{end}}</li>{{end}}
+  </ul>
+  {{end}}
 </section>
 {{end}}
 

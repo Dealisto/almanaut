@@ -42,10 +42,10 @@ func Send(ctx context.Context, hc *http.Client, serverURL, token string, rep age
 	url := strings.TrimRight(serverURL, "/") + "/api/agent/report"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return SendResult{}, fmt.Errorf("build request: %w", redact.ErrorWithSecrets(err, token, serverURL))
+		return SendResult{}, fmt.Errorf("build request: %w", redact.ErrorWithURL(err, url, token, serverURL))
 	}
 	safeError := func(err error) error {
-		return redact.ErrorWithSecrets(err, url, serverURL, req.URL.Path, req.URL.EscapedPath(), token)
+		return redact.ErrorWithURL(err, url, token, serverURL)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -64,7 +64,7 @@ func Send(ctx context.Context, hc *http.Client, serverURL, token string, rep age
 	}
 	defer resp.Body.Close()
 	message := func() string {
-		return serverMessage(resp.Body, url, serverURL, req.URL.Path, req.URL.EscapedPath(), token)
+		return safeError(errors.New(serverMessage(resp.Body))).Error()
 	}
 
 	switch {
@@ -112,12 +112,7 @@ func serverMessage(r io.Reader, secrets ...string) string {
 		Error string `json:"error"`
 	}
 	if json.Unmarshal(raw, &payload) == nil && payload.Error != "" {
-		for _, secret := range secrets {
-			if secret != "" {
-				payload.Error = strings.ReplaceAll(payload.Error, secret, "[redacted]")
-			}
-		}
-		return payload.Error
+		return redact.ErrorWithSecrets(errors.New(payload.Error), secrets...).Error()
 	}
 	return "(no structured error message)"
 }

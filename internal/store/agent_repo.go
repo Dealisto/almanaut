@@ -141,9 +141,15 @@ func (r *AgentRepo) RecordConflict(agentID, hostname, at string) error {
 	return nil
 }
 
-// RecordReport appends one report and prunes the host's history to
-// agentReportRetention rows.
+// RecordReport atomically appends one report and prunes the host's history to
+// agentReportRetention rows. A failed prune must not publish the new report.
+// A tx-bound repository participates in the caller's inventory transaction.
 func (r *AgentRepo) RecordReport(hostID int64, agentID, receivedAt, agentVersion string, schemaVersion int, payload []byte) error {
+	if db, ok := r.db.(*sql.DB); ok {
+		return WithTx(db, func(tx *sql.Tx) error {
+			return r.WithTx(tx).RecordReport(hostID, agentID, receivedAt, agentVersion, schemaVersion, payload)
+		})
+	}
 	if _, err := r.db.Exec(
 		`INSERT INTO agent_reports (host_id, agent_id, received_at, agent_version, schema_version, payload)
 		 VALUES (?, ?, ?, ?, ?, ?)`,

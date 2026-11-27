@@ -100,12 +100,20 @@ port only is completed on the other. Two ports connected to the same port, or
 a port on another host's NIC, fail the import.
 Tag names are normalised the way the UI stores them (`#Prod` → `prod`). A
 file written by a newer almanaut, with a higher `version`, is refused.
+Duplicate normalized tags on one entity, duplicate custom-field names for one
+entity type, and multiple values for the same entity and field are rejected
+with an error identifying the conflicting records.
 
 Uploads must contain exactly one YAML document with an explicit supported
 `version`. Empty files, unknown field names (including misspelled record fields),
 and additional documents are rejected before any data is replaced. Record IDs
 must be positive and unique within each record type. To deliberately restore
 an empty inventory, use a valid versioned export containing no records.
+
+Invalid input receives a detailed form error. A storage failure returns a
+generic server error and logs its details on the server. In either case, the
+existing inventory is preserved; replacement and its history event commit
+together.
 
 ## Additive CSV import
 

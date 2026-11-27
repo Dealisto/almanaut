@@ -51,7 +51,7 @@ func NewNtfyClient(url, token string) Sender {
 func (c *ntfyClient) Send(ctx context.Context, n Notification) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, strings.NewReader(n.Body))
 	if err != nil {
-		return fmt.Errorf("build ntfy request: %w", redact.Error(err))
+		return fmt.Errorf("build ntfy request: %w", redact.ErrorWithURL(err, c.url, c.token))
 	}
 	if n.Title != "" {
 		req.Header.Set("Title", n.Title)
@@ -64,7 +64,7 @@ func (c *ntfyClient) Send(ctx context.Context, n Notification) error {
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("post ntfy: %w", redact.Error(err)) // the topic in the URL is its credential
+		return fmt.Errorf("post ntfy: %w", redact.ErrorWithURL(err, c.url, c.token))
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))

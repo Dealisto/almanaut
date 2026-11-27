@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 )
@@ -63,30 +64,35 @@ func Migrate(db *sql.DB, dbPath string) error {
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", f, err)
 		}
-		tx, err := db.Begin()
-		if err != nil {
-			return fmt.Errorf("begin tx for %s: %w", f, err)
-		}
-		if _, err := tx.Exec(string(sqlBytes)); err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				return fmt.Errorf("apply %s: %w (rollback failed: %v)", f, err, rbErr)
-			}
-			return fmt.Errorf("apply %s: %w", f, err)
-		}
-		if _, err := tx.Exec(
-			`INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`,
-			f, time.Now().UTC().Format(time.RFC3339),
-		); err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				return fmt.Errorf("record %s: %w (rollback failed: %v)", f, err, rbErr)
-			}
-			return fmt.Errorf("record %s: %w", f, err)
-		}
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("commit %s: %w", f, err)
+		if err := applyMigration(db, f, string(sqlBytes)); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// applyMigration rechecks the version after taking the write lock: another
+// process may have applied it since Migrate built its list of pending files.
+func applyMigration(db *sql.DB, version, statements string) error {
+	return WithTx(db, func(tx *sql.Tx) error {
+		var applied bool
+		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?)`, version).Scan(&applied); err != nil {
+			return fmt.Errorf("check migration %s: %w", version, err)
+		}
+		if applied {
+			return nil
+		}
+		if _, err := tx.Exec(statements); err != nil {
+			return fmt.Errorf("apply %s: %w", version, err)
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`,
+			version, time.Now().UTC().Format(time.RFC3339),
+		); err != nil {
+			return fmt.Errorf("record %s: %w", version, err)
+		}
+		return nil
+	})
 }
 
 func appliedVersions(db *sql.DB) (map[string]bool, error) {
@@ -109,7 +115,14 @@ func appliedVersions(db *sql.DB) (map[string]bool, error) {
 // backupDatabase writes a consistent copy of the database using
 // SQLite's VACUUM INTO, which is safe while the DB is open.
 func backupDatabase(db *sql.DB, dbPath string) error {
-	backup := fmt.Sprintf("%s.backup-%s", dbPath, time.Now().UTC().Format("20060102-150405.000000000"))
+	absolute, err := filepath.Abs(dbPath)
+	if err != nil {
+		return fmt.Errorf("resolve backup path: %w", err)
+	}
+	// VACUUM INTO interprets a leading "file:" as a URI. An absolute path
+	// keeps literal filenames on the same destination reserved below, rather
+	// than leaving an empty placeholder and creating another, public file.
+	backup := fmt.Sprintf("%s.backup-%s", absolute, time.Now().UTC().Format("20060102-150405.000000000"))
 	// VACUUM INTO accepts an empty existing file but otherwise creates it
 	// with SQLite's public default mode, independent of the source's mode.
 	// Reserve this name privately and never overwrite an existing backup.

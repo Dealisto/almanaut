@@ -27,5 +27,18 @@
   document.dispatchEvent(new KeyboardEvent("keydown", {key: "k", ctrlKey: true, bubbles: true, cancelable: true}));
   await settle();
   check("search shortcut wins over a pending drawer focus change", document.activeElement === search && !toggle.checked && !content.inert);
+  // Form controls may be restored independently of JavaScript state.
+  toggle.checked = true;
+  window.dispatchEvent(new PageTransitionEvent("pageshow", {persisted: true}));
+  await settle();
+  check("restored open navigation reconciles accessibility and scroll state", !sidebar.inert && content.inert &&
+    toggle.getAttribute("aria-expanded") === "true" && document.body.classList.contains("nav-open"));
+  check("restored open navigation moves focus out of inert content", sidebar.contains(document.activeElement));
+  toggle.checked = false;
+  window.dispatchEvent(new PageTransitionEvent("pageshow", {persisted: true}));
+  await settle();
+  check("restored closed navigation clears stale accessibility and scroll state", sidebar.inert && !content.inert &&
+    toggle.getAttribute("aria-expanded") === "false" && !document.body.classList.contains("nav-open"));
+  check("restored closed navigation recovers focus from the hidden drawer", document.activeElement === toggle);
   return results;
 })()

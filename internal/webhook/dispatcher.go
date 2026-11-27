@@ -339,14 +339,14 @@ func postDelivery(ctx context.Context, client *http.Client, url string, body []b
 	// since the caller logs every failed attempt.
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return redact.Error(err)
+		return redact.ErrorWithURL(err, url, sig)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Almanaut-Signature", sig)
 	req.Header.Set("X-Almanaut-Delivery", deliveryID)
 	resp, err := client.Do(req)
 	if err != nil {
-		return redact.Error(err)
+		return redact.ErrorWithURL(err, url, sig)
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))

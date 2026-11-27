@@ -171,7 +171,10 @@ func confirm2FA(totp *store.TOTPRepo, db *sql.DB) http.HandlerFunc {
 			if !fresh {
 				return errTOTPInvalidCode
 			}
-			return tr.ReplaceRecoveryCodes(u.ID, hashes)
+			if err := tr.ReplaceRecoveryCodes(u.ID, hashes); err != nil {
+				return err
+			}
+			return revokeFactorCredentials(tr, store.NewSessionRepo(db).WithTx(tx), r, u.ID)
 		})
 		if errors.Is(err, errTOTPAlreadyEnabled) {
 			http.Redirect(w, r, "/account/2fa", http.StatusSeeOther)
@@ -236,7 +239,10 @@ func disable2FA(totp *store.TOTPRepo, db *sql.DB) http.HandlerFunc {
 				throttle.cleanup(now)
 				return errTOTPDisableInvalid
 			}
-			return tr.Disable(u.ID)
+			if err := tr.Disable(u.ID); err != nil {
+				return err
+			}
+			return revokeFactorCredentials(tr, store.NewSessionRepo(db).WithTx(tx), r, u.ID)
 		})
 		if errors.Is(err, errTOTPDisableThrottled) {
 			http.Error(w, "Too many attempts. Try again later.", http.StatusTooManyRequests)
@@ -269,6 +275,18 @@ var (
 	errTOTPDisableThrottled = errors.New("second-factor removal is rate-limited")
 	errTOTPDisableInvalid   = errors.New("invalid second factor for removal")
 )
+
+// revokeFactorCredentials invalidates credentials issued under the previous
+// second-factor policy. Keep only the session performing its own factor change.
+// In particular, a pending challenge must never become usable again after a
+// reset followed by re-enrollment. Both repositories must use the transaction
+// that changes the factor, so a failed revocation rolls the whole change back.
+func revokeFactorCredentials(totp *store.TOTPRepo, sessions *store.SessionRepo, r *http.Request, userID int64) error {
+	if err := totp.DeletePendingByUser(userID); err != nil {
+		return err
+	}
+	return revokeSessions(sessions, r, userID)
+}
 
 // verifySecondFactor checks a TOTP code or, failing that, redeems a single-use
 // recovery code. Returns true on either. A TOTP code is accepted once per time
@@ -435,7 +453,7 @@ func resetUser2FA(totp *store.TOTPRepo, sessions *store.SessionRepo, audit *stor
 			if err := totp.WithTx(tx).Disable(id); err != nil {
 				return err
 			}
-			return revokeSessions(sessions.WithTx(tx), r, id)
+			return revokeFactorCredentials(totp.WithTx(tx), sessions.WithTx(tx), r, id)
 		})
 		if err != nil {
 			notFoundOrServerError(w, r, "user", err)

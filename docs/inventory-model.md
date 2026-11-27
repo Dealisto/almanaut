@@ -70,7 +70,8 @@ height in U) from their edit form. The rack's detail page then renders a
 **U elevation** — a top-to-bottom diagram with each occupant drawn at its
 position, linking to its detail page. Occupants that extend past the rack or
 overlap another are highlighted; placement is advisory, not enforced at save
-time.
+time. When placements conflict, a separate list keeps every occupant's position
+and detail link available, including records obscured by another in the diagram.
 
 ## NICs & ports
 
@@ -102,6 +103,15 @@ The gateway also consumes one usable address unless a host or reservation
 already occupies it. Overlapping reservations count once. IPv4 network and
 broadcast addresses are excluded from usable capacity, except on /31 and /32
 networks; they are not subtracted again when a reservation includes them.
+
+When networks overlap, host usage is attributed to the most specific subnet;
+equal prefixes use the first network in inventory order. Capacity counts follow
+that attribution. The "next free" suggestion additionally excludes every IP
+assigned to a host, including hosts attributed to a child subnet or an equivalent
+network. IPv4 and IPv4-mapped IPv6 spellings identify the same address. Gateway
+and reservation exclusions apply to the network where they are configured.
+A network can therefore have a positive local free-address count but no safe
+suggestion when hosts attributed to overlapping networks occupy the candidates.
 
 Reservation counts remain exact for networks with up to 30 host bits, including
 networks too large for the next-free search. That search is limited to 65,536

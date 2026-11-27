@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -46,7 +47,7 @@ func rootFilesystem(usage func(string) (int64, int64, error)) (string, []agentap
 		return "", nil
 	}
 	total, used, err := usage("/")
-	if err != nil || total <= 0 {
+	if err != nil || total <= 0 || used < 0 || used > total {
 		return "", nil
 	}
 	d := agentapi.Disk{
@@ -75,7 +76,14 @@ func blockDevices(r Root) (string, []agentapi.Disk) {
 	parts := make([]string, 0, len(names))
 	for _, name := range names {
 		sectors, err := strconv.ParseInt(readTrimmed(r.Path(r.Sys, "block/"+name+"/size")), 10, 64)
-		if err != nil || sectors <= 0 {
+		if err != nil || sectors < 0 || sectors > math.MaxInt64/sectorSize {
+			// Publishing the other disks would turn a transient read failure
+			// into a smaller storage inventory. Empty means "unknown" to the
+			// server, so preserve the previous complete summary instead.
+			return "", nil
+		}
+		if sectors == 0 {
+			// A readable zero can describe a removable device without media.
 			continue
 		}
 		size := sectors * sectorSize

@@ -1,6 +1,7 @@
 package kuma
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Dealisto/almanaut/internal/redact"
 	"github.com/coder/websocket"
 )
 
@@ -45,6 +47,8 @@ func NewClient(baseURL, user, pass string, insecure bool) *Client {
 type Session struct {
 	conn     *websocket.Conn
 	cancel   context.CancelFunc // stops the read loop
+	endpoint string
+	secrets  []string // immutable credentials retained for post-login error redaction
 	writeMu  sync.Mutex
 	ackMu    sync.Mutex
 	ackID    int64
@@ -57,7 +61,10 @@ type Session struct {
 
 // Connect dials, completes the engine.io v4 + socket.io handshake, logs in,
 // and waits for the initial monitorList push. Close the session when done.
-func (c *Client) Connect(ctx context.Context) (*Session, error) {
+func (c *Client) Connect(ctx context.Context) (_ *Session, err error) {
+	defer func() {
+		err = redact.ErrorWithURL(err, c.wsURL, c.user, c.pass)
+	}()
 	// The login frame carries credentials after the HTTP upgrade. Following a
 	// redirect would authenticate to a different endpoint, even though net/http
 	// normally strips authorization headers on cross-host redirects.
@@ -85,9 +92,13 @@ func (c *Client) Connect(ctx context.Context) (*Session, error) {
 
 	// engine.io OPEN, then socket.io CONNECT on the default namespace.
 	frame, err := readFrame()
-	if err != nil || !strings.HasPrefix(frame, "0") {
+	if err != nil {
 		conn.CloseNow()
-		return nil, fmt.Errorf("kuma: engine.io open: %v (frame %.32q)", err, frame)
+		return nil, fmt.Errorf("kuma: engine.io open: %w", err)
+	}
+	if !strings.HasPrefix(frame, "0") {
+		conn.CloseNow()
+		return nil, errors.New("kuma: invalid engine.io open frame")
 	}
 	if err := conn.Write(ctx, websocket.MessageText, []byte("40")); err != nil {
 		conn.CloseNow()
@@ -113,6 +124,7 @@ func (c *Client) Connect(ctx context.Context) (*Session, error) {
 	loopCtx, cancel := context.WithCancel(context.Background())
 	s := &Session{
 		conn: conn, cancel: cancel,
+		endpoint: c.wsURL, secrets: []string{c.user, c.pass},
 		acks:     map[int64]chan json.RawMessage{},
 		monsOnce: make(chan struct{}),
 		monitors: map[int64]Monitor{},
@@ -125,7 +137,7 @@ func (c *Client) Connect(ctx context.Context) (*Session, error) {
 		s.Close()
 		return nil, fmt.Errorf("kuma: login: %w", err)
 	}
-	if err := okOrError(res); err != nil {
+	if err := okOrError(res, c.wsURL, c.user, c.pass); err != nil {
 		s.Close()
 		return nil, fmt.Errorf("kuma: login: %w", err)
 	}
@@ -141,6 +153,12 @@ func (c *Client) Connect(ctx context.Context) (*Session, error) {
 		return nil, fmt.Errorf("kuma: waiting for monitorList: %w", ctx.Err())
 	}
 	return s, nil
+}
+
+// safeError protects errors throughout the session, including transport errors
+// returned after a successful login. The underlying cause remains available.
+func (s *Session) safeError(err error) error {
+	return redact.ErrorWithURL(err, s.endpoint, s.secrets...)
 }
 
 // Close tears the connection down. Safe to call more than once.
@@ -279,13 +297,20 @@ func (s *Session) handleEvent(msg string) error {
 			return errors.New("kuma: invalid monitorList array")
 		}
 		list = map[string]map[string]any{}
-	} else if err := json.Unmarshal(arr[1], &list); err != nil || list == nil {
-		return errors.New("kuma: invalid monitorList object")
+	} else {
+		// These objects are sent back on edit. Preserve unknown numeric
+		// settings exactly instead of rounding them through float64.
+		decoder := json.NewDecoder(bytes.NewReader(arr[1]))
+		decoder.UseNumber()
+		if err := decoder.Decode(&list); err != nil || list == nil {
+			return errors.New("kuma: invalid monitorList object")
+		}
 	}
 	mons := make(map[int64]Monitor, len(list))
 	for key, raw := range list {
 		id, err := strconv.ParseInt(key, 10, 64)
-		if err != nil || id <= 0 || raw == nil {
+		_, duplicate := mons[id]
+		if err != nil || id <= 0 || raw == nil || duplicate {
 			return errors.New("kuma: invalid monitorList entry")
 		}
 		m := Monitor{ID: id, raw: raw}
@@ -334,13 +359,15 @@ type ackResult struct {
 
 // okOrError decodes an ack and converts ok=false into an error with Kuma's
 // message (bounded — Kuma messages are short, but never trust the peer).
-func okOrError(raw json.RawMessage) error {
+func okOrError(raw json.RawMessage, endpoint string, secrets ...string) error {
 	var res ackResult
 	if err := json.Unmarshal(raw, &res); err != nil {
-		return fmt.Errorf("malformed ack %.128q", string(raw))
+		return errors.New("malformed acknowledgement")
 	}
 	if !res.OK {
-		msg := res.Msg
+		// Redact before truncation so a long reflected password cannot leave
+		// a visible prefix that no longer matches the complete credential.
+		msg := redact.ErrorWithURL(errors.New(res.Msg), endpoint, secrets...).Error()
 		if len(msg) > 200 {
 			msg = msg[:200]
 		}
@@ -367,20 +394,19 @@ func addPayload(m Monitor) map[string]any {
 }
 
 // Add creates an HTTP monitor and returns its Kuma id.
-func (s *Session) Add(ctx context.Context, m Monitor) (int64, error) {
+func (s *Session) Add(ctx context.Context, m Monitor) (_ int64, err error) {
+	defer func() { err = s.safeError(err) }()
 	raw, err := s.emit(ctx, "add", addPayload(m))
 	if err != nil {
 		return 0, fmt.Errorf("add %q: %w", m.Name, err)
 	}
+	if err := okOrError(raw, s.endpoint, s.secrets...); err != nil {
+		return 0, fmt.Errorf("add %q: %w", m.Name, err)
+	}
 	var res ackResult
-	if err := json.Unmarshal(raw, &res); err != nil {
-		return 0, fmt.Errorf("add %q: malformed ack %.128q", m.Name, string(raw))
-	}
-	if !res.OK {
-		return 0, fmt.Errorf("add %q: kuma refused: %.200s", m.Name, res.Msg)
-	}
-	if res.MonitorID == 0 {
-		return 0, fmt.Errorf("add %q: ack carried no monitorID", m.Name)
+	_ = json.Unmarshal(raw, &res) // Already validated above; never reflect malformed acknowledgements.
+	if res.MonitorID <= 0 {
+		return 0, fmt.Errorf("add %q: ack carried no positive monitorID", m.Name)
 	}
 	return res.MonitorID, nil
 }
@@ -388,7 +414,8 @@ func (s *Session) Add(ctx context.Context, m Monitor) (int64, error) {
 // Edit updates a monitor's name and url. The raw object from the monitorList
 // is round-tripped so fields almanaut does not manage (interval, retries,
 // notification assignments, ...) survive the edit.
-func (s *Session) Edit(ctx context.Context, m Monitor) error {
+func (s *Session) Edit(ctx context.Context, m Monitor) (err error) {
+	defer func() { err = s.safeError(err) }()
 	obj := make(map[string]any, len(m.raw)+3)
 	for k, v := range m.raw {
 		obj[k] = v
@@ -400,19 +427,20 @@ func (s *Session) Edit(ctx context.Context, m Monitor) error {
 	if err != nil {
 		return fmt.Errorf("edit monitor %d: %w", m.ID, err)
 	}
-	if err := okOrError(raw); err != nil {
+	if err := okOrError(raw, s.endpoint, s.secrets...); err != nil {
 		return fmt.Errorf("edit monitor %d: %w", m.ID, err)
 	}
 	return nil
 }
 
 // Delete removes a monitor by Kuma id.
-func (s *Session) Delete(ctx context.Context, id int64) error {
+func (s *Session) Delete(ctx context.Context, id int64) (err error) {
+	defer func() { err = s.safeError(err) }()
 	raw, err := s.emit(ctx, "deleteMonitor", id)
 	if err != nil {
 		return fmt.Errorf("delete monitor %d: %w", id, err)
 	}
-	if err := okOrError(raw); err != nil {
+	if err := okOrError(raw, s.endpoint, s.secrets...); err != nil {
 		return fmt.Errorf("delete monitor %d: %w", id, err)
 	}
 	return nil

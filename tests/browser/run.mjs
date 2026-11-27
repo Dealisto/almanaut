@@ -174,6 +174,36 @@ try {
   const results = await evaluate(await readFile(join(directory, "checks.js"), "utf8"));
   const viewport = (width) => client.send("Emulation.setDeviceMetricsOverride", {width, height: 844, deviceScaleFactor: 1, mobile: false}, sessionId);
   await viewport(1200);
+  const checkRackLinks = async (scenario) => evaluate(`(async () => {
+    document.querySelector('.detail-tabs a[href="#connections"]').click();
+    const panel = document.querySelector(".rack-elev").closest("section");
+    const results = [];
+    for (const path of ["/hosts/1", "/hardware/1"]) {
+      let reachable = false;
+      for (const link of [...panel.querySelectorAll("a")].filter(link => link.getAttribute("href") === path)) {
+        link.scrollIntoView({block: "center"});
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const box = link.getBoundingClientRect();
+        const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        reachable ||= box.width > 0 && box.height > 0 && (hit === link || link.contains(hit));
+      }
+      results.push({name: ${JSON.stringify(scenario)} + " rack occupant remains visible and clickable: " + path, passed: reachable});
+    }
+    return results;
+  })()`);
+  await navigate("/racks/1");
+  results.push(...await checkRackLinks("overlapping"));
+  await evaluate(`(async () => {
+    for (const [path, position] of [["/api/hosts/1", 42], ["/api/hardware/1", 60]]) {
+      const item = await (await fetch(path)).json();
+      item.rack_position = position;
+      item.u_height = 1;
+      const response = await fetch(path, {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify(item)});
+      if (!response.ok) throw new Error("Could not prepare clamped rack placement: " + response.status);
+    }
+  })()`);
+  await navigate("/racks/1");
+  results.push(...await checkRackLinks("clamped out-of-bounds"));
   await navigate("/hosts");
   await evaluate('document.querySelector("#sidebar a").focus()');
   await viewport(390);
@@ -187,7 +217,25 @@ try {
       {name: "printing an open mobile drawer allows the document to flow", passed: getComputedStyle(document.body).overflow !== "hidden"}
     ];
   })()`));
-  await client.send("Emulation.setEmulatedMedia", {media: ""}, sessionId);
+  const palette = `JSON.stringify([document.documentElement, document.body, document.querySelector("h1"),
+    document.querySelector("th")].map(element => {
+      const style = getComputedStyle(element);
+      return [style.color, style.backgroundColor, style.colorScheme];
+    }))`;
+  const lightPrintPalette = await evaluate(palette);
+  await evaluate('document.documentElement.dataset.theme = "dark"');
+  results.push({name: "explicit dark mode prints with the light document palette", passed: await evaluate(palette) === lightPrintPalette});
+  await evaluate('document.documentElement.dataset.theme = "system"');
+  await client.send("Emulation.setEmulatedMedia", {media: "print", features: [{name: "prefers-color-scheme", value: "dark"}]}, sessionId);
+  results.push({name: "system dark mode prints with the light document palette", passed: await evaluate(palette) === lightPrintPalette});
+  await client.send("Emulation.setEmulatedMedia", {media: "screen", features: [{name: "prefers-color-scheme", value: "dark"}]}, sessionId);
+  results.push({name: "system dark mode remains active on screen", passed:
+    await evaluate('getComputedStyle(document.documentElement).colorScheme') === "dark"});
+  await evaluate('document.documentElement.dataset.theme = "dark"');
+  await client.send("Emulation.setEmulatedMedia", {media: "", features: []}, sessionId);
+  results.push({name: "explicit dark mode remains active on screen", passed:
+    await evaluate('getComputedStyle(document.documentElement).colorScheme') === "dark"});
+  await evaluate('document.documentElement.dataset.theme = "system"');
   await evaluate('document.querySelector(".nav-close").focus()');
   await viewport(1200);
   results.push(...await evaluate(`(async () => {
@@ -195,6 +243,8 @@ try {
     return [{name: "expanding a focused mobile drawer preserves usable desktop focus", passed:
       document.activeElement === document.querySelector("#sidebar a") && !document.getElementById("app-content").inert}];
   })()`));
+  await navigate("/host-types");
+  results.push(...await evaluate(await readFile(join(directory, "forms.js"), "utf8")));
   assert(Array.isArray(results) && results.length > 0, "Browser returned no assertions");
   for (const result of results) {
     console.log(`${result.passed ? "PASS" : "FAIL"} ${result.name}${!result.passed && result.details ? `: ${result.details}` : ""}`);

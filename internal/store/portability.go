@@ -113,6 +113,14 @@ func exportList[T any](err *error, list func() ([]T, error)) []T {
 // snapshotVersion is the Snapshot format Export writes and Import reads.
 const snapshotVersion = 3
 
+// ImportValidationError identifies invalid snapshot input whose message can be
+// shown to the user. Database and transaction failures remain ordinary errors
+// so callers can log them without exposing storage details to clients.
+type ImportValidationError struct{ err error }
+
+func (e *ImportValidationError) Error() string { return e.err.Error() }
+func (e *ImportValidationError) Unwrap() error { return e.err }
+
 // Import replaces the entire inventory with snap, in a single transaction.
 // It validates every record first (aborting before any delete on the first
 // error), then clears all tables and re-inserts each row with its original id
@@ -122,20 +130,20 @@ const snapshotVersion = 3
 // the new inventory: see reconcileSideTables.
 func Import(db *sql.DB, snap Snapshot) error {
 	if snap.Version < 1 {
-		return fmt.Errorf("snapshot version must be at least 1")
+		return &ImportValidationError{fmt.Errorf("snapshot version must be at least 1")}
 	}
 	if snap.Version > snapshotVersion {
-		return fmt.Errorf("snapshot version %d is newer than this almanaut supports (%d)", snap.Version, snapshotVersion)
+		return &ImportValidationError{fmt.Errorf("snapshot version %d is newer than this almanaut supports (%d)", snap.Version, snapshotVersion)}
 	}
 	// Older snapshots predate the catalog and contain only built-in types.
 	if snap.Version < 2 && len(snap.HostTypes) == 0 {
 		snap.HostTypes = domain.DefaultHostTypes()
 	}
 	if err := validateDiscoveryBindings(snap); err != nil {
-		return err
+		return &ImportValidationError{err}
 	}
 	if err := validateHostTypes(snap); err != nil {
-		return err
+		return &ImportValidationError{err}
 	}
 	for _, err := range []error{
 		validateAll("host", snap.Hosts, func(h domain.Host) int64 { return h.ID }),
@@ -162,7 +170,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 		validateAll("custom_field_value", snap.CustomFieldValues, func(v domain.CustomFieldValueRow) int64 { return v.ID }),
 	} {
 		if err != nil {
-			return err
+			return &ImportValidationError{err}
 		}
 	}
 
@@ -178,7 +186,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 	for _, value := range snap.CustomFieldValues {
 		normalized, err := domain.ValidateCustomFieldValue(fieldKinds[value.DefID], value.Value)
 		if err != nil {
-			return fmt.Errorf("custom field value %d (definition %d): %w", value.ID, value.DefID, err)
+			return &ImportValidationError{fmt.Errorf("custom field value %d (definition %d): %w", value.ID, value.DefID, err)}
 		}
 		value.Value = normalized
 		// Match SetForEntity: an empty text, number or date is unset, not a
@@ -188,13 +196,37 @@ func Import(db *sql.DB, snap Snapshot) error {
 		}
 	}
 	snap.CustomFieldValues = values
+	type tagKey struct {
+		entityType string
+		entityID   int64
+		name       string
+	}
+	type customValueKey struct {
+		entityType      string
+		entityID, defID int64
+	}
+	for _, err := range []error{
+		validateUniqueImportKeys("tag", snap.Tags, func(t domain.Tag) int64 { return t.ID }, func(t domain.Tag) tagKey {
+			return tagKey{t.EntityType, t.EntityID, domain.NormalizeTag(t.Name)}
+		}),
+		validateUniqueImportKeys("custom field definition", snap.CustomFieldDefs, func(d domain.CustomFieldDef) int64 { return d.ID }, func(d domain.CustomFieldDef) [2]string {
+			return [2]string{d.EntityType, d.Name}
+		}),
+		validateUniqueImportKeys("custom field value", snap.CustomFieldValues, func(v domain.CustomFieldValueRow) int64 { return v.ID }, func(v domain.CustomFieldValueRow) customValueKey {
+			return customValueKey{v.EntityType, v.EntityID, v.DefID}
+		}),
+	} {
+		if err != nil {
+			return &ImportValidationError{err}
+		}
+	}
 	ports, unlinked, err := pairPortLinks(snap.Ports)
 	if err != nil {
-		return err
+		return &ImportValidationError{err}
 	}
 	ports, unattributed, err := checkPortNICs(ports, snap.NICs)
 	if err != nil {
-		return err
+		return &ImportValidationError{err}
 	}
 	snap.Ports = ports
 	skipped += unlinked + unattributed
@@ -223,6 +255,20 @@ func Import(db *sql.DB, snap Snapshot) error {
 			CreatedAt: time.Now().UTC().Format(time.RFC3339),
 		})
 	})
+}
+
+// validateUniqueImportKeys reports conflicting natural keys before SQLite sees
+// them, preserving actionable input errors without exposing database failures.
+func validateUniqueImportKeys[T any, K comparable](label string, items []T, id func(T) int64, key func(T) K) error {
+	seen := make(map[K]int64, len(items))
+	for _, item := range items {
+		k := key(item)
+		if previous, exists := seen[k]; exists {
+			return fmt.Errorf("%s %d duplicates %s %d", label, id(item), label, previous)
+		}
+		seen[k] = id(item)
+	}
+	return nil
 }
 
 // inventoryTables are the tables a Snapshot carries, one per Snapshot list:

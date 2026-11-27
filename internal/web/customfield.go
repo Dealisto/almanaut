@@ -78,12 +78,13 @@ func (d handlerDeps) parseJSONCustomFields(entityType string, raw map[string]jso
 		case []any, map[string]any:
 			return nil, customFieldValidationError{fmt.Errorf("%s: value must be a string, number, boolean, or null", def.Label)}
 		}
-		// Preserve the existing scalar coercion for boolean fields (1.0 and
-		// 1e0 mean true). Text and number fields retain the exact JSON number.
+		// Preserve numeric boolean notation (1.0 and 1e0 mean true), but
+		// require exact zero or one. float64 would round near-one values or
+		// underflow tiny nonzero values into valid booleans.
 		if number, ok := v.(json.Number); ok && def.Kind == domain.KindBool {
-			value, err := number.Float64()
-			if err != nil {
-				return nil, customFieldValidationError{fmt.Errorf("%s: invalid boolean value", def.Label)}
+			value, valid := jsonNumberBoolean(number.String())
+			if !valid {
+				return nil, customFieldValidationError{fmt.Errorf("%s: numeric boolean must be exactly 0 or 1", def.Label)}
 			}
 			v = value
 		}
@@ -94,6 +95,55 @@ func (d handlerDeps) parseJSONCustomFields(entityType string, raw map[string]jso
 		out[def.ID] = canon
 	}
 	return out, nil
+}
+
+// jsonNumberBoolean recognizes exact zero or one in an already validated JSON
+// number. Counting decimal places keeps work linear in the request size; parsing
+// an arbitrarily precise float would make long mantissas disproportionately costly.
+func jsonNumberBoolean(raw string) (value, valid bool) {
+	mantissa, exponent := raw, ""
+	if i := strings.IndexAny(raw, "eE"); i >= 0 {
+		mantissa, exponent = raw[:i], raw[i+1:]
+	}
+	negative := strings.HasPrefix(mantissa, "-")
+	if negative {
+		mantissa = mantissa[1:]
+	}
+	digits, fractionDigits, onePosition := 0, 0, -1
+	fraction := false
+	for i := 0; i < len(mantissa); i++ {
+		if mantissa[i] == '.' {
+			fraction = true
+			continue
+		}
+		if fraction {
+			fractionDigits++
+		}
+		if mantissa[i] != '0' {
+			if mantissa[i] != '1' || onePosition >= 0 {
+				return false, false
+			}
+			onePosition = digits
+		}
+		digits++
+	}
+	if onePosition < 0 {
+		return false, true // Zero remains zero regardless of sign or exponent size.
+	}
+	if negative {
+		return false, false
+	}
+	var scale int64
+	if exponent != "" {
+		var err error
+		scale, err = strconv.ParseInt(exponent, 10, 64)
+		if err != nil {
+			return false, false // An overflowing exponent cannot balance a bounded mantissa.
+		}
+	}
+	trailingZeros := digits - onePosition - 1
+	valid = scale == int64(fractionDigits-trailingZeros)
+	return valid, valid
 }
 
 // jsonValueToString renders a decoded JSON scalar as the string form

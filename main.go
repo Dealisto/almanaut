@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -354,7 +355,9 @@ func runHealthcheck(addr string) int {
 	case "::":
 		host = "::1"
 	}
-	url := "http://" + net.JoinHostPort(host, port) + "/healthz"
+	// URL.String escapes an IPv6 scope delimiter (%eth0 becomes %25eth0).
+	// The listening address itself uses the unescaped network-address form.
+	endpoint := (&url.URL{Scheme: "http", Host: net.JoinHostPort(host, port), Path: "/healthz"}).String()
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil // A local health probe must not go through an HTTP proxy.
 	defer transport.CloseIdleConnections()
@@ -365,7 +368,7 @@ func runHealthcheck(addr string) int {
 		// that this process's health endpoint is healthy.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	resp, err := client.Get(url)
+	resp, err := client.Get(endpoint)
 	if err != nil {
 		log.Printf("healthcheck: %v", err)
 		return 1
