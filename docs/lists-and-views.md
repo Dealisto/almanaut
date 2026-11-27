@@ -26,6 +26,8 @@ or send it to a colleague, and they see exactly the same view.
 Sorting is numeric-aware where it matters — a column holding `9` and `10` sorts
 `10` after `9`, not before it, as a plain string sort would. Values that are not
 numbers sort case-insensitively.
+Large integers and close decimal values keep their exact numeric order, even
+when a machine floating-point value would round them to the same number.
 When a column mixes numbers and text, ascending order places numbers first;
 descending order reverses both groups. `NaN` is treated as text.
 
@@ -39,6 +41,10 @@ count and Previous/Next links preserve the active filters and sort order.
 Filtering, sorting, and page selection happen in the database before records
 are loaded, so a large inventory does not need to be copied into application
 memory to render one page. Substring filters may still scan matching tables.
+
+If a bookmarked page number is beyond the remaining results, the list offers
+a return to the first page while preserving the current filters, sort order,
+and page size. This is distinct from a search with no matching records.
 
 ## Saved views (`/views`)
 

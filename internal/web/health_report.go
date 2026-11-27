@@ -1,6 +1,7 @@
 package web
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"time"
@@ -166,40 +167,38 @@ func healthReport(repos entityRepos, rels *store.RelationshipRepo, cat entityCat
 
 // acknowledgeStale records an "acknowledge" changelog event for an entity,
 // resetting its staleness clock and leaving a trail in the entity's history.
-func acknowledgeStale(cat entityCatalog, changelog *store.ChangelogRepo) http.HandlerFunc {
+func acknowledgeStale(cat entityCatalog, changelog *store.ChangelogRepo, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		typ, id, err := parseRef(req.FormValue("ref"))
 		if err != nil {
 			http.Error(w, "invalid entity reference", http.StatusBadRequest)
 			return
 		}
-		if _, ok := cat.resource(typ); !ok {
+		rs, ok := cat.resource(typ)
+		if !ok {
 			http.Error(w, "unknown entity type", http.StatusBadRequest)
 			return
 		}
-		// Only acknowledge an entity that actually exists, so a stray ref can't
-		// append a phantom row to the append-only changelog.
-		opts, err := cat.options()
+		// Keep the existence check and label lookup under the same write lock
+		// as history creation. A concurrent deletion must not leave an
+		// acknowledgement for an entity that no longer exists.
+		err = store.WithTx(db, func(tx *sql.Tx) error {
+			label, err := rs.labelTx(tx, id)
+			if err != nil {
+				return err
+			}
+			return changelog.WithTx(tx).Create(store.ChangeEvent{
+				EntityType: typ,
+				EntityID:   id,
+				Label:      label,
+				Action:     domain.ActionAcknowledge,
+				Actor:      actor(req),
+				Changes:    []domain.FieldChange{{Field: "stale", Old: "stale", New: "acknowledged"}},
+				CreatedAt:  nowRFC3339(),
+			})
+		})
 		if err != nil {
-			serverError(w, req, err)
-			return
-		}
-		labels := labelMap(opts)
-		label, ok := labels[fmt.Sprintf("%s:%d", typ, id)]
-		if !ok {
-			http.NotFound(w, req)
-			return
-		}
-		if err := changelog.Create(store.ChangeEvent{
-			EntityType: typ,
-			EntityID:   id,
-			Label:      label,
-			Action:     domain.ActionAcknowledge,
-			Actor:      actor(req),
-			Changes:    []domain.FieldChange{{Field: "stale", Old: "stale", New: "acknowledged"}},
-			CreatedAt:  nowRFC3339(),
-		}); err != nil {
-			serverError(w, req, err)
+			notFoundOrServerError(w, req, typ, err)
 			return
 		}
 		http.Redirect(w, req, "/health-report", http.StatusSeeOther)

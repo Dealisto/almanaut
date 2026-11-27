@@ -95,6 +95,11 @@ interrupts the scan, the next pass starts with certificates it did not reach,
 so slow early targets cannot indefinitely starve later certificates. This
 rotation resets when the server restarts.
 
+Probe diagnostics include DNS names and IP addresses from the served certificate.
+An IP subject is compared against IP SANs using address equality, so equivalent
+IPv6 spellings match; a numeric DNS entry or DNS wildcard does not count as an
+IP SAN. These inventory checks do not verify certificate trust.
+
 Probing on demand is a write action, so it needs an editor or admin role: a
 viewer sees the last probe's result but cannot trigger a new one.
 

@@ -2,6 +2,14 @@
    Every form and inventory page remains usable without JavaScript. */
 "use strict";
 (() => {
+  function revealDetails(element) {
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      if (parent.tagName === "DETAILS") parent.open = true;
+    }
+  }
+  // Native constraint validation cannot focus a control inside a collapsed
+  // disclosure. Reveal it synchronously, then let the browser show its message.
+  document.addEventListener("invalid", (event) => revealDetails(event.target), true);
   // Use the submitter so mixed-action forms confirm only destructive actions,
   // including submissions triggered by the keyboard or requestSubmit().
   document.addEventListener("submit", (event) => {
@@ -59,6 +67,13 @@
     updateNavigation(moveFocus);
   });
   updateNavigation(false);
+  // History navigation may restore the checkbox after initialization without
+  // a change event. Reconcile inert regions before restoring usable focus.
+  window.addEventListener("pageshow", () => {
+    const focusInSidebar = sidebar?.contains(document.activeElement);
+    const open = mobile.matches && toggle?.checked;
+    updateNavigation(open ? !focusInSidebar : mobile.matches && focusInSidebar);
+  });
   const themeForm = document.querySelector(".theme-switch");
   themeForm?.addEventListener("submit", () => {
     themeForm.elements.return_to.value = location.pathname + location.search + location.hash;
@@ -145,6 +160,9 @@
       activate();
     });
     tablist.addEventListener("keydown", (event) => {
+      // Modified arrows/Home/End belong to browser and OS navigation (for
+      // example Alt+Left for Back), not to the record's tab selection.
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       const current = tabs.indexOf(document.activeElement);
       if (current < 0) return;
       if (event.key === " ") {
@@ -233,9 +251,7 @@
 
   const error = document.querySelector('.error[role="alert"]');
   if (error) {
-    for (let parent = error.parentElement; parent; parent = parent.parentElement) {
-      if (parent.tagName === "DETAILS") parent.open = true;
-    }
+    revealDetails(error);
     error.focus();
   }
 })();

@@ -123,6 +123,16 @@ func (rs resource[T]) existsTx(tx *sql.Tx, id int64) error {
 	return err
 }
 
+// labelTx resolves one catalog label inside a mutation's transaction, without
+// loading unrelated entities or leaving a gap between the lookup and write.
+func (rs resource[T]) labelTx(tx *sql.Tx, id int64) (string, error) {
+	item, err := rs.repo.GetTx(tx, id)
+	if err != nil {
+		return "", err
+	}
+	return entityOptionOf(rs.sing, id, rs.label(item)).Label, nil
+}
+
 // options lists this resource's entities as relationship/catalog options.
 func (rs resource[T]) options() ([]entityOption, error) {
 	items, err := rs.repo.List()
@@ -881,6 +891,7 @@ type mountable interface {
 	options() ([]entityOption, error)
 	singular() string
 	existsTx(tx *sql.Tx, id int64) error
+	labelTx(tx *sql.Tx, id int64) (string, error)
 	basePath() string
 	apiResource() apiResourceInfo
 	searchHeading() string

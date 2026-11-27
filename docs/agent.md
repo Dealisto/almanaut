@@ -72,6 +72,12 @@ cgroup limit. A container limit above the machine's available resources does
 not inflate the inventory; when one memory source is unreadable, the agent
 uses the other. Invalid or overflowing memory totals are treated as unknown.
 
+Disk summaries are also treated as unknown if a device size cannot be read,
+is malformed, or would overflow the byte count. This preserves the existing
+storage inventory instead of replacing it with a partial list. Readable
+zero-sized devices, such as empty removable drives, are skipped. Inconsistent
+root-filesystem usage (negative usage or usage above total capacity) is ignored.
+
 Virtualization detection uses container markers before examining DMI. If no
 positive container marker is available and `/proc/1/environ` cannot be read,
 the agent leaves virtualization undetermined and reports only the root
@@ -130,6 +136,9 @@ Invalid configuration exits with code `1` before creating an agent identity.
 A successful HTTP response containing HTML or malformed JSON exits with code
 `2`, identifying a misconfigured endpoint. Error logs omit unstructured response
 bodies and redact the configured token and endpoint from structured API errors.
+Individual URL path segments reflected by a proxy are also redacted, including
+their encoded or quoted forms. Overlapping secrets are matched longest first so
+masking a prefix cannot expose the rest of a credential.
 
 ## Resolving an ambiguous first report
 
@@ -137,6 +146,11 @@ An unbound agent adopts an existing host only when exactly one unbound record
 matches its normalized hostname or reported IP addresses. Multiple matches,
 including a name matching one host and an IP matching another, return HTTP
 `422` and exit code `2`. No host, binding, or report history is changed.
+
+Only valid global-unicast addresses participate in matching, including private
+addresses. Optional CIDR prefix lengths are validated before being removed;
+IPv6 zone identifiers are accepted, while malformed prefixes and IPv4 zone
+suffixes are ignored. IPv4-mapped IPv6 addresses match their IPv4 equivalents.
 
 Correct the duplicate names or IP assignments in the inventory, then report
 again with the same agent identity. `reset-id` does not resolve ambiguity.

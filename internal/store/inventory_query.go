@@ -69,6 +69,17 @@ func CompareInventoryValues(a, b string) int {
 		// Float's separate exponent avoids expanding tiny values such as 1e-1000
 		// into enormous denominators, as a rational representation would.
 		if a != b && !math.IsInf(fa, 0) {
+			// Nonzero finite decimal ties have bounded effective exponents.
+			// Compare their digits directly: constructing million-digit binary
+			// mantissas here makes an otherwise small list take seconds to sort.
+			if fa != 0 {
+				if cmp, ok := compareFiniteDecimals(a, b); ok {
+					if fa < 0 {
+						return -cmp
+					}
+					return cmp
+				}
+			}
 			precision := uint(64 + 4*(len(a)+len(b)))
 			aa, _, aerr := big.ParseFloat(strings.TrimSpace(a), 0, precision, big.ToNearestEven)
 			bb, _, berr := big.ParseFloat(strings.TrimSpace(b), 0, precision, big.ToNearestEven)

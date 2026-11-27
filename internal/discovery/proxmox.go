@@ -70,7 +70,7 @@ type apiResource struct {
 func (c *ProxmoxClient) Resources(ctx context.Context) ([]ProxmoxResource, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api2/json/cluster/resources", nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build proxmox request: %w", c.safeError(err))
 	}
 	req.Header.Set("Authorization", "PVEAPIToken="+c.token)
 	resp, err := c.httpClient.Do(req)
@@ -113,15 +113,8 @@ func (c *ProxmoxClient) Resources(ctx context.Context) ([]ProxmoxResource, error
 }
 
 func (c *ProxmoxClient) safeError(err error) error {
-	err = redact.Error(err)
-	message := err.Error()
-	if c.token != "" {
-		message = strings.ReplaceAll(message, c.token, "[redacted]")
-		if _, secret, ok := strings.Cut(c.token, "="); ok && secret != "" {
-			message = strings.ReplaceAll(message, secret, "[redacted]")
-		}
-	}
-	return &discoveryRequestError{err: err, message: message}
+	_, secret, _ := strings.Cut(c.token, "=")
+	return redact.ErrorWithURL(err, c.baseURL, c.token, secret)
 }
 
 // noRedirect tells an http.Client not to follow redirects. The discovery REST

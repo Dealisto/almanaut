@@ -27,7 +27,7 @@ type NetworkUsage struct {
 	UsedCount   int            // distinct IPs in use
 	FreeCount   int            // usable addresses not occupied by hosts, gateway or reservations
 	Unbounded   bool           // subnet too large to count/enumerate (e.g. IPv6 /64)
-	NextFree    string         // lowest usable address not in use ("" if none or Unbounded)
+	NextFree    string         // lowest usable address not assigned to any host ("" if none or Unbounded)
 
 	ReservedCount int           // usable reserved/gateway addresses not already host-used (0 when Unbounded)
 	Reservations  []Reservation // reservations for this network (for display)
@@ -45,6 +45,7 @@ type IPAMReport struct {
 // (most specific), mirroring routing; IPs in no known network are unassigned.
 func BuildIPAM(networks []Network, hosts []Host, reservations []Reservation) IPAMReport {
 	used, unassigned := attribute(networks, hosts, -1)
+	allocated := allocatedHostIPs(hosts)
 	// Group once for the full report; rescanning every reservation for every
 	// network makes otherwise small subnet reports quadratic in inventory size.
 	byNetwork := make(map[int64][]Reservation, len(networks))
@@ -58,7 +59,7 @@ func BuildIPAM(networks []Network, hosts []Host, reservations []Reservation) IPA
 	}
 	report := IPAMReport{Unassigned: sortAllocs(unassigned)}
 	for i, n := range networks {
-		report.Networks = append(report.Networks, buildUsage(n, sortAllocs(used[i]), byNetwork[n.ID]))
+		report.Networks = append(report.Networks, buildUsage(n, sortAllocs(used[i]), byNetwork[n.ID], allocated))
 	}
 	return report
 }
@@ -84,7 +85,7 @@ func BuildNetworkUsage(targetID int64, networks []Network, hosts []Host, reserva
 	// only the target's allocations are collected — no slices are built for the
 	// networks we are about to discard.
 	used, _ := attribute(networks, hosts, targetIdx)
-	return buildUsage(networks[targetIdx], sortAllocs(used[targetIdx]), reservationsFor(targetID, reservations)), true
+	return buildUsage(networks[targetIdx], sortAllocs(used[targetIdx]), reservationsFor(targetID, reservations), allocatedHostIPs(hosts)), true
 }
 
 // attribute assigns each host IP to the index of the network containing it with
@@ -129,6 +130,21 @@ func attribute(networks []Network, hosts []Host, onlyIdx int) (map[int][]Allocat
 	return used, unassigned
 }
 
+// allocatedHostIPs keeps next-free suggestions safe across overlapping networks.
+// Attribution and capacity remain local to the most-specific subnet, but an
+// address used by a child subnet (or an equal-prefix winner) is not a free choice.
+func allocatedHostIPs(hosts []Host) map[string]bool {
+	allocated := make(map[string]bool)
+	for _, host := range hosts {
+		for _, raw := range host.IPs {
+			if ip := net.ParseIP(raw); ip != nil {
+				allocated[ip.String()] = true
+			}
+		}
+	}
+	return allocated
+}
+
 // reservationsFor returns the reservations that belong to network id.
 func reservationsFor(id int64, reservations []Reservation) []Reservation {
 	var out []Reservation
@@ -142,7 +158,7 @@ func reservationsFor(id int64, reservations []Reservation) []Reservation {
 
 // buildUsage computes the derived stats for one network from its (already
 // IP-sorted) allocations.
-func buildUsage(n Network, used []Allocation, reservations []Reservation) NetworkUsage {
+func buildUsage(n Network, used []Allocation, reservations []Reservation, allocated map[string]bool) NetworkUsage {
 	u := NetworkUsage{Network: n, Used: used, Reservations: reservations}
 
 	byIP := map[string][]Allocation{}
@@ -214,7 +230,7 @@ func buildUsage(n Network, used []Allocation, reservations []Reservation) Networ
 		if u.FreeCount = u.TotalUsable - len(taken) - reservedCount; u.FreeCount < 0 {
 			u.FreeCount = 0
 		}
-		u.NextFree = nextFree(ipn, taken, reserved)
+		u.NextFree = nextFree(ipn, taken, reserved, allocated)
 	}
 	return u
 }
@@ -229,12 +245,13 @@ func reservesEnds(ipn *net.IPNet) bool {
 	return ipn.IP.To4() != nil && bits-ones >= 2
 }
 
-// nextFree returns the lowest usable address in ipn not present in taken, or ""
-// if the subnet is full or larger than 2^maxEnumerableHostBits addresses. It
+// nextFree returns the lowest usable address in ipn absent from taken and all
+// host allocations and outside reservations, or "" if no candidate exists or
+// the subnet is larger than 2^maxEnumerableHostBits addresses. It
 // walks addresses in place rather than materializing the whole range, so a large
 // (but enumerable) subnet does not allocate one net.IP per address just to find
 // the first hole.
-func nextFree(ipn *net.IPNet, taken map[string]bool, reserved ipRanges) string {
+func nextFree(ipn *net.IPNet, taken map[string]bool, reserved ipRanges, allocated map[string]bool) string {
 	ones, bits := ipn.Mask.Size()
 	if bits-ones > maxEnumerableHostBits {
 		return ""
@@ -257,8 +274,8 @@ func nextFree(ipn *net.IPNet, taken map[string]bool, reserved ipRanges) string {
 		if excludeEnds && cur.Equal(broadcast) {
 			break // reached the reserved broadcast address
 		}
-		if !taken[cur.String()] && !reserved.contains(cur) {
-			return cur.String()
+		if candidate := cur.String(); !taken[candidate] && !allocated[candidate] && !reserved.contains(cur) {
+			return candidate
 		}
 		incIP(cur)
 	}

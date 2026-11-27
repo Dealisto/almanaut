@@ -28,9 +28,10 @@ type elevationOccupant struct {
 
 // elevationSection is the display-ready rack elevation for the detail page.
 type elevationSection struct {
-	UHeight   int
-	Units     []elevationUnit
-	Occupants []elevationOccupant
+	UHeight            int
+	Units              []elevationUnit
+	Occupants          []elevationOccupant
+	HasPlacementIssues bool
 }
 
 // buildElevationSection computes the elevation for one rack from every host and
@@ -85,6 +86,7 @@ func buildElevationSection(rack domain.Rack, hosts []domain.Host, hardware []dom
 		cp := min(max(o.pos, 1), rackHeight)
 		ctop := min(max(top, cp), rackHeight)
 		span := ctop - cp + 1
+		sec.HasPlacementIssues = sec.HasPlacementIssues || oob || overlap
 		sec.Occupants = append(sec.Occupants, elevationOccupant{
 			Label:        o.label,
 			Path:         o.path,

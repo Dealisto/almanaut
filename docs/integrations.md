@@ -33,6 +33,10 @@ accepted it. When a pass times out, the next pass starts with the next eligible
 item rather than repeatedly blocking behind the same alert. This rotation is
 kept in memory and resets on restart.
 
+Before each delivery, the item is read again so a renewal or deletion while
+earlier alerts were being sent does not trigger an obsolete queued alert.
+The refreshed deadline and label are used if the item is still due.
+
 Notification URLs must point directly to their final ntfy or Discord endpoint.
 HTTP redirects are treated as failed deliveries, including redirects that
 preserve the POST method; this prevents a redirected request from being mistaken
@@ -101,6 +105,14 @@ Things to know:
   without 2FA.
 - Only monitors that almanaut itself created are ever touched — monitors you
   made by hand in Kuma are left alone.
+- Editing a managed monitor preserves unrelated settings, including the exact
+  numeric values supplied by Kuma. Invalid or ambiguous monitor IDs fail the
+  synchronization instead of creating an unreliable mapping.
+- Connection and monitor-operation errors redact the configured credentials and
+  endpoint path, including credentials reflected after login. Malformed
+  acknowledgements omit the response payload; refusal messages are redacted
+  before truncation so long secrets cannot leak a partial value.
+  Malformed login acknowledgements are reported without their raw contents.
 - A whole-inventory YAML import does not itself trigger a sync — use **Sync
   now** on `/kuma` afterwards.
 - If a create's acknowledgment is lost mid-flight (e.g. Kuma restarting during

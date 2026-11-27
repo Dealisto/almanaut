@@ -69,12 +69,12 @@ func (c *discordClient) Send(ctx context.Context, n Notification) error {
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("build discord request: %w", redact.Error(err))
+		return fmt.Errorf("build discord request: %w", redact.ErrorWithURL(err, c.url))
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("post discord: %w", redact.Error(err)) // the URL holds the webhook token
+		return fmt.Errorf("post discord: %w", redact.ErrorWithURL(err, c.url))
 	}
 	defer resp.Body.Close()
 	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))

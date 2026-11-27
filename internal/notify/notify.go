@@ -116,6 +116,35 @@ func (n *Notifier) gather(now time.Time) ([]Item, error) {
 	return items, nil
 }
 
+// current refreshes a queued candidate after earlier network deliveries. Its
+// deadline or label may have changed, or the entity may have been deleted.
+// Keep the same domain cutoff rules as gather without holding a transaction
+// across notification I/O.
+func (n *Notifier) current(key Key, now time.Time) (Item, bool, error) {
+	switch key.Kind {
+	case KindCertificate:
+		c, err := n.certs.Get(key.ID)
+		if err != nil {
+			return Item{}, false, err
+		}
+		return Item{Kind: key.Kind, ID: key.ID, Label: c.Subject, Date: c.ExpiresOn}, len(domain.ExpiringSoon([]domain.Certificate{c}, now, n.withinDays)) != 0, nil
+	case KindHardware:
+		h, err := n.hw.Get(key.ID)
+		if err != nil {
+			return Item{}, false, err
+		}
+		return Item{Kind: key.Kind, ID: key.ID, Label: h.Name, Date: h.WarrantyEnd}, len(domain.WarrantyExpiring([]domain.Hardware{h}, now, n.withinDays)) != 0, nil
+	case KindSubscription:
+		s, err := n.subs.Get(key.ID)
+		if err != nil {
+			return Item{}, false, err
+		}
+		return Item{Kind: key.Kind, ID: key.ID, Label: s.Name, Date: s.RenewalDate}, len(domain.RenewalsDue([]domain.Subscription{s}, now, n.withinDays)) != 0, nil
+	default:
+		return Item{}, false, fmt.Errorf("unknown notification kind %q", key.Kind)
+	}
+}
+
 // Run performs one full pass: notify newly-expiring items, clear items that are
 // no longer expiring. A single failed send is logged and skipped (its state is
 // left unmarked so it retries next pass); it does not abort the pass.
@@ -167,8 +196,25 @@ func (n *Notifier) Run(ctx context.Context, now time.Time) error {
 		if err := ctx.Err(); err != nil {
 			return errors.Join(runErr, err)
 		}
-		it := toNotify[(start+i)%len(toNotify)]
+		candidate := toNotify[(start+i)%len(toNotify)]
 		n.next = toNotify[(start+i+1)%len(toNotify)].Key()
+		it, expiring, err := n.current(candidate.Key(), now)
+		if errors.Is(err, store.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			runErr = errors.Join(runErr, fmt.Errorf("refresh %s %d notification: %w", candidate.Kind, candidate.ID, err))
+			continue
+		}
+		if !expiring {
+			continue
+		}
+		if date, notified := sent[it.Key()]; notified && strings.TrimSpace(date) == strings.TrimSpace(it.Date) {
+			continue // an edit restored the deadline that was already notified
+		}
+		if err := ctx.Err(); err != nil {
+			return errors.Join(runErr, err)
+		}
 		if err := n.sender.Send(ctx, message(it, now)); err != nil {
 			log.Printf("notify: send %s %d: %v", it.Kind, it.ID, err)
 			runErr = errors.Join(runErr, fmt.Errorf("send %s %d notification: %w", it.Kind, it.ID, err))

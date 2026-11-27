@@ -29,6 +29,10 @@
 {{end}}
 {{end}}
 
+{{define "listpageempty"}}
+{{icon "search"}}<strong>No records on this page.</strong><p>Matching records are available on earlier pages.</p><a class="btn" href="{{.FirstURL}}">Return to the first page</a>
+{{end}}
+
 {{define "pagination"}}
 <nav class="pagination" aria-label="Pagination">
   <span>Showing {{.From}}–{{.To}} of {{.Total}} records · Page {{.Page}} of {{.Pages}}</span>

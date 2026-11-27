@@ -961,7 +961,7 @@ func New(cfg Config) http.Handler {
 			r.Get("/history", history(cat, changelog))
 			r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
 			r.Get("/health-report", healthReport(repos, relationships, cat, changelog, cfg.StaleAfterDays))
-			r.Post("/health-report/acknowledge", acknowledgeStale(cat, changelog))
+			r.Post("/health-report/acknowledge", acknowledgeStale(cat, changelog, db))
 			r.Get("/search", searchEntities(cat, db))
 			r.Get("/api/docs", apiDocsPage(resources, cfg.Version))
 			r.Get("/data", showData(cat))
@@ -1340,9 +1340,11 @@ func removeTag(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 		}
 		entityType := req.FormValue("entity_type")
 		entityID, err := strconv.ParseInt(req.FormValue("entity_id"), 10, 64)
-		if err != nil {
+		_, registered := cat.resource(entityType)
+		if err != nil || entityID <= 0 || !registered {
 			// The tag is gone; with no valid entity to return to, fall back to the
-			// tag overview rather than redirecting to a bogus "/type/0".
+			// overview. Never let an unknown type become a URL: a leading slash
+			// or backslash could turn the fallback path into an external redirect.
 			http.Redirect(w, req, "/tags", http.StatusSeeOther)
 			return
 		}

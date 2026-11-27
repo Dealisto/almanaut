@@ -35,6 +35,15 @@
     check(`${modifier} click retains browser behavior`, prevented === false && location.hash === "#connections");
   }
   tabs[1].focus();
+  for (const [modifier, key] of [["altKey", "ArrowLeft"], ["altKey", "ArrowRight"], ["ctrlKey", "Home"], ["metaKey", "ArrowLeft"]]) {
+    const event = new KeyboardEvent("keydown", {key, [modifier]: true, bubbles: true, cancelable: true});
+    tabs[1].dispatchEvent(event);
+    check(`${modifier} ${key} retains browser navigation`, !event.defaultPrevented &&
+      document.activeElement === tabs[1] && location.hash === "#connections");
+    // Reset between cases so a failure does not obscure the next assertion.
+    tabs[1].click();
+    tabs[1].focus();
+  }
   tabs[1].dispatchEvent(new KeyboardEvent("keydown", {key: "End", bubbles: true, cancelable: true}));
   check("End selects and focuses the last tab", document.activeElement === tabs[2] && !panels[2].hidden);
   tabs[2].dispatchEvent(new KeyboardEvent("keydown", {key: "ArrowRight", bubbles: true, cancelable: true}));
@@ -80,7 +89,19 @@
     const label = doc.querySelector('input[name="ids"]')?.getAttribute("aria-label");
     check(`${list} selection identifies the record and escapes its name`, label === expected &&
       !doc.querySelector("script:not([src])"), `label=${label}`);
+    const query = new URLSearchParams({q: "Browser", sort: "id", dir: "desc", page: "999", per_page: "1"});
+    const outOfRange = await page(`/${list}?${query}`);
+    const emptyState = outOfRange.querySelector(".empty");
+    const first = emptyState?.querySelector("a");
+    const firstURL = first && new URL(first.getAttribute("href"), location.href);
+    check(`${list} out-of-range state preserves the current filters`, emptyState?.textContent.includes("No records on this page.") &&
+      firstURL?.pathname === `/${list}` && firstURL.searchParams.get("q") === "Browser" &&
+      firstURL.searchParams.get("sort") === "id" && firstURL.searchParams.get("dir") === "desc" &&
+      firstURL.searchParams.get("per_page") === "1" && firstURL.searchParams.get("page") === "1");
   }
+  const filteredEmpty = await page("/hosts?q=missing-8dd019e4");
+  check("empty inventory filters remain distinct from an out-of-range page", filteredEmpty.querySelector(".empty").textContent.includes("No matching records.") &&
+    filteredEmpty.querySelector(".empty a").getAttribute("href") === "/hosts");
   const beyond = await page("/search?q=Browser&page=999&per_page=1");
   const resultsPanel = beyond.querySelector(".search-results");
   const first = resultsPanel.querySelector("a");

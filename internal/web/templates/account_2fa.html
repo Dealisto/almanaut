@@ -22,6 +22,6 @@
   <div class="panel-head"><h2>Add a second sign-in step</h2><span class="badge">Not enabled</span></div><p>Use an authenticator app to generate a code when you sign in. You will receive recovery codes after setup.</p><form method="post" action="/account/2fa/setup">{{ csrfField }}<button class="btn btn-primary" type="submit">Set up 2FA</button></form>
 {{end}}
 </section>
-<aside class="help-card"><h2>Keep a way back in</h2><p>Store your recovery codes somewhere you can access without signing in to Almanaut. Each code works once if your authenticator is unavailable.</p><a class="text-link" href="/account/password">Manage your password {{icon "arrow"}}</a></aside>
+<aside class="help-card"><h2>Keep a way back in</h2><p>Store your recovery codes somewhere you can access without signing in to Almanaut. Each code works once if your authenticator is unavailable.</p><p>Enabling or disabling two-factor authentication signs you out everywhere else. You stay signed in here.</p><a class="text-link" href="/account/password">Manage your password {{icon "arrow"}}</a></aside>
 </div>
 {{end}}

@@ -11,6 +11,8 @@ package redact
 import (
 	"fmt"
 	"net/url"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -49,6 +51,19 @@ func ErrorWithSecrets(err error, secrets ...string) error {
 	if err == nil {
 		return nil
 	}
+	// Replacer prefers the first match, so a short path component must not
+	// expose the suffix of a longer credential sharing that prefix. Copy the
+	// caller's slice before sorting; it may be reused by concurrent requests.
+	secrets = append([]string(nil), secrets...)
+	for _, secret := range secrets {
+		// net/http quotes malformed response lines with %q. Their escaped
+		// form can differ from both the raw credential and its URL encoding.
+		quoted := strconv.Quote(secret)
+		if escaped := quoted[1 : len(quoted)-1]; escaped != secret {
+			secrets = append(secrets, escaped)
+		}
+	}
+	sort.Slice(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
 	pairs := make([]string, 0, len(secrets)*2)
 	for _, secret := range secrets {
 		if secret != "" {
@@ -56,6 +71,33 @@ func ErrorWithSecrets(err error, secrets ...string) error {
 		}
 	}
 	return &secretError{err: Error(err), replacer: strings.NewReplacer(pairs...)}
+}
+
+// ErrorWithURL also hides endpoint credentials reflected by a peer in protocol
+// errors. A malformed HTTP response can echo just a path segment or query value,
+// independently of the request URL that Error already sanitizes.
+func ErrorWithURL(err error, endpoint string, secrets ...string) error {
+	if err == nil {
+		return nil
+	}
+	values := append([]string{endpoint}, secrets...)
+	if u, parseErr := url.Parse(endpoint); parseErr == nil {
+		values = append(values, u.Path, u.EscapedPath(), u.RawQuery, u.Fragment)
+		for _, segment := range strings.Split(u.EscapedPath(), "/") {
+			decoded, _ := url.PathUnescape(segment)
+			values = append(values, segment, decoded)
+		}
+		for _, query := range u.Query() {
+			for _, value := range query {
+				values = append(values, value, url.QueryEscape(value))
+			}
+		}
+		if u.User != nil {
+			password, _ := u.User.Password()
+			values = append(values, u.User.String(), u.User.Username(), password)
+		}
+	}
+	return ErrorWithSecrets(err, values...)
 }
 
 type secretError struct {

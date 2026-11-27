@@ -47,6 +47,9 @@ built-in subcommand that probes the local `/healthz` and exits non-zero when
 unhealthy (the distroless image has no shell, so the binary is its own probe).
 Only a direct HTTP 200 response counts as healthy. Redirects fail the probe,
 even if their destination is a working login page.
+The probe uses `ALMANAUT_ADDR`, including explicit IPv6 addresses with an
+interface scope such as `[fe80::1%eth0]:8080`. Wildcard listeners are probed
+through loopback, and local probes bypass HTTP proxies.
 
 To stamp a version into a build, pass it at build time:
 

@@ -17,10 +17,13 @@ import (
 // fakeKuma is an in-process Uptime Kuma lookalike speaking just enough
 // engine.io v4 / socket.io over websocket for the client and syncer tests.
 type fakeKuma struct {
-	t                   *testing.T
-	srv                 *httptest.Server
-	user, pass          string
-	monitorListOverride string // optional raw JSON payload for protocol validation tests
+	t                    *testing.T
+	srv                  *httptest.Server
+	user, pass           string
+	monitorListOverride  string               // optional raw JSON payload for protocol validation tests
+	loginAckOverride     string               // optional raw login acknowledgement
+	operationAckOverride string               // optional acknowledgement for monitor mutations
+	editPayload          chan json.RawMessage // optional capture before decoding
 
 	mu       sync.Mutex
 	monitors map[int64]map[string]any
@@ -155,9 +158,17 @@ func (f *fakeKuma) handleEvent(msg string, write func(string)) {
 			write("43" + ackID + "[" + result + "]")
 		}
 	}
+	if event != "login" && f.operationAckOverride != "" {
+		ack(f.operationAckOverride)
+		return
+	}
 
 	switch event {
 	case "login":
+		if f.loginAckOverride != "" {
+			ack(f.loginAckOverride)
+			return
+		}
 		var creds struct{ Username, Password string }
 		_ = json.Unmarshal(arr[1], &creds)
 		if creds.Username != f.user || creds.Password != f.pass {
@@ -199,6 +210,9 @@ func (f *fakeKuma) handleEvent(msg string, write func(string)) {
 		f.mu.Unlock()
 		ack(fmt.Sprintf(`{"ok":true,"monitorID":%d}`, id))
 	case "editMonitor":
+		if f.editPayload != nil {
+			f.editPayload <- append(json.RawMessage(nil), arr[1]...)
+		}
 		var m map[string]any
 		_ = json.Unmarshal(arr[1], &m)
 		id := int64(m["id"].(float64))

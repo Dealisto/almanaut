@@ -20,12 +20,3 @@ func decodeInventory(r io.Reader, dst any) error {
 	}
 	return json.Unmarshal(body, dst)
 }
-
-// discoveryRequestError preserves the cause while exposing a sanitized message.
-type discoveryRequestError struct {
-	err     error
-	message string
-}
-
-func (e *discoveryRequestError) Error() string { return e.message }
-func (e *discoveryRequestError) Unwrap() error { return e.err }

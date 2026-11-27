@@ -2,6 +2,7 @@ package web
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -85,7 +86,12 @@ func importData(db *sql.DB, cat entityCatalog) http.HandlerFunc {
 			return
 		}
 		if err := store.Import(db, snap); err != nil {
-			render(w, req, "data.html", dataPageData{Title: "Data", Types: cat.importTypes(), Error: err.Error()})
+			var validation *store.ImportValidationError
+			if errors.As(err, &validation) {
+				render(w, req, "data.html", dataPageData{Title: "Data", Types: cat.importTypes(), Error: validation.Error()})
+			} else {
+				serverError(w, req, err)
+			}
 			return
 		}
 		http.Redirect(w, req, "/data?imported=1", http.StatusSeeOther)

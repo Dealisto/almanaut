@@ -5,7 +5,7 @@ package agentapi
 
 import (
 	"fmt"
-	"net"
+	"net/netip"
 	"sort"
 	"strings"
 )
@@ -110,23 +110,24 @@ func (r Report) ReportedIPs() []string {
 	return out
 }
 
-// sanitizeReportedIP strips a CIDR suffix and an IPv6 zone from a, then
-// reports the bare address if it is global unicast (including private ranges).
+// sanitizeReportedIP validates the address, optional CIDR suffix and IPv6 zone,
+// then returns a bare global-unicast address (including private ranges).
 func sanitizeReportedIP(a string) (string, bool) {
 	a = strings.TrimSpace(a)
-	if a == "" {
+	address, bits, hasPrefix := strings.Cut(a, "/")
+	ip, err := netip.ParseAddr(address)
+	if err != nil {
 		return "", false
 	}
-	if idx := strings.IndexByte(a, '/'); idx >= 0 {
-		a = a[:idx]
+	ip = ip.WithZone("")
+	if hasPrefix {
+		// Validate the original address family before unmapping IPv4. A
+		// mapped address can legitimately carry a 128-bit prefix length.
+		if _, err := netip.ParsePrefix(ip.String() + "/" + bits); err != nil {
+			return "", false
+		}
 	}
-	if idx := strings.IndexByte(a, '%'); idx >= 0 {
-		a = a[:idx]
-	}
-	ip := net.ParseIP(a)
-	if ip == nil {
-		return "", false
-	}
+	ip = ip.Unmap()
 	if !ip.IsGlobalUnicast() {
 		return "", false
 	}

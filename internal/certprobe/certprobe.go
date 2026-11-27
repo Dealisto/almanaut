@@ -199,9 +199,12 @@ func (p *Prober) ProbeOne(ctx context.Context, cert domain.Certificate) error {
 		}
 		serial := fmt.Sprintf("%x", leaf.SerialNumber)
 		issuer := leaf.Issuer.String()
-		sans := leaf.DNSNames
+		sans := append([]string(nil), leaf.DNSNames...)
+		for _, ip := range leaf.IPAddresses {
+			sans = append(sans, ip.String())
+		}
 		notAfter := leaf.NotAfter.UTC().Format(domain.DateLayout)
-		mismatches := domain.ComputeCertMismatches(current.Subject, prev, serial, issuer, sans)
+		mismatches := domain.ComputeCertMismatches(current.Subject, prev, serial, issuer, leaf.DNSNames, leaf.IPAddresses...)
 		current.ExpiresOn = notAfter
 		current.Issuer = issuer
 		if err := certs.Update(current); err != nil {
