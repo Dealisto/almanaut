@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -43,7 +44,7 @@ func showData(cat entityCatalog) http.HandlerFunc {
 
 func exportData(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		snap, err := store.Export(db)
+		snap, err := store.ExportContext(req.Context(), db)
 		if err != nil {
 			serverError(w, req, err)
 			return
@@ -70,7 +71,7 @@ func importData(db *sql.DB, cat entityCatalog) http.HandlerFunc {
 				_ = req.MultipartForm.RemoveAll()
 			}
 		}()
-		if req.FormValue("confirm") == "" {
+		if req.PostFormValue("confirm") == "" {
 			http.Error(w, "you must confirm that all data will be replaced", http.StatusBadRequest)
 			return
 		}
@@ -80,12 +81,16 @@ func importData(db *sql.DB, cat entityCatalog) http.HandlerFunc {
 			return
 		}
 		defer file.Close()
-		snap, err := decodeSnapshot(file)
+		snap, err := decodeSnapshot(contextReader{ctx: req.Context(), Reader: file})
 		if err != nil {
+			if req.Context().Err() != nil {
+				serverError(w, req, req.Context().Err())
+				return
+			}
 			render(w, req, "data.html", dataPageData{Title: "Data", Types: cat.importTypes(), Error: "invalid YAML: " + err.Error()})
 			return
 		}
-		if err := store.Import(db, snap); err != nil {
+		if err := store.ImportContext(req.Context(), db, snap); err != nil {
 			var validation *store.ImportValidationError
 			if errors.As(err, &validation) {
 				render(w, req, "data.html", dataPageData{Title: "Data", Types: cat.importTypes(), Error: validation.Error()})
@@ -134,13 +139,13 @@ func importCSV(cat entityCatalog, deps handlerDeps) http.HandlerFunc {
 				_ = req.MultipartForm.RemoveAll()
 			}
 		}()
-		typ := req.FormValue("type")
+		typ := req.PostFormValue("type")
 		rs, ok := cat.resource(typ)
 		if !ok {
 			http.Error(w, "unknown entity type", http.StatusBadRequest)
 			return
 		}
-		if req.FormValue("confirm") == "" {
+		if req.PostFormValue("confirm") == "" {
 			http.Error(w, "you must confirm the import", http.StatusBadRequest)
 			return
 		}
@@ -151,7 +156,7 @@ func importCSV(cat entityCatalog, deps handlerDeps) http.HandlerFunc {
 		}
 		defer file.Close()
 
-		created, updated, rowErrs, err := rs.importCSV(deps, file, actor(req))
+		created, updated, rowErrs, err := rs.importCSVContext(req.Context(), deps, file, actor(req))
 		if err != nil {
 			serverError(w, req, err)
 			return
@@ -164,4 +169,18 @@ func importCSV(cat entityCatalog, deps handlerDeps) http.HandlerFunc {
 		}
 		http.Redirect(w, req, fmt.Sprintf("/data?csv_imported=1&created=%d&updated=%d", created, updated), http.StatusSeeOther)
 	}
+}
+
+// contextReader also checks cancellation when a parsed multipart upload is
+// already buffered in memory and its underlying reader has no request context.
+type contextReader struct {
+	ctx context.Context
+	io.Reader
+}
+
+func (r contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.Reader.Read(p)
 }

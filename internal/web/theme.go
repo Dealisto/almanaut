@@ -74,6 +74,13 @@ func setTheme(forceSecure bool) http.HandlerFunc {
 			SameSite: http.SameSiteLaxMode,
 			MaxAge:   int((365 * 24 * time.Hour).Seconds()),
 		})
+		// Enhanced clients can update appearance without replacing a document
+		// containing unsaved inputs. Native forms keep their redirect behavior.
+		if r.Header.Get("Accept") == "application/json" {
+			w.Header().Set("Cache-Control", "no-store")
+			writeJSON(w, http.StatusOK, map[string]string{"theme": v})
+			return
+		}
 		target := safeRedirectTarget(r)
 		if next := r.FormValue("return_to"); next != "" {
 			target = safeNext(next)

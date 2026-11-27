@@ -129,6 +129,12 @@ Configure the final server URL, including its correct HTTP or HTTPS scheme.
 The agent refuses redirects so reports and bearer tokens stay at the configured
 endpoint.
 
+If reading an error response is interrupted, times out, or ends prematurely,
+the agent reports a transient failure (exit `3`) even if `400` or `409` headers
+were received. Diagnostics retain the HTTP status and underlying read error
+without exposing a partial response body. Complete responses retain their
+normal rejection or conflict classification.
+
 The URL must have a hostname, a port between 1 and 65535 when specified, and
 no embedded username or password. Supply authentication through `token` or
 `ALMANAUT_AGENT_TOKEN`; tokens must contain only printable ASCII without whitespace.

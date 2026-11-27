@@ -95,7 +95,7 @@ func agentReport(d agentDeps) http.HandlerFunc {
 			return
 		}
 
-		raw, ok := readAPIBody(w, req, "could not read body")
+		raw, req, ok := readAPIBody(w, req, "could not read body", domain.ScopeAgent)
 		if !ok {
 			return
 		}

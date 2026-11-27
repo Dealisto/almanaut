@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -782,7 +783,7 @@ func New(cfg Config) http.Handler {
 	totp := store.NewTOTPRepo(db)
 	tokenUses := newTokenUseLog()
 	ssoLog := newTokenUseLog()
-	cat := entityCatalog{resources: resources}
+	cat := entityCatalog{db: db, resources: resources}
 	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, customFields: customFields, attachments: attachments, db: db, webhooks: cfg.Webhooks}
 	r := chi.NewRouter()
 	logger := cfg.Logger
@@ -866,6 +867,9 @@ func New(cfg Config) http.Handler {
 		// unsafe request, so an oversize upload is rejected up front.
 		r.Use(limitBody)
 		r.Use(csrfProtect(cfg.SecureCookies))
+		if cfg.AuthEnabled {
+			r.Use(refreshUIAuth(users, sessions))
+		}
 		// Load the user's saved views for the sidebar on every UI page.
 		r.Use(savedViewsMiddleware(savedViews, cat))
 
@@ -878,14 +882,14 @@ func New(cfg Config) http.Handler {
 
 		// Self-service: available to every authenticated user regardless of role.
 		if cfg.AuthEnabled {
-			r.Post("/logout", logout(sessions, authEvents, cfg.SecureCookies))
+			r.Post("/logout", logout(db, sessions, totp, authEvents, cfg.SecureCookies))
 			r.Get("/account/password", changePasswordForm)
 			r.Post("/account/password", changePassword(users, sessions, db, authEvents))
 			r.Get("/account/tokens", listTokens(tokens))
-			r.Post("/account/tokens", createToken(tokens))
-			r.Post("/account/tokens/{id}/delete", deleteToken(tokens))
-			r.Post("/account/tokens/{id}/rotate", rotateToken(db, tokens))
-			r.Post("/account/tokens/{id}/finish-rotation", finishTokenRotation(db, tokens))
+			r.Post("/account/tokens", createToken(tokens, authEvents))
+			r.Post("/account/tokens/{id}/delete", deleteToken(tokens, authEvents))
+			r.Post("/account/tokens/{id}/rotate", rotateToken(db, tokens, authEvents))
+			r.Post("/account/tokens/{id}/finish-rotation", finishTokenRotation(db, tokens, authEvents))
 			r.Get("/account/2fa", account2FA(totp))
 			r.Post("/account/2fa/setup", setup2FA(totp))
 			r.Post("/account/2fa/confirm", confirm2FA(totp, db))
@@ -902,7 +906,7 @@ func New(cfg Config) http.Handler {
 				r.Post("/users/{id}/delete", deleteUser(users, db, authEvents))
 				r.Get("/audit", auditLogPage(authEvents, users))
 				r.Post("/users/{id}/password", resetUserPassword(users, sessions, db, authEvents))
-				r.Post("/users/{id}/role", updateUserRole(users, db))
+				r.Post("/users/{id}/role", updateUserRole(users, db, authEvents))
 				r.Post("/users/{id}/2fa/reset", resetUser2FA(totp, sessions, authEvents, users, db))
 
 				r.Get("/webhooks", listWebhooks(webhooks, webhookOutbox))
@@ -940,7 +944,7 @@ func New(cfg Config) http.Handler {
 			}
 			r.Post("/tags", addTag(tags, cat, db))
 			r.Post("/tags/delete", removeTag(tags, cat))
-			r.Get("/tags", tagsOverview(tags, cat))
+			r.Get("/tags", tagsOverview(db, tags, cat))
 
 			r.Get("/host-types", hostTypesPage(hostTypes))
 			r.Post("/host-types", createHostType(hostTypes))
@@ -1014,7 +1018,7 @@ func New(cfg Config) http.Handler {
 		}
 		r.Get("/api/host-types", hostTypesJSON(hostTypes))
 		r.Get("/api/search", apiSearch(cat, db))
-		r.Get("/api/relationships", apiRelationships(relationships))
+		r.Get("/api/relationships", apiRelationships(db))
 		r.Get("/api/openapi.json", openAPISpec(resources, cfg.Version))
 		// /metrics is a GET: reachable with a bearer API token (Prometheus) or a
 		// session cookie (logged-in browser). Not under CSRF; no creds → 401.
@@ -1056,7 +1060,7 @@ type impactPageData struct {
 
 func impactView(rels *store.RelationshipRepo, cat entityCatalog) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		opts, err := cat.options()
+		opts, err := cat.optionsContext(req.Context())
 		if err != nil {
 			serverError(w, req, err)
 			return
@@ -1147,10 +1151,15 @@ type relationshipsPageData struct {
 	Options       []entityOption
 	Kinds         []string
 	Error         string
+	Draft         relationshipDraft
 }
 
+// Keep submitted references as strings: an invalid or deleted endpoint must
+// remain visible instead of silently selecting the first available entity.
+type relationshipDraft struct{ From, Kind, To string }
+
 func renderRelationships(w http.ResponseWriter, r *http.Request, rels *store.RelationshipRepo, cat entityCatalog, errMsg string) {
-	opts, err := cat.options()
+	opts, err := cat.optionsContext(r.Context())
 	if err != nil {
 		serverError(w, r, err)
 		return
@@ -1170,9 +1179,13 @@ func renderRelationships(w http.ResponseWriter, r *http.Request, rels *store.Rel
 			ToLabel:   labelOrFallback(labels, rel.ToType, rel.ToID),
 		})
 	}
+	var draft relationshipDraft
+	if errMsg != "" && r.Method == http.MethodPost {
+		draft = relationshipDraft{From: r.FormValue("from"), Kind: r.FormValue("kind"), To: r.FormValue("to")}
+	}
 	render(w, r, "relationships.html", relationshipsPageData{
 		Title: "Relationships", Relationships: views, Options: opts,
-		Kinds: domain.RelationshipKinds, Error: errMsg,
+		Kinds: domain.RelationshipKinds, Error: errMsg, Draft: draft,
 	})
 }
 
@@ -1248,12 +1261,17 @@ type tagEntity struct {
 
 type tagsOverviewData struct {
 	Title    string
-	Counts   []store.TagCount
+	Counts   []tagCountView
 	Selected string
 	Entities []tagEntity
 }
 
-func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
+type tagCountView struct {
+	store.TagCount
+	URL string
+}
+
+func tagsOverview(db *sql.DB, tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Decide between the tag cloud and a drilldown on whether a name was
 		// actually requested, not on its normalized form — otherwise a query
@@ -1265,28 +1283,25 @@ func tagsOverview(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 				serverError(w, req, err)
 				return
 			}
-			render(w, req, "tags_overview.html", tagsOverviewData{Title: "Tags", Counts: counts})
+			views := make([]tagCountView, 0, len(counts))
+			for _, count := range counts {
+				// The query accepts raw tag input. Escape a stored leading '#'
+				// so normalizing that input once preserves the canonical name.
+				queryName := count.Name
+				if strings.HasPrefix(queryName, "#") {
+					queryName = "#" + queryName
+				}
+				views = append(views, tagCountView{TagCount: count, URL: "/tags?name=" + url.QueryEscape(queryName)})
+			}
+			render(w, req, "tags_overview.html", tagsOverviewData{Title: "Tags", Counts: views})
 			return
 		}
 
 		name := domain.NormalizeTag(raw)
-		tagged, err := tags.ListByName(name)
+		entities, err := tagEntities(req.Context(), db, tags, cat, raw)
 		if err != nil {
 			serverError(w, req, err)
 			return
-		}
-		opts, err := cat.options()
-		if err != nil {
-			serverError(w, req, err)
-			return
-		}
-		labels := labelMap(opts)
-		entities := make([]tagEntity, 0, len(tagged))
-		for _, tg := range tagged {
-			entities = append(entities, tagEntity{
-				Label: labelOrFallback(labels, tg.EntityType, tg.EntityID),
-				URL:   cat.path(tg.EntityType, tg.EntityID),
-			})
 		}
 		// Keep the view in drilldown mode (Selected non-empty) even when the
 		// requested name normalizes away, so it shows "no entities" not the cloud.
@@ -1323,7 +1338,7 @@ func addTag(tags *store.TagRepo, cat entityCatalog, db *sql.DB) http.HandlerFunc
 			notFoundOrServerError(w, req, entityType, err)
 			return
 		}
-		http.Redirect(w, req, cat.path(entityType, entityID), http.StatusSeeOther)
+		http.Redirect(w, req, detailReturnPath(req, cat.path(entityType, entityID)), http.StatusSeeOther)
 	}
 }
 
@@ -1348,7 +1363,7 @@ func removeTag(tags *store.TagRepo, cat entityCatalog) http.HandlerFunc {
 			http.Redirect(w, req, "/tags", http.StatusSeeOther)
 			return
 		}
-		http.Redirect(w, req, cat.path(entityType, entityID), http.StatusSeeOther)
+		http.Redirect(w, req, detailReturnPath(req, cat.path(entityType, entityID)), http.StatusSeeOther)
 	}
 }
 

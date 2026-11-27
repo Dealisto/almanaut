@@ -8,16 +8,17 @@
 {{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
 {{ csrfField }}
+<input type="hidden" name="return_to" value="{{.ReturnURL}}">
   <label>Subject<input name="subject" value="{{.Item.Subject}}" placeholder="*.example.com" required></label>
   <label>Issuer<input name="issuer" value="{{.Item.Issuer}}" placeholder="Let's Encrypt"></label>
   <label>Probe target (host:port, optional)<input name="probe_target" value="{{.Item.ProbeTarget}}" placeholder="example.com:443"></label>
-  <label>Expires on<input type="date" name="expires_on" value="{{.Item.ExpiresOn}}" required></label>
+  <label>Expires on<input type="{{dateInputType .Item.ExpiresOn}}" name="expires_on" value="{{.Item.ExpiresOn}}" required></label>
   <label><input type="checkbox" name="auto_renew" {{if .Item.AutoRenew}}checked{{end}}> Auto-renew</label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
   {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
-    <a class="btn" href="/certificates">Cancel</a>
+    <a class="btn" data-list-return href="{{.ReturnURL}}">Cancel</a>
   </div>
 </form>
 {{end}}

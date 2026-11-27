@@ -167,8 +167,8 @@ func TestSendRejectsZeroHostID(t *testing.T) {
 
 func TestServerMessageDoesNotDrainPastTheExcerpt(t *testing.T) {
 	r := strings.NewReader(strings.Repeat("x", maxErrorBody*2))
-	if got := serverMessage(r); got != "(no structured error message)" {
-		t.Fatalf("unstructured response was exposed: %q", got)
+	if got, err := serverMessage(r); got != "(no structured error message)" || err != nil {
+		t.Fatalf("unstructured response was exposed: %q, %v", got, err)
 	}
 	if r.Len() != maxErrorBody {
 		t.Fatalf("read beyond the excerpt: %d bytes remain", r.Len())

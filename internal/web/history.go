@@ -1,7 +1,6 @@
 package web
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -39,19 +38,21 @@ type historyData struct {
 // buildActivityRows turns changelog events into display rows, linking each to
 // its entity's detail page when that entity still exists. Delete/import rows
 // (and rows whose entity is gone) show the frozen label, unlinked.
-func buildActivityRows(cat entityCatalog, events []store.ChangeEvent) ([]historyRow, error) {
-	opts, err := cat.options()
+func buildActivityRows(cat entityCatalog, changelog *store.ChangelogRepo, events []store.ChangeEvent) ([]historyRow, error) {
+	refs := make([]domain.EntityRef, 0, len(events))
+	for _, e := range events {
+		if _, known := cat.resource(e.EntityType); known && e.Action != domain.ActionDelete && e.Action != domain.ActionImport {
+			refs = append(refs, domain.EntityRef{Type: e.EntityType, ID: e.EntityID})
+		}
+	}
+	live, err := changelog.ExistingRefs(refs)
 	if err != nil {
 		return nil, err
-	}
-	live := map[string]bool{}
-	for _, o := range opts {
-		live[o.Value] = true
 	}
 	rows := make([]historyRow, 0, len(events))
 	for _, e := range events {
 		path := ""
-		key := fmt.Sprintf("%s:%d", e.EntityType, e.EntityID)
+		key := domain.EntityRef{Type: e.EntityType, ID: e.EntityID}
 		if e.Action != domain.ActionDelete && e.Action != domain.ActionImport && live[key] {
 			path = cat.path(e.EntityType, e.EntityID)
 		}
@@ -72,7 +73,7 @@ func history(cat entityCatalog, changelog *store.ChangelogRepo) http.HandlerFunc
 			serverError(w, req, err)
 			return
 		}
-		rows, err := buildActivityRows(cat, events)
+		rows, err := buildActivityRows(cat, changelog, events)
 		if err != nil {
 			serverError(w, req, err)
 			return

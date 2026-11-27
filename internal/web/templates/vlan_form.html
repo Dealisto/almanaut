@@ -6,15 +6,17 @@
   </div>
 </div>
 {{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
+{{$vid := integerFormInput .Error "vid" .Item.VID}}
 <form class="stack" method="post" action="{{.Action}}">
 {{ csrfField }}
+<input type="hidden" name="return_to" value="{{.ReturnURL}}">
   <label>Name<input name="name" value="{{.Item.Name}}" required></label>
-  <label>VLAN ID<input type="number" name="vid" min="1" max="4094" value="{{if .Item.VID}}{{.Item.VID}}{{end}}" required></label>
+  <label>VLAN ID<input type="{{$vid.Type}}" inputmode="numeric" name="vid" min="1" max="4094" value="{{if or .Error .Item.VID}}{{$vid.Value}}{{end}}" required></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
   {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
-    <a class="btn" href="/vlans">Cancel</a>
+    <a class="btn" data-list-return href="{{.ReturnURL}}">Cancel</a>
   </div>
 </form>
 {{end}}

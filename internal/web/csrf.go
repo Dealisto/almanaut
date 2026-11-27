@@ -102,10 +102,12 @@ func csrfProtect(forceSecure bool) func(http.Handler) http.Handler {
 					return
 				}
 				// The token alphabet is URL-safe base64 (base64.RawURLEncoding → [A-Za-z0-9-_]),
-				// so r.FormValue's percent-decoding is a no-op vs the raw cookie value.
+				// so r.PostFormValue's percent-decoding is a no-op vs the raw cookie value.
 				// Any future encoding change (e.g. standard base64 with +/=) must reconsider
 				// this comparison path, since form encoding would transform those characters.
-				submitted := r.FormValue(csrfFieldName)
+				// A URL parameter must neither supply a missing token nor override
+				// the submitted token in a multipart form.
+				submitted := r.PostFormValue(csrfFieldName)
 				if submitted == "" || subtle.ConstantTimeCompare([]byte(submitted), []byte(token)) != 1 {
 					http.Error(w, "invalid CSRF token", http.StatusForbidden)
 					return

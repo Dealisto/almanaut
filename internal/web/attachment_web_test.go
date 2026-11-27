@@ -21,7 +21,7 @@ var attachmentHostLinkRE = regexp.MustCompile(`/hosts/(\d+)`)
 // uploadAttachment posts a multipart file to path, with the CSRF field/cookie
 // pair the double-submit check requires. Models the CSV-import test's
 // multipart-builder (internal/web/csvimport_handler_test.go).
-func uploadAttachment(t *testing.T, srv http.Handler, path, filename string, content []byte) *httptest.ResponseRecorder {
+func uploadAttachment(t *testing.T, srv http.Handler, path, filename string, content []byte, fields ...url.Values) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -34,6 +34,15 @@ func uploadAttachment(t *testing.T, srv http.Handler, path, filename string, con
 	}
 	if err := mw.WriteField(csrfFieldName, csrfTestToken); err != nil {
 		t.Fatal(err)
+	}
+	for _, form := range fields {
+		for name, values := range form {
+			for _, value := range values {
+				if err := mw.WriteField(name, value); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
 	}
 	if err := mw.Close(); err != nil {
 		t.Fatal(err)

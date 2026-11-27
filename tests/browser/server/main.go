@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/Dealisto/almanaut/internal/discovery"
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/Dealisto/almanaut/internal/web"
@@ -69,6 +71,7 @@ func run() error {
 		Contacts: store.NewContactRepo(db), Relationships: store.NewRelationshipRepo(db),
 		Tags: store.NewTagRepo(db), VLANs: store.NewVLANRepo(db),
 		Reservations: store.NewReservationRepo(db),
+		Docker:       browserScanner{},
 	}))
 	defer srv.Close()
 	stop := make(chan os.Signal, 1)
@@ -77,4 +80,14 @@ func run() error {
 	fmt.Println(srv.URL)
 	<-stop
 	return nil
+}
+
+// Browser discovery fixtures never connect to a real container engine.
+type browserScanner struct{}
+
+func (browserScanner) Containers(context.Context) ([]discovery.Container, error) {
+	return []discovery.Container{
+		{ID: "browser-first", Name: "Browser first container"},
+		{ID: "browser-second", Name: "Browser second container"},
+	}, nil
 }

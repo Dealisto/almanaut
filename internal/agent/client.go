@@ -63,10 +63,6 @@ func Send(ctx context.Context, hc *http.Client, serverURL, token string, rep age
 		return SendResult{}, fmt.Errorf("post report: %w", safeError(err))
 	}
 	defer resp.Body.Close()
-	message := func() string {
-		return safeError(errors.New(serverMessage(resp.Body))).Error()
-	}
-
 	switch {
 	case resp.StatusCode == http.StatusOK:
 		var res SendResult
@@ -85,34 +81,48 @@ func Send(ctx context.Context, hc *http.Client, serverURL, token string, rep age
 			return SendResult{}, fmt.Errorf("%w: server returned 200 but no host_id at /api/agent/report", ErrRejected)
 		}
 		return res, nil
-	case resp.StatusCode == http.StatusConflict:
-		return SendResult{}, fmt.Errorf("%w: %s", ErrConflict, message())
-	case resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusTooManyRequests:
-		return SendResult{}, fmt.Errorf("server returned %d: %s", resp.StatusCode, message())
 	case resp.StatusCode >= 300 && resp.StatusCode < 400:
 		// Redirect bodies may echo destination URLs containing credentials.
 		return SendResult{}, fmt.Errorf("%w: server redirected the report (status %d); configure the final server URL", ErrRejected, resp.StatusCode)
+	}
+
+	message, err := serverMessage(resp.Body)
+	if err != nil {
+		// A failed read is transient even when error headers were received.
+		// Keep the status as context without losing cancellation or treating
+		// an incomplete response as a permanent CLI rejection/conflict.
+		return SendResult{}, fmt.Errorf("read response (status %d): %w", resp.StatusCode, safeError(err))
+	}
+	message = safeError(errors.New(message)).Error()
+	switch {
+	case resp.StatusCode == http.StatusConflict:
+		return SendResult{}, fmt.Errorf("%w: %s", ErrConflict, message)
+	case resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusTooManyRequests:
+		return SendResult{}, fmt.Errorf("server returned %d: %s", resp.StatusCode, message)
 	case resp.StatusCode >= 400 && resp.StatusCode < 500:
-		return SendResult{}, fmt.Errorf("%w (%d): %s", ErrRejected, resp.StatusCode, message())
+		return SendResult{}, fmt.Errorf("%w (%d): %s", ErrRejected, resp.StatusCode, message)
 	default:
 		// 5xx and anything unexpected is transient: the timer runs again in an
 		// hour, and the next report carries fresh facts anyway.
-		return SendResult{}, fmt.Errorf("server returned %d: %s", resp.StatusCode, message())
+		return SendResult{}, fmt.Errorf("server returned %d: %s", resp.StatusCode, message)
 	}
 }
 
 // serverMessage retains structured API diagnostics without reflecting the
 // request's credentials. HTML and other proxy response bodies are omitted.
-func serverMessage(r io.Reader, secrets ...string) string {
+func serverMessage(r io.Reader, secrets ...string) (string, error) {
 	raw, err := io.ReadAll(io.LimitReader(r, maxErrorBody))
-	if err != nil || len(raw) == 0 {
-		return "(no message)"
+	if err != nil {
+		return "", err
+	}
+	if len(raw) == 0 {
+		return "(no message)", nil
 	}
 	var payload struct {
 		Error string `json:"error"`
 	}
 	if json.Unmarshal(raw, &payload) == nil && payload.Error != "" {
-		return redact.ErrorWithSecrets(errors.New(payload.Error), secrets...).Error()
+		return redact.ErrorWithSecrets(errors.New(payload.Error), secrets...).Error(), nil
 	}
-	return "(no structured error message)"
+	return "(no structured error message)", nil
 }

@@ -3,9 +3,12 @@ package web
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
@@ -93,7 +96,7 @@ func createUser(users *store.UserRepo) http.HandlerFunc {
 	}
 }
 
-func updateUserRole(users *store.UserRepo, db *sql.DB) http.HandlerFunc {
+func updateUserRole(users *store.UserRepo, db *sql.DB, audit *store.AuthEventRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id, ok := userIDParam(w, r)
 		if !ok {
@@ -107,18 +110,28 @@ func updateUserRole(users *store.UserRepo, db *sql.DB) http.HandlerFunc {
 		// Demoting the last admin would leave nobody able to manage users. The
 		// count-check-and-update runs in one transaction so two concurrent
 		// demotions cannot both see a second admin and both proceed.
+		var target domain.User
+		changed := false
 		err := store.WithTx(db, func(tx *sql.Tx) error {
 			ur := users.WithTx(tx)
-			target, err := ur.Get(id)
+			var err error
+			target, err = ur.Get(id)
 			if err != nil {
 				return err
+			}
+			if target.Role == role {
+				return nil
 			}
 			if target.Role == domain.RoleAdmin && role != domain.RoleAdmin {
 				if err := requireAnotherAdmin(ur); err != nil {
 					return err
 				}
 			}
-			return ur.UpdateRole(id, role, nowRFC3339())
+			if err := ur.UpdateRole(id, role, nowRFC3339()); err != nil {
+				return err
+			}
+			changed = true
+			return nil
 		})
 		if errors.Is(err, errLastAdmin) {
 			renderUsers(w, r, users, errLastAdmin.Error())
@@ -127,6 +140,11 @@ func updateUserRole(users *store.UserRepo, db *sql.DB) http.HandlerFunc {
 		if err != nil {
 			notFoundOrServerError(w, r, "user", err)
 			return
+		}
+		if changed {
+			actor, _ := userFrom(r.Context())
+			recordAuth(audit, r, domain.AuthRoleChanged, target.Username, target.ID,
+				fmt.Sprintf("from=%s to=%s actor_user_id=%d", target.Role, role, actor.ID))
 		}
 		http.Redirect(w, r, "/users", http.StatusSeeOther)
 	}
@@ -283,6 +301,9 @@ func changePasswordForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func changePassword(users *store.UserRepo, sessions *store.SessionRepo, db *sql.DB, audit *store.AuthEventRepo) http.HandlerFunc {
+	// A stolen session must not provide an unlimited password-guessing oracle.
+	// Keep this budget separate from login so signing in cannot reset it.
+	throttle := newLoginThrottle()
 	return func(w http.ResponseWriter, r *http.Request) {
 		release, ok := acquirePasswordWork(w, r)
 		if !ok {
@@ -294,9 +315,20 @@ func changePassword(users *store.UserRepo, sessions *store.SessionRepo, db *sql.
 			serverError(w, r, errors.New("no authenticated user in context"))
 			return
 		}
+		key := strconv.FormatInt(u.ID, 10)
+		now := time.Now().UTC()
+		if ok, retryAfter := throttle.allowed(key, now); !ok {
+			w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(retryAfter.Seconds()))))
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusTooManyRequests)
+			render(w, r, "password.html", passwordPageData{Title: "Change password", Error: "too many attempts — try again later"})
+			return
+		}
 		current := r.FormValue("current_password")
 		next := r.FormValue("new_password")
 		if !verifyPassword(u.PasswordHash, current) {
+			throttle.recordFailure(key, now)
+			throttle.cleanup(now)
 			render(w, r, "password.html", passwordPageData{Title: "Change password", Error: "current password is incorrect"})
 			return
 		}
@@ -318,6 +350,7 @@ func changePassword(users *store.UserRepo, sessions *store.SessionRepo, db *sql.
 			serverError(w, r, err)
 			return
 		}
+		throttle.recordSuccess(key)
 		recordAuth(audit, r, domain.AuthSessionRevoked, u.Username, u.ID, "password changed")
 		render(w, r, "password.html", passwordPageData{Title: "Change password", Success: "password updated; your other sessions were signed out"})
 	}

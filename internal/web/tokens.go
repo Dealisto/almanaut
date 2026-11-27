@@ -64,7 +64,7 @@ func listTokens(tokens *store.TokenRepo) http.HandlerFunc {
 	}
 }
 
-func createToken(tokens *store.TokenRepo) http.HandlerFunc {
+func createToken(tokens *store.TokenRepo, audit *store.AuthEventRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, ok := userFrom(r.Context())
 		if !ok {
@@ -94,12 +94,14 @@ func createToken(tokens *store.TokenRepo) http.HandlerFunc {
 			serverError(w, r, err)
 			return
 		}
-		if _, err := tokens.Create(store.APIToken{
+		id, err := tokens.Create(store.APIToken{
 			TokenHash: hashToken(raw), UserID: u.ID, Label: label, Scope: scope, CreatedAt: nowRFC3339(), ExpiresAt: expires,
-		}); err != nil {
+		})
+		if err != nil {
 			serverError(w, r, err)
 			return
 		}
+		recordAuth(audit, r, domain.AuthTokenCreated, u.Username, u.ID, fmt.Sprintf("token_id=%d scope=%s expires_at=%s", id, scope, expires))
 		renderTokens(w, r, tokens, "", raw)
 	}
 }
@@ -118,7 +120,7 @@ func tokenExpiry(raw string, now time.Time) (string, error) {
 
 // rotateToken prepares a replacement without revoking the credential currently
 // deployed. The original owner, scope and label are read within the transaction.
-func rotateToken(db *sql.DB, tokens *store.TokenRepo) http.HandlerFunc {
+func rotateToken(db *sql.DB, tokens *store.TokenRepo, audit *store.AuthEventRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, ok := userFrom(r.Context())
 		if !ok {
@@ -139,6 +141,7 @@ func rotateToken(db *sql.DB, tokens *store.TokenRepo) http.HandlerFunc {
 			serverError(w, r, err)
 			return
 		}
+		var replacementID int64
 		err = store.WithTx(db, func(tx *sql.Tx) error {
 			repo := tokens.WithTx(tx)
 			old, err := repo.GetByOwner(id, u.ID)
@@ -157,7 +160,7 @@ func rotateToken(db *sql.DB, tokens *store.TokenRepo) http.HandlerFunc {
 					return &store.ConstraintError{Reason: "a replacement already exists; finish its rotation or revoke it before preparing another"}
 				}
 			}
-			_, err = repo.Create(store.APIToken{
+			replacementID, err = repo.Create(store.APIToken{
 				TokenHash: hashToken(raw), UserID: u.ID, Label: old.Label, Scope: old.Scope,
 				CreatedAt: nowRFC3339(), ExpiresAt: expires, RotatedFromID: old.ID,
 			})
@@ -172,11 +175,13 @@ func rotateToken(db *sql.DB, tokens *store.TokenRepo) http.HandlerFunc {
 			}
 			return
 		}
+		recordAuth(audit, r, domain.AuthTokenRotationStarted, u.Username, u.ID,
+			fmt.Sprintf("original_token_id=%d replacement_token_id=%d expires_at=%s", id, replacementID, expires))
 		renderTokens(w, r, tokens, "", raw)
 	}
 }
 
-func finishTokenRotation(db *sql.DB, tokens *store.TokenRepo) http.HandlerFunc {
+func finishTokenRotation(db *sql.DB, tokens *store.TokenRepo, audit *store.AuthEventRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, ok := userFrom(r.Context())
 		if !ok {
@@ -187,6 +192,7 @@ func finishTokenRotation(db *sql.DB, tokens *store.TokenRepo) http.HandlerFunc {
 		if !ok {
 			return
 		}
+		var originalID int64
 		err := store.WithTx(db, func(tx *sql.Tx) error {
 			repo := tokens.WithTx(tx)
 			replacement, err := repo.GetByOwner(id, u.ID)
@@ -202,6 +208,7 @@ func finishTokenRotation(db *sql.DB, tokens *store.TokenRepo) http.HandlerFunc {
 			if err := repo.Delete(replacement.RotatedFromID, u.ID); err != nil {
 				return fmt.Errorf("retire original token: %w", err)
 			}
+			originalID = replacement.RotatedFromID
 			return nil
 		})
 		if err != nil {
@@ -213,11 +220,13 @@ func finishTokenRotation(db *sql.DB, tokens *store.TokenRepo) http.HandlerFunc {
 			}
 			return
 		}
+		recordAuth(audit, r, domain.AuthTokenRotationCompleted, u.Username, u.ID,
+			fmt.Sprintf("revoked_token_id=%d replacement_token_id=%d", originalID, id))
 		http.Redirect(w, r, "/account/tokens", http.StatusSeeOther)
 	}
 }
 
-func deleteToken(tokens *store.TokenRepo) http.HandlerFunc {
+func deleteToken(tokens *store.TokenRepo, audit *store.AuthEventRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		u, ok := userFrom(r.Context())
 		if !ok {
@@ -231,9 +240,13 @@ func deleteToken(tokens *store.TokenRepo) http.HandlerFunc {
 		}
 		// A token already gone (or not owned) is not an error to the user: either
 		// way it no longer grants access. Only a real backend failure is a 500.
-		if err := tokens.Delete(id, u.ID); err != nil && !errors.Is(err, store.ErrNotFound) {
+		err = tokens.Delete(id, u.ID)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			serverError(w, r, err)
 			return
+		}
+		if err == nil {
+			recordAuth(audit, r, domain.AuthTokenRevoked, u.Username, u.ID, fmt.Sprintf("token_id=%d", id))
 		}
 		http.Redirect(w, r, "/account/tokens", http.StatusSeeOther)
 	}

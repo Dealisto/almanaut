@@ -46,6 +46,18 @@ If a bookmarked page number is beyond the remaining results, the list offers
 a return to the first page while preserving the current filters, sort order,
 and page size. This is distinct from a search with no matching records.
 
+Opening a record from a list preserves that list's search, filters, sorting,
+page and page size in the record link. **Back to list** returns to that view,
+including after switching detail tabs or opening the record in a new tab.
+This works without JavaScript. Only controls for the same entity list are
+accepted as a return destination. **New** and **Edit** carry the same context
+through validation errors, **Cancel**, and successful saves. Bulk port generation
+preserves this context after invalid input and successful generation. Adding or
+removing a tag, journal entry or attachment also retains the originating view;
+journal and attachment actions keep the Activity tab selected. Following
+relationships to other records starts a separate navigation path without this
+list context.
+
 ## Saved views (`/views`)
 
 A view you keep coming back to can be saved instead of rebuilt. On a filtered
@@ -72,6 +84,9 @@ Select rows with the checkboxes, open **Bulk actions**, and apply one action to
 all of them. The header checkbox selects every row on the current page;
 the selection count shows how many records the action will affect. Individual
 rows keep their edit and delete controls under **Actions**.
+
+Selections, the action, and its parameters come only from the submitted form
+body. Query-string values cannot add unchecked records or supply an action.
 
 | Action | What it does |
 |---|---|

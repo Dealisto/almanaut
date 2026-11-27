@@ -6,16 +6,19 @@
   </div>
 </div>
 {{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
+{{$rack_position := integerFormInput .Error "rack_position" .Item.RackPosition}}
+{{$u_height := integerFormInput .Error "u_height" .Item.UHeight}}
 <form class="stack" method="post" action="{{.Action}}">
 {{ csrfField }}
+<input type="hidden" name="return_to" value="{{.ReturnURL}}">
   <label>Name<input name="name" value="{{.Item.Name}}" required></label>
   <label>Kind<input name="kind" value="{{.Item.Kind}}" placeholder="ups, switch, disk, nas…"></label>
   <label>Manufacturer<input name="manufacturer" value="{{.Item.Manufacturer}}" placeholder="APC"></label>
   <label>Model<input name="model" value="{{.Item.Model}}" placeholder="Smart-UPS 1500"></label>
   <label>Serial<input name="serial" value="{{.Item.Serial}}"></label>
   <label>Location<input name="location" value="{{.Item.Location}}" placeholder="rack-1"></label>
-  <label>Purchase date<input type="date" name="purchase_date" value="{{.Item.PurchaseDate}}"></label>
-  <label>Warranty end<input type="date" name="warranty_end" value="{{.Item.WarrantyEnd}}"></label>
+  <label>Purchase date<input type="{{dateInputType .Item.PurchaseDate}}" name="purchase_date" value="{{.Item.PurchaseDate}}"></label>
+  <label>Warranty end<input type="{{dateInputType .Item.WarrantyEnd}}" name="warranty_end" value="{{.Item.WarrantyEnd}}"></label>
   <label>Status<input name="status" value="{{.Item.Status}}" placeholder="active, spare, retired"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
   <label>Rack
@@ -24,12 +27,12 @@
       {{$foundRackID := false}}{{range .Extras.Racks}}{{if eq .ID $.Item.RackID}}{{$foundRackID = true}}{{end}}<option value="{{.ID}}"{{if eq .ID $.Item.RackID}} selected{{end}}>{{.Name}}</option>{{end}}{{if and (gt .Item.RackID 0) (not $foundRackID)}}<option value="{{.Item.RackID}}" selected>rack:{{.Item.RackID}} (deleted)</option>{{end}}
     </select>
   </label>
-  <label>Rack position (U)<input type="number" name="rack_position" min="0" max="60" value="{{.Item.RackPosition}}"></label>
-  <label>Height (U)<input type="number" name="u_height" min="0" max="60" value="{{.Item.UHeight}}"></label>
+  <label>Rack position (U)<input type="{{$rack_position.Type}}" inputmode="numeric" name="rack_position" min="0" max="60" value="{{$rack_position.Value}}"></label>
+  <label>Height (U)<input type="{{$u_height.Type}}" inputmode="numeric" name="u_height" min="0" max="60" value="{{$u_height.Value}}"></label>
   {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
-    <a class="btn" href="/hardware">Cancel</a>
+    <a class="btn" data-list-return href="{{.ReturnURL}}">Cancel</a>
   </div>
 </form>
 {{end}}

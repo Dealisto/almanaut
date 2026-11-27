@@ -66,7 +66,7 @@ func TestInventoryPagesAreBoundedAndAdvertised(t *testing.T) {
 
 func TestPaginationRejectsInvalidBounds(t *testing.T) {
 	h := newTestServer(t)
-	for _, path := range []string{"/hosts", "/api/hosts", "/search", "/api/search"} {
+	for _, path := range []string{"/hosts", "/api/hosts", "/search", "/api/search", "/api/relationships"} {
 		for _, query := range []string{"page=", "per_page=", "page=0", "page=-1", "page=abc", "per_page=0", "per_page=101", "page=9223372036854775807&per_page=100"} {
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, httptest.NewRequest("GET", path+"?"+query, nil))
@@ -247,7 +247,7 @@ func TestTagSuggestionsAreBoundedWithoutRestrictingFilters(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := getBody(t, h, "/hosts?tag=t122")
-	for _, want := range []string{`value="t122"`, `href="/hosts/1"`, "First 100 suggestions; enter any tag."} {
+	for _, want := range []string{`value="t122"`, `href="/hosts/1?return_to=%2Fhosts%3Ftag%3Dt122"`, "First 100 suggestions; enter any tag."} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q", want)
 		}

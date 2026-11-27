@@ -9,6 +9,7 @@
 <p style="color:var(--muted)">Never store passwords or keys here — record where the secret lives (your password manager) and point to it.</p>
 <form class="stack" method="post" action="{{.Action}}">
 {{ csrfField }}
+<input type="hidden" name="return_to" value="{{.ReturnURL}}">
   <label>Name<input name="name" value="{{.Item.Name}}" required></label>
   <label>Kind<input name="kind" value="{{.Item.Kind}}" placeholder="admin, service account, API, SSH key…"></label>
   <label>Username<input name="username" value="{{.Item.Username}}" placeholder="admin, root@pam…"></label>
@@ -20,7 +21,7 @@
   {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
-    <a class="btn" href="/accounts">Cancel</a>
+    <a class="btn" data-list-return href="{{.ReturnURL}}">Cancel</a>
   </div>
 </form>
 {{end}}

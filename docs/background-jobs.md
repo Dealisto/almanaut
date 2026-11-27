@@ -22,6 +22,9 @@ the error from the last pass if there was one. A job currently executing is
 marked as running. Scheduled intervals are delays after the previous pass
 finishes, including a manual pass: **run now** restarts the delay. No next-run
 time is advertised while a pass is running or after the scheduler stops.
+An expired deadline or shutdown cancellation is recorded as an interrupted pass,
+even when the job stops without returning its own error. A job-specific error
+is preserved when available.
 
 Expiry deliveries, liveness checks, and TLS probes report storage or delivery
 failures here while continuing with the other items. An unreachable monitored
@@ -99,6 +102,10 @@ Probe diagnostics include DNS names and IP addresses from the served certificate
 An IP subject is compared against IP SANs using address equality, so equivalent
 IPv6 spellings match; a numeric DNS entry or DNS wildcard does not count as an
 IP SAN. These inventory checks do not verify certificate trust.
+DNS subjects use Go's TLS hostname matching rules, including case-insensitive
+ASCII names, a trailing dot on the expected hostname, and single-label
+wildcards. Malformed served SANs are not repaired by trimming whitespace or
+folding Unicode characters.
 
 Probing on demand is a write action, so it needs an editor or admin role: a
 viewer sees the last probe's result but cannot trigger a new one.

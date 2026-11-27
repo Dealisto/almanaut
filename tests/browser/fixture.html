@@ -21,5 +21,29 @@
   <tr><td><input type="checkbox" name="ids" value="2" form="bulkform" aria-label="Select second host"></td></tr>
 </table>
 <input type="checkbox" data-select-all aria-label="Select all rows">
+<form id="discovery-import" data-selection-form>
+  <label><input type="checkbox" name="link" checked>Link to host</label>
+  <input class="js-only" type="checkbox" data-select-all aria-label="Select all importable resources">
+  <table>
+    <tr><td><input type="checkbox" data-selection-item name="id" value="first" checked aria-label="Import first resource"></td></tr>
+    <tr><td><input type="checkbox" data-selection-item name="id" value="second" checked aria-label="Import second resource"></td></tr>
+  </table>
+  <p class="js-only" data-selection-count role="status"></p>
+  <button type="submit">Import selected</button>
+</form>
+<form id="discovery-changes" data-selection-form>
+  <input class="js-only" type="checkbox" data-select-all aria-label="Select all editable fields">
+  <table>
+    <tr><td><input type="checkbox" data-selection-item name="field" value="cpu" aria-label="Apply CPU"></td></tr>
+    <tr><td><input type="checkbox" data-selection-item name="field" value="ram" aria-label="Apply RAM"></td></tr>
+  </table>
+  <p class="js-only" data-selection-count role="status"></p>
+  <button type="submit">Apply selected fields</button>
+</form>
+<form id="discovery-tracked" data-selection-form>
+  <input class="js-only" type="checkbox" data-select-all aria-label="Select all importable resources">
+  <p class="js-only" data-selection-count role="status"></p>
+  <button type="submit" disabled>Import selected</button>
+</form>
 <script src="/static/app.js"></script>
 </html>

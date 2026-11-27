@@ -20,7 +20,7 @@
   {{if .Counts}}
   <div class="tags">
     {{range .Counts}}
-      <a class="tag" href="/tags?name={{.Name}}">#{{.Name}} <span class="muted">({{.Count}})</span></a>
+      <a class="tag" href="{{.URL}}">#{{.Name}} <span class="muted">({{.Count}})</span></a>
     {{end}}
   </div>
   {{else}}<p><em>No tags yet.</em></p>{{end}}

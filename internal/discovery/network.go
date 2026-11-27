@@ -57,6 +57,16 @@ func (s *NetworkScanner) Scan(ctx context.Context, cidr string, ports []int) ([]
 	if len(ports) == 0 {
 		ports = defaultPorts
 	}
+	var selected scanPorts
+	for _, port := range ports {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if err := selected.add(port); err != nil {
+			return nil, err
+		}
+	}
+	ports = selected.values
 	timeout := s.Timeout
 	if timeout <= 0 {
 		timeout = 500 * time.Millisecond
@@ -65,6 +75,7 @@ func (s *NetworkScanner) Scan(ctx context.Context, cidr string, ports []int) ([]
 	if conc <= 0 {
 		conc = 64
 	}
+	conc = min(conc, len(ips))
 
 	dialer := &net.Dialer{Timeout: timeout}
 	resolver := &net.Resolver{}
@@ -78,6 +89,9 @@ func (s *NetworkScanner) Scan(ctx context.Context, cidr string, ports []int) ([]
 			for ip := range jobs {
 				var open []int
 				for _, p := range ports {
+					if ctx.Err() != nil {
+						return
+					}
 					conn, derr := dialer.DialContext(ctx, "tcp", net.JoinHostPort(ip, strconv.Itoa(p)))
 					if derr == nil {
 						open = append(open, p)
@@ -164,10 +178,11 @@ func ExpandCIDR(cidr string, maxHosts int) ([]string, error) {
 	return ips, nil
 }
 
-// ParsePorts parses a comma-separated TCP port list (e.g. "22, 80, 443").
+// ParsePorts parses a comma-separated TCP port list (e.g. "22, 80, 443"),
+// preserving first-seen order while dropping repeated port numbers.
 func ParsePorts(s string) ([]int, error) {
-	var out []int
-	for _, part := range strings.Split(s, ",") {
+	var ports scanPorts
+	for part := range strings.SplitSeq(s, ",") {
 		p := strings.TrimSpace(part)
 		if p == "" {
 			continue
@@ -176,12 +191,32 @@ func ParsePorts(s string) ([]int, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid port %q", p)
 		}
-		if n < 1 || n > 65535 {
-			return nil, fmt.Errorf("port %d out of range", n)
+		if err := ports.add(n); err != nil {
+			return nil, err
 		}
-		out = append(out, n)
 	}
-	return out, nil
+	return ports.values, nil
+}
+
+// scanPorts keeps textual input and programmatic scanner options consistent.
+// Repeated ports must not repeat slow dials or inflate the reported findings.
+type scanPorts struct {
+	values []int
+	seen   map[int]bool
+}
+
+func (p *scanPorts) add(n int) error {
+	if n < 1 || n > 65535 {
+		return fmt.Errorf("port %d out of range", n)
+	}
+	if p.seen == nil {
+		p.seen = make(map[int]bool)
+	}
+	if !p.seen[n] {
+		p.seen[n] = true
+		p.values = append(p.values, n)
+	}
+	return nil
 }
 
 func incIP(ip net.IP) {

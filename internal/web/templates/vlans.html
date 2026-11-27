@@ -5,7 +5,7 @@
     <h1>VLANs</h1>
   </div>
   <div class="ph-actions">
-    {{if canWrite}}<a class="btn btn-primary" href="/vlans/new">+ New VLAN</a>{{end}}
+    {{if canWrite}}<a class="btn btn-primary" href="{{listFormURL .Controls.BasePath (printf "%s/new" .Controls.BasePath)}}">+ New VLAN</a>{{end}}
   </div>
 </div>
 {{template "listcontrols" .Controls}}
@@ -18,12 +18,12 @@
   <tbody>
   {{range .Items}}
     <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select VLAN {{.VID}} ({{.Name}})">{{end}}</td>
-      <td><a href="/vlans/{{.ID}}">{{.VID}}</a></td>
+      <td><a href="{{listRecordURL $.Controls.BasePath .ID}}">{{.VID}}</a></td>
       <td>{{.Name}}</td>
       <td>
         {{if canWrite}}
         <details class="row-menu"><summary>Actions</summary>
-        <a class="btn" href="/vlans/{{.ID}}/edit">Edit</a>
+        <a class="btn" href="{{listFormURL $.Controls.BasePath (printf "%s/%d/edit" $.Controls.BasePath .ID)}}">Edit</a>
         <form class="form-inline" method="post" action="/vlans/{{.ID}}/delete"
               data-confirm="Delete this VLAN?">
           {{ csrfField }}
@@ -38,7 +38,7 @@
 </table>
 </div>
 {{else}}
-<div class="table-wrap"><div class="empty">{{if gt .Controls.Pagination.Total 0}}{{template "listpageempty" .Controls.Pagination}}{{else if .Controls.Active}}{{icon "search"}}<strong>No matching records.</strong><p>Try a different search or clear your filters.</p><a class="btn" href="{{.Controls.BasePath}}">Clear filters</a>{{else}}{{icon "box"}}<strong>No VLANs yet.</strong><p>Add your first record to start documenting your inventory.</p>{{if canWrite}}<a class="btn" href="{{.Controls.BasePath}}/new">Add a record</a>{{end}}{{end}}</div></div>
+<div class="table-wrap"><div class="empty">{{if gt .Controls.Pagination.Total 0}}{{template "listpageempty" .Controls.Pagination}}{{else if .Controls.Active}}{{icon "search"}}<strong>No matching records.</strong><p>Try a different search or clear your filters.</p><a class="btn" href="{{.Controls.BasePath}}">Clear filters</a>{{else}}{{icon "box"}}<strong>No VLANs yet.</strong><p>Add your first record to start documenting your inventory.</p>{{if canWrite}}<a class="btn" href="{{listFormURL .Controls.BasePath (printf "%s/new" .Controls.BasePath)}}">Add a record</a>{{end}}{{end}}</div></div>
 {{end}}
 {{template "pagination" .Controls.Pagination}}
 {{end}}

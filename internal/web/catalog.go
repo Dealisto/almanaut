@@ -1,11 +1,13 @@
 package web
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/store"
 )
 
@@ -43,6 +45,7 @@ type entityOption struct {
 // entityCatalog resolves (type,id) references to human labels by aggregating
 // every registered entity resource.
 type entityCatalog struct {
+	db        *sql.DB
 	resources []mountable
 }
 
@@ -57,15 +60,59 @@ func entityOptionOf(typ string, id int64, name string) entityOption {
 
 // options returns every entity across all registered types as selectable options.
 func (c entityCatalog) options() ([]entityOption, error) {
+	return c.optionsContext(context.Background())
+}
+
+// optionsContext reads only IDs and labels, preserving catalog and repository
+// order. Composite labels share a read-only snapshot with their owners.
+func (c entityCatalog) optionsContext(ctx context.Context) ([]entityOption, error) {
+	if len(c.resources) == 0 {
+		return nil, nil
+	}
+	tx, err := c.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
 	var opts []entityOption
 	for _, rs := range c.resources {
-		got, err := rs.options()
+		got, err := store.InventoryOptions(ctx, tx, rs.querySpec())
 		if err != nil {
 			return nil, err
 		}
-		opts = append(opts, got...)
+		for _, item := range got {
+			opts = append(opts, entityOptionOf(rs.singular(), item.ID, item.Label))
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 	return opts, nil
+}
+
+// labelsFor resolves supplied references in bounded queries using catalog SQL labels.
+// Unknown types and deleted entities are absent, preserving labelOrFallback.
+func (c entityCatalog) labelsFor(ctx context.Context, tx *sql.Tx, refs []domain.EntityRef) (map[string]string, error) {
+	byType := make(map[string][]int64)
+	for _, ref := range refs {
+		byType[ref.Type] = append(byType[ref.Type], ref.ID)
+	}
+	labels := make(map[string]string)
+	for _, rs := range c.resources {
+		ids := byType[rs.singular()]
+		if len(ids) == 0 {
+			continue
+		}
+		names, err := store.InventoryLabels(ctx, tx, rs.querySpec(), ids)
+		if err != nil {
+			return nil, err
+		}
+		for id, name := range names {
+			option := entityOptionOf(rs.singular(), id, name)
+			labels[option.Value] = option.Label
+		}
+	}
+	return labels, nil
 }
 
 // path resolves an entity reference to its canonical detail URL (e.g. "/hosts/1").

@@ -8,6 +8,7 @@
 {{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
 {{ csrfField }}
+<input type="hidden" name="return_to" value="{{.ReturnURL}}">
   <label>Name<input name="name" value="{{.Item.Name}}" placeholder="eth0, Port 1" required></label>
   <label>Owner
     <select name="owner">
@@ -17,13 +18,15 @@
   <label>NIC (host ports only)
     <select name="nic_id">
       <option value="0">— none —</option>
-      {{range .Extras.NICs}}<option value="{{.ID}}"{{if eq .ID $.Item.NICID}} selected{{end}}>{{.HostName}} / {{.Name}}</option>{{end}}
+      {{$foundNIC := false}}{{range .Extras.NICs}}<option value="{{.ID}}"{{if eq .ID $.Item.NICID}}{{$foundNIC = true}} selected{{end}}>{{.HostName}} / {{.Name}}</option>{{end}}
+      {{if and (ne .Item.NICID 0) (not $foundNIC)}}<option value="{{.Item.NICID}}" selected>NIC {{.Item.NICID}} (unavailable)</option>{{end}}
     </select>
   </label>
   <label>Connected to
     <select name="peer_port_id">
       <option value="0">— not connected —</option>
-      {{range .Extras.Ports}}{{if and (ne .ID $.Item.ID) (or (eq .PeerPortID 0) (eq .PeerPortID $.Item.ID))}}<option value="{{.ID}}"{{if eq .ID $.Item.PeerPortID}} selected{{end}}>{{.OwnerName}} / {{.Name}}</option>{{end}}{{end}}
+      {{$foundPeer := false}}{{range .Extras.Ports}}{{if and (ne .ID $.Item.ID) (or (eq .PeerPortID 0) (eq .PeerPortID $.Item.ID))}}<option value="{{.ID}}"{{if eq .ID $.Item.PeerPortID}}{{$foundPeer = true}} selected{{end}}>{{.OwnerName}} / {{.Name}}</option>{{end}}{{end}}
+      {{if and (ne .Item.PeerPortID 0) (not $foundPeer)}}<option value="{{.Item.PeerPortID}}" selected>Port {{.Item.PeerPortID}} (unavailable)</option>{{end}}
     </select>
   </label>
   <label>MAC<input name="mac" value="{{.Item.MAC}}" placeholder="aa:bb:cc:dd:ee:ff"></label>
@@ -32,7 +35,7 @@
   {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
-    <a class="btn" href="/ports">Cancel</a>
+    <a class="btn" data-list-return href="{{.ReturnURL}}">Cancel</a>
   </div>
 </form>
 {{if not .Item.ID}}
@@ -42,13 +45,17 @@
 <p>Create "Prefix 1" … "Prefix N" on one owner in a single step. Existing names are skipped.</p>
 <form class="stack" method="post" action="/ports/generate">
 {{ csrfField }}
+<input type="hidden" name="return_to" value="{{.ReturnURL}}">
+  {{$generation := .Extras.Generation}}
   <label>Owner
     <select name="owner">
-      {{range .Extras.Owners}}<option value="{{.Value}}">{{.Label}}</option>{{end}}
+      {{if $generation}}{{if not $generation.Owner}}<option value="" selected>Choose an owner</option>{{end}}{{end}}
+      {{$foundOwner := false}}{{range .Extras.Owners}}<option value="{{.Value}}"{{if $generation}}{{if eq .Value $generation.Owner}}{{$foundOwner = true}} selected{{end}}{{end}}>{{.Label}}</option>{{end}}
+      {{if $generation}}{{if and $generation.Owner (not $foundOwner)}}<option value="{{$generation.Owner}}" selected>{{$generation.Owner}} (unavailable)</option>{{end}}{{end}}
     </select>
   </label>
-  <label>Name prefix<input name="prefix" value="Port "></label>
-  <label>Count<input name="count" type="number" value="8" min="1" max="256"></label>
+  <label>Name prefix<input name="prefix" value="{{if $generation}}{{$generation.Prefix}}{{else}}Port {{end}}"></label>
+  <label>Count<input name="count" {{if $generation}}type="text" inputmode="numeric" value="{{$generation.Count}}"{{else}}type="number" value="8" min="1" max="256"{{end}}></label>
   <div class="actions">
     <button class="btn btn-primary" type="submit">Generate</button>
   </div>

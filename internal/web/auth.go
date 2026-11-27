@@ -32,6 +32,12 @@ func hashPassword(pw string) (string, error) {
 
 // verifyPassword reports whether pw matches the bcrypt hash.
 func verifyPassword(hash, pw string) bool {
+	// CompareHashAndPassword silently ignores bytes beyond bcrypt's limit.
+	// Enforce the same supported range on every verification path, including
+	// the current-password check outside the login handler.
+	if len(pw) > domain.MaxPasswordBytes {
+		return false
+	}
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
 }
 
@@ -63,6 +69,13 @@ const sessionCookieName = "almanaut_session"
 const sessionDuration = 30 * 24 * time.Hour
 
 type userCtxKey struct{}
+type sessionTokenCtxKey struct{}
+type apiCredentialCtxKey struct{}
+
+type apiCredential struct {
+	tokens    *store.TokenRepo
+	tokenHash string
+}
 
 // withUser returns a context carrying the authenticated user.
 func withUser(ctx context.Context, u domain.User) context.Context {
@@ -118,9 +131,11 @@ func sessionAuth(sessions *store.SessionRepo) func(http.Handler) http.Handler {
 				return
 			}
 			if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
-				u, err := sessions.UserByToken(hashToken(c.Value), nowRFC3339())
+				tokenHash := hashToken(c.Value)
+				u, err := sessions.UserByToken(tokenHash, nowRFC3339())
 				if err == nil {
-					next.ServeHTTP(w, r.WithContext(withUser(r.Context(), u)))
+					ctx := context.WithValue(withUser(r.Context(), u), sessionTokenCtxKey{}, tokenHash)
+					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
 				if !errors.Is(err, store.ErrNotFound) {
@@ -137,6 +152,43 @@ func sessionAuth(sessions *store.SessionRepo) func(http.Handler) http.Handler {
 				return
 			}
 			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
+		})
+	}
+}
+
+// refreshUIAuth rechecks unsafe UI requests after CSRF has consumed their body.
+// A slow form/upload must not retain a revoked session or a role removed while
+// reading. Initial authentication still rejects anonymous requests before that
+// work. This is not an atomic permission check through the later write/commit.
+func refreshUIAuth(users *store.UserRepo, sessions *store.SessionRepo) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if csrfSafeMethod(r.Method) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			current, ok := userFrom(r.Context())
+			var user domain.User
+			err := store.ErrNotFound
+			if ok {
+				if tokenHash, session := r.Context().Value(sessionTokenCtxKey{}).(string); session {
+					user, err = sessions.UserByToken(tokenHash, nowRFC3339())
+				} else {
+					// SSO already authenticated this local identity. Refresh its
+					// role without re-provisioning a user deleted during the read
+					// or falling back to a different browser-session identity.
+					user, err = users.Get(current.ID)
+				}
+			}
+			if errors.Is(err, store.ErrNotFound) {
+				http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
+				return
+			}
+			if err != nil {
+				serverError(w, r, err)
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(withUser(r.Context(), user)))
 		})
 	}
 }
@@ -278,14 +330,25 @@ func issuePasswordLogin(db *sql.DB, users *store.UserRepo, sessions *store.Sessi
 	return pending, err
 }
 
-// logout deletes the current session and clears the cookie.
-func logout(sessions *store.SessionRepo, audit *store.AuthEventRepo, forceSecure bool) http.HandlerFunc {
+// logout revokes the current browser's session and pending second-factor
+// challenge together. An unfinished login in another tab must not restore a
+// signed-out session using only a second factor after an explicit logout.
+func logout(db *sql.DB, sessions *store.SessionRepo, totp *store.TOTPRepo, audit *store.AuthEventRepo, forceSecure bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
-			if err := sessions.DeleteByToken(hashToken(c.Value)); err != nil {
-				serverError(w, r, err)
-				return
+		err := store.WithTx(db, func(tx *sql.Tx) error {
+			if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
+				if err := sessions.WithTx(tx).DeleteByToken(hashToken(c.Value)); err != nil {
+					return err
+				}
 			}
+			if c, err := r.Cookie(pending2FACookieName); err == nil && c.Value != "" {
+				return totp.WithTx(tx).DeletePending(hashToken(c.Value))
+			}
+			return nil
+		})
+		if err != nil {
+			serverError(w, r, err)
+			return
 		}
 		var username string
 		var uid int64
@@ -294,6 +357,7 @@ func logout(sessions *store.SessionRepo, audit *store.AuthEventRepo, forceSecure
 		}
 		recordAuth(audit, r, domain.AuthLogout, username, uid, "")
 		clearSessionCookie(w, r, forceSecure)
+		clearPending2FACookie(w, r, forceSecure)
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 	}
 }
@@ -350,12 +414,14 @@ func apiAuth(tokens *store.TokenRepo, sessions *store.SessionRepo, audit *store.
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if raw, ok := bearerToken(r); ok {
-				u, scope, err := tokens.UserByToken(hashToken(raw))
+				tokenHash := hashToken(raw)
+				u, scope, err := tokens.UserByToken(tokenHash)
 				if err == nil {
-					if tokenUses != nil && tokenUses.shouldLog(hashToken(raw), time.Now().UTC()) {
+					if tokenUses != nil && tokenUses.shouldLog(tokenHash, time.Now().UTC()) {
 						recordAuth(audit, r, domain.AuthTokenUsed, u.Username, u.ID, "scope="+scope)
 					}
 					ctx := withTokenScope(withUser(r.Context(), u), domain.Scope(scope))
+					ctx = context.WithValue(ctx, apiCredentialCtxKey{}, apiCredential{tokens: tokens, tokenHash: tokenHash})
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
 				}
@@ -386,4 +452,30 @@ func apiAuth(tokens *store.TokenRepo, sessions *store.SessionRepo, audit *store.
 			writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 		})
 	}
+}
+
+// refreshAPIBodyAuth checks the original bearer credential after body ingestion.
+// Initial authentication/authorization still rejects disallowed requests before
+// reading. No additional token-use audit is emitted. This protects the ingestion
+// window, not permission changes after this check or during the later commit.
+func refreshAPIBodyAuth(w http.ResponseWriter, r *http.Request, requiredScope domain.Scope) (*http.Request, bool) {
+	credential, ok := r.Context().Value(apiCredentialCtxKey{}).(apiCredential)
+	if !ok {
+		return r, true // Authentication-disabled routes have no bearer identity.
+	}
+	user, scope, err := credential.tokens.UserByToken(credential.tokenHash)
+	if errors.Is(err, store.ErrNotFound) {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return r, false
+	}
+	if err != nil {
+		apiServerError(w, r, err)
+		return r, false
+	}
+	if !user.Role.CanWrite() || domain.Scope(scope) != requiredScope {
+		writeJSONError(w, http.StatusForbidden, "forbidden")
+		return r, false
+	}
+	ctx := withTokenScope(withUser(r.Context(), user), domain.Scope(scope))
+	return r.WithContext(ctx), true
 }

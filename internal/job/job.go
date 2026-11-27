@@ -188,6 +188,12 @@ func (r *Runner) pass(ctx context.Context, j *job) {
 	start := time.Now()
 	runCtx, cancel := context.WithTimeout(ctx, j.def.Timeout)
 	err := r.runSafely(runCtx, j)
+	// A callback can stop on cancellation without returning ctx.Err(). Do not
+	// advertise that interrupted pass as successful. Inspect before cancel,
+	// which would otherwise turn every successful pass into a canceled one.
+	if err == nil {
+		err = runCtx.Err()
+	}
 	cancel()
 
 	j.mu.Lock()

@@ -27,7 +27,7 @@ type NetworkUsage struct {
 	UsedCount   int            // distinct IPs in use
 	FreeCount   int            // usable addresses not occupied by hosts, gateway or reservations
 	Unbounded   bool           // subnet too large to count/enumerate (e.g. IPv6 /64)
-	NextFree    string         // lowest usable address not assigned to any host ("" if none or Unbounded)
+	NextFree    string         // lowest usable address not allocated or reserved in any network ("" if none or Unbounded)
 
 	ReservedCount int           // usable reserved/gateway addresses not already host-used (0 when Unbounded)
 	Reservations  []Reservation // reservations for this network (for display)
@@ -46,20 +46,11 @@ type IPAMReport struct {
 func BuildIPAM(networks []Network, hosts []Host, reservations []Reservation) IPAMReport {
 	used, unassigned := attribute(networks, hosts, -1)
 	allocated := allocatedHostIPs(hosts)
-	// Group once for the full report; rescanning every reservation for every
-	// network makes otherwise small subnet reports quadratic in inventory size.
-	byNetwork := make(map[int64][]Reservation, len(networks))
-	for _, n := range networks {
-		byNetwork[n.ID] = nil
-	}
-	for _, r := range reservations {
-		if group, exists := byNetwork[r.NetworkID]; exists {
-			byNetwork[r.NetworkID] = append(group, r)
-		}
-	}
+	byNetwork := groupReservations(reservations)
+	prepared, blocked := prepareNetworkReservations(networks, byNetwork)
 	report := IPAMReport{Unassigned: sortAllocs(unassigned)}
 	for i, n := range networks {
-		report.Networks = append(report.Networks, buildUsage(n, sortAllocs(used[i]), byNetwork[n.ID], allocated))
+		report.Networks = append(report.Networks, buildUsage(n, sortAllocs(used[i]), byNetwork[n.ID], allocated, prepared[i], blocked))
 	}
 	return report
 }
@@ -85,7 +76,9 @@ func BuildNetworkUsage(targetID int64, networks []Network, hosts []Host, reserva
 	// only the target's allocations are collected — no slices are built for the
 	// networks we are about to discard.
 	used, _ := attribute(networks, hosts, targetIdx)
-	return buildUsage(networks[targetIdx], sortAllocs(used[targetIdx]), reservationsFor(targetID, reservations), allocatedHostIPs(hosts)), true
+	byNetwork := groupReservations(reservations)
+	prepared, blocked := prepareNetworkReservations(networks, byNetwork)
+	return buildUsage(networks[targetIdx], sortAllocs(used[targetIdx]), byNetwork[targetID], allocatedHostIPs(hosts), prepared[targetIdx], blocked), true
 }
 
 // attribute assigns each host IP to the index of the network containing it with
@@ -145,20 +138,85 @@ func allocatedHostIPs(hosts []Host) map[string]bool {
 	return allocated
 }
 
-// reservationsFor returns the reservations that belong to network id.
-func reservationsFor(id int64, reservations []Reservation) []Reservation {
-	var out []Reservation
-	for _, r := range reservations {
-		if r.NetworkID == id {
-			out = append(out, r)
+// prepareNetworkReservations parses each network and its reservations once,
+// reusing the local ranges for capacity and collecting a separate global index
+// for next-free suggestions. A parent or child subnet must not suggest an
+// address reserved by another network. Capacity and attribution remain local.
+// Clip each range to its owning subnet first: unassigned reservations and
+// addresses outside that subnet cannot block unrelated networks.
+func prepareNetworkReservations(networks []Network, byNetwork map[int64][]Reservation) ([]networkReservation, networkReservations) {
+	prepared := make([]networkReservation, len(networks))
+	v4Count, v6Count := 0, 0
+	for i, n := range networks {
+		_, ipn, err := net.ParseCIDR(n.CIDR)
+		if err != nil {
+			continue
+		}
+		prepared[i] = networkReservation{ipn: ipn, ranges: reservationRanges(ipn, byNetwork[n.ID])}
+		// Reserve room for local intervals, two endpoints, and one gateway.
+		if ipn.IP.To4() != nil {
+			v4Count += len(prepared[i].ranges) + 3
+		} else {
+			v6Count += len(prepared[i].ranges) + 1
 		}
 	}
-	return out
+	blocked := networkReservations{v4: make(ipRanges, 0, v4Count), v6: make(ipRanges, 0, v6Count)}
+	for i, n := range networks {
+		ipn := prepared[i].ipn
+		if ipn == nil {
+			continue
+		}
+		ranges := &blocked.v6
+		if ipn.IP.To4() != nil {
+			ranges = &blocked.v4
+		}
+		*ranges = append(*ranges, prepared[i].ranges...)
+		if reservesEnds(ipn) {
+			base := ipn.IP.Mask(ipn.Mask)
+			broadcast := make(net.IP, len(base))
+			for i := range base {
+				broadcast[i] = base[i] | ^ipn.Mask[i]
+			}
+			*ranges = append(*ranges, ipRange{base.To16(), base.To16()}, ipRange{broadcast.To16(), broadcast.To16()})
+		}
+		if gw := net.ParseIP(strings.TrimSpace(n.Gateway)); gw != nil && ipn.Contains(gw) {
+			*ranges = append(*ranges, ipRange{gw.To16(), gw.To16()})
+		}
+	}
+	blocked.v4 = mergeIPRanges(blocked.v4)
+	blocked.v6 = mergeIPRanges(blocked.v6)
+	return prepared, blocked
+}
+
+type networkReservation struct {
+	ipn    *net.IPNet
+	ranges ipRanges
+}
+
+// Keep address families separate: a broad native IPv6 reservation may span the
+// numeric representation of IPv4-mapped addresses without reserving any IPv4.
+type networkReservations struct{ v4, v6 ipRanges }
+
+// groupReservations indexes once rather than rescanning every reservation for
+// each network, which makes full reports quadratic in inventory size.
+func groupReservations(reservations []Reservation) map[int64][]Reservation {
+	counts := make(map[int64]int)
+	for _, r := range reservations {
+		counts[r.NetworkID]++
+	}
+	byNetwork := make(map[int64][]Reservation, len(counts))
+	for id, count := range counts {
+		byNetwork[id] = make([]Reservation, 0, count)
+	}
+	for _, r := range reservations {
+		byNetwork[r.NetworkID] = append(byNetwork[r.NetworkID], r)
+	}
+	return byNetwork
 }
 
 // buildUsage computes the derived stats for one network from its (already
 // IP-sorted) allocations.
-func buildUsage(n Network, used []Allocation, reservations []Reservation, allocated map[string]bool) NetworkUsage {
+func buildUsage(n Network, used []Allocation, reservations []Reservation, allocated map[string]bool, prepared networkReservation, blocked networkReservations) NetworkUsage {
 	u := NetworkUsage{Network: n, Used: used, Reservations: reservations}
 
 	byIP := map[string][]Allocation{}
@@ -176,8 +234,8 @@ func buildUsage(n Network, used []Allocation, reservations []Reservation, alloca
 		}
 	}
 
-	_, ipn, err := net.ParseCIDR(n.CIDR)
-	if err != nil {
+	ipn := prepared.ipn
+	if ipn == nil {
 		return u // invalid CIDR: no capacity math
 	}
 	ones, bits := ipn.Mask.Size()
@@ -202,7 +260,7 @@ func buildUsage(n Network, used []Allocation, reservations []Reservation, alloca
 		// Count merged ranges instead of expanding every reserved address. Even
 		// a /2 can then report accurate capacity using space proportional to
 		// the number of reservations, not the size of the subnet.
-		reserved := reservationRanges(ipn, reservations)
+		reserved := prepared.ranges
 		reservedCount := 0
 		for _, span := range reserved {
 			reservedCount += int(binary.BigEndian.Uint32(span.end[12:])-binary.BigEndian.Uint32(span.start[12:])) + 1
@@ -230,7 +288,7 @@ func buildUsage(n Network, used []Allocation, reservations []Reservation, alloca
 		if u.FreeCount = u.TotalUsable - len(taken) - reservedCount; u.FreeCount < 0 {
 			u.FreeCount = 0
 		}
-		u.NextFree = nextFree(ipn, taken, reserved, allocated)
+		u.NextFree = nextFree(ipn, taken, blocked, allocated)
 	}
 	return u
 }
@@ -247,35 +305,51 @@ func reservesEnds(ipn *net.IPNet) bool {
 
 // nextFree returns the lowest usable address in ipn absent from taken and all
 // host allocations and outside reservations, or "" if no candidate exists or
-// the subnet is larger than 2^maxEnumerableHostBits addresses. It
-// walks addresses in place rather than materializing the whole range, so a large
-// (but enumerable) subnet does not allocate one net.IP per address just to find
-// the first hole.
-func nextFree(ipn *net.IPNet, taken map[string]bool, reserved ipRanges, allocated map[string]bool) string {
+// the subnet is larger than 2^maxEnumerableHostBits addresses. Reserved ranges
+// are skipped in one step, so a large DHCP pool does not require checking and
+// formatting every address it contains.
+func nextFree(ipn *net.IPNet, taken map[string]bool, reserved networkReservations, allocated map[string]bool) string {
 	ones, bits := ipn.Mask.Size()
 	if bits-ones > maxEnumerableHostBits {
 		return ""
 	}
 	base := ipn.IP.Mask(ipn.Mask)
-	cur := make(net.IP, len(base))
-	copy(cur, base)
-
-	excludeEnds := reservesEnds(ipn)
-	var broadcast net.IP
-	if excludeEnds {
-		broadcast = make(net.IP, len(base))
-		for i := range base {
-			broadcast[i] = base[i] | ^ipn.Mask[i]
-		}
-		incIP(cur) // skip the network address
+	last := make(net.IP, len(base))
+	for i := range base {
+		last[i] = base[i] | ^ipn.Mask[i]
 	}
-
-	for ipn.Contains(cur) {
-		if excludeEnds && cur.Equal(broadcast) {
-			break // reached the reserved broadcast address
+	cur := append(net.IP(nil), base.To16()...)
+	last = last.To16()
+	if reservesEnds(ipn) {
+		incIP(cur)
+		last[len(last)-1]--
+	}
+	ranges := reserved.v6
+	if base.To4() != nil {
+		ranges = reserved.v4
+	}
+	// Find the first relevant interval once, then advance monotonically.
+	i := sort.Search(len(ranges), func(i int) bool {
+		return bytes.Compare(ranges[i].end, cur) >= 0
+	})
+	for bytes.Compare(cur, last) <= 0 {
+		for i < len(ranges) && bytes.Compare(ranges[i].end, cur) < 0 {
+			i++
 		}
-		if candidate := cur.String(); !taken[candidate] && !allocated[candidate] && !reserved.contains(cur) {
+		if i < len(ranges) && bytes.Compare(ranges[i].start, cur) <= 0 {
+			if bytes.Compare(ranges[i].end, last) >= 0 {
+				return "" // also prevents overflow at the largest IPv6 address
+			}
+			copy(cur, ranges[i].end)
+			incIP(cur)
+			i++
+			continue
+		}
+		if candidate := cur.String(); !taken[candidate] && !allocated[candidate] {
 			return candidate
+		}
+		if cur.Equal(last) {
+			return ""
 		}
 		incIP(cur)
 	}
@@ -295,9 +369,9 @@ func (ranges ipRanges) contains(ip net.IP) bool {
 	return i < len(ranges) && bytes.Compare(ranges[i].start, ip) <= 0
 }
 
-// reservationRanges clips reservations to the usable part of a bounded subnet
-// and merges overlaps. Counting each range needs only its low 32 bits because
-// buildUsage calls this for subnets with at most 30 host bits.
+// reservationRanges clips reservations to the usable part of a subnet and
+// merges overlaps without enumerating its addresses. When buildUsage counts
+// these ranges, its bounded subnets need only the low 32 bits of each endpoint.
 func reservationRanges(ipn *net.IPNet, reservations []Reservation) ipRanges {
 	base := ipn.IP.Mask(ipn.Mask)
 	last := make(net.IP, len(base))
@@ -310,7 +384,7 @@ func reservationRanges(ipn *net.IPNet, reservations []Reservation) ipRanges {
 		// An IPv4 broadcast address always ends in at least two set bits.
 		last[len(last)-1]--
 	}
-	var ranges ipRanges
+	ranges := make(ipRanges, 0, len(reservations))
 	for _, r := range reservations {
 		start := net.ParseIP(strings.TrimSpace(r.StartIP))
 		end := net.ParseIP(strings.TrimSpace(r.EndIP))
@@ -333,6 +407,10 @@ func reservationRanges(ipn *net.IPNet, reservations []Reservation) ipRanges {
 			ranges = append(ranges, ipRange{start, end})
 		}
 	}
+	return mergeIPRanges(ranges)
+}
+
+func mergeIPRanges(ranges ipRanges) ipRanges {
 	sort.Slice(ranges, func(i, j int) bool {
 		return bytes.Compare(ranges[i].start, ranges[j].start) < 0
 	})

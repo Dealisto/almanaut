@@ -19,18 +19,25 @@ var pages = func() map[string]*template.Template {
 		m[page] = template.Must(
 			template.New("layout.html").
 				Funcs(template.FuncMap{
-					"icon":        uiIcon,
-					"initials":    initials,
-					"displayTime": displayTime,
-					"currentPath": func() string { return "/" },
-					"csrfField":   func() template.HTML { return "" },
-					"isActive":    func(string) bool { return false },
-					"theme":       func() string { return "system" },
-					"currentUser": func() string { return "" },
-					"canWrite":    func() bool { return false },
-					"isAdmin":     func() bool { return false },
-					"kumaEnabled": func() bool { return false },
-					"savedViews":  func() []savedViewGroup { return nil },
+					"icon":          uiIcon,
+					"initials":      initials,
+					"displayTime":   displayTime,
+					"dateInputType": dateInputType,
+					"integerFormInput": func(errorText, name string, value int) integerInput {
+						return integerInputValue(nil, errorText, name, value)
+					},
+					"currentPath":   func() string { return "/" },
+					"listRecordURL": func(string, int64) string { return "" },
+					"listFormURL":   func(_, target string) string { return target },
+					"listReturnURL": func(base string) string { return base },
+					"csrfField":     func() template.HTML { return "" },
+					"isActive":      func(string) bool { return false },
+					"theme":         func() string { return "system" },
+					"currentUser":   func() string { return "" },
+					"canWrite":      func() bool { return false },
+					"isAdmin":       func() bool { return false },
+					"kumaEnabled":   func() bool { return false },
+					"savedViews":    func() []savedViewGroup { return nil },
 				}).
 				ParseFS(templatesFS, "templates/layout.html", "templates/settings_nav.html", "templates/custom_fields_form.html", "templates/webhook_form_fields.html", "templates/list_controls.html", "templates/bulk_actions.html", "templates/"+page),
 		)
@@ -66,6 +73,10 @@ var pages = func() map[string]*template.Template {
 // It renders into a buffer first so a mid-render error never produces a
 // half-written response with a 200 status.
 func render(w http.ResponseWriter, r *http.Request, page string, data any) {
+	renderStatus(w, r, page, data, 0)
+}
+
+func renderStatus(w http.ResponseWriter, r *http.Request, page string, data any, status int) {
 	t, ok := pages[page]
 	if !ok {
 		http.Error(w, "unknown page: "+page, http.StatusInternalServerError)
@@ -78,7 +89,13 @@ func render(w http.ResponseWriter, r *http.Request, page string, data any) {
 	}
 	token := csrfTokenFrom(r.Context())
 	clone.Funcs(template.FuncMap{
-		"currentPath": func() string { return r.URL.RequestURI() },
+		"integerFormInput": func(errorText, name string, value int) integerInput {
+			return integerInputValue(r, errorText, name, value)
+		},
+		"currentPath":   func() string { return r.URL.RequestURI() },
+		"listRecordURL": func(base string, id int64) string { return listRecordURL(r, base, id) },
+		"listFormURL":   func(base, target string) string { return listFormURL(r, base, target) },
+		"listReturnURL": func(base string) string { return inventoryListReturnPath(base, r.URL.Query().Get("return_to")) },
 		"csrfField": func() template.HTML {
 			return template.HTML(`<input type="hidden" name="` + csrfFieldName +
 				`" value="` + template.HTMLEscapeString(token) + `">`)
@@ -114,5 +131,8 @@ func render(w http.ResponseWriter, r *http.Request, page string, data any) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if status != 0 {
+		w.WriteHeader(status)
+	}
 	_, _ = buf.WriteTo(w)
 }

@@ -135,6 +135,8 @@ var auditEventTypes = []string{
 	domain.AuthLoginSuccess, domain.AuthLoginFailure, domain.AuthLogout,
 	domain.Auth2FASuccess, domain.Auth2FAFailure, domain.AuthSSOLogin,
 	domain.AuthTokenUsed, domain.AuthSessionRevoked,
+	domain.AuthRoleChanged, domain.AuthTokenCreated, domain.AuthTokenRevoked,
+	domain.AuthTokenRotationStarted, domain.AuthTokenRotationCompleted,
 }
 
 // auditLogPage renders the admin-only authentication audit log with filters.

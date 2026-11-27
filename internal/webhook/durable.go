@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Dealisto/almanaut/internal/domain"
 	"github.com/Dealisto/almanaut/internal/redact"
 	"github.com/Dealisto/almanaut/internal/store"
 )
@@ -94,21 +95,45 @@ func NewDurableQueue(db *sql.DB, opts Options) *DurableQueue {
 }
 
 func (q *DurableQueue) Stage(tx *sql.Tx, events ...Event) error {
+	return (&durableStage{queue: q, tx: tx}).stage(events...)
+}
+
+// durableStage retains only endpoint configuration and admission counters;
+// delivery bodies are serialized and inserted one at a time.
+type durableStage struct {
+	queue     *DurableQueue
+	tx        *sql.Tx
+	endpoints []domain.Webhook
+	loaded    bool
+	batch     *store.WebhookOutboxBatch
+}
+
+func (s *durableStage) stage(events ...Event) error {
+	q, tx := s.queue, s.tx
 	if tx == nil {
 		return errors.New("webhook staging requires an inventory transaction")
 	}
 	if q.closed.Load() {
 		return errors.New("webhook dispatcher is shutting down")
 	}
-	endpoints, err := store.NewWebhookRepo(q.db).WithTx(tx).ListEnabled()
-	if err != nil {
-		return err
+	if !s.loaded {
+		endpoints, err := store.NewWebhookRepo(q.db).WithTx(tx).ListEnabled()
+		if err != nil {
+			return err
+		}
+		s.endpoints, s.loaded = endpoints, true
 	}
-	repo := q.repo.WithTx(tx)
 	for _, event := range events {
-		for _, endpoint := range endpoints {
+		for _, endpoint := range s.endpoints {
 			if !endpoint.Matches(event.Type, event.Action) {
 				continue
+			}
+			if s.batch == nil {
+				batch, err := store.NewWebhookOutboxBatch(tx, q.capacity, MaxOutboxBytes)
+				if err != nil {
+					return err
+				}
+				s.batch = batch
 			}
 			id, err := newDeliveryID()
 			if err != nil {
@@ -118,7 +143,7 @@ func (q *DurableQueue) Stage(tx *sql.Tx, events ...Event) error {
 			if err != nil {
 				return err
 			}
-			if err := repo.Enqueue(store.WebhookDelivery{ID: id, WebhookID: endpoint.ID, URL: endpoint.URL, Body: body, Signature: signature}, time.Now(), q.capacity, MaxOutboxBytes); err != nil {
+			if err := s.batch.Enqueue(store.WebhookDelivery{ID: id, WebhookID: endpoint.ID, URL: endpoint.URL, Body: body, Signature: signature}, time.Now()); err != nil {
 				return err
 			}
 		}

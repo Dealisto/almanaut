@@ -8,15 +8,16 @@
 {{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
 {{ csrfField }}
+<input type="hidden" name="return_to" value="{{.ReturnURL}}">
   <label>Source (what is backed up)<input name="source" value="{{.Item.Source}}" required></label>
   <label>Destination<input name="destination" value="{{.Item.Destination}}" placeholder="Backblaze B2"></label>
   <label>Frequency<input name="frequency" value="{{.Item.Frequency}}" placeholder="daily"></label>
-  <label>Last run<input type="date" name="last_run" value="{{.Item.LastRun}}"></label>
+  <label>Last run<input type="{{dateInputType .Item.LastRun}}" name="last_run" value="{{.Item.LastRun}}"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
   {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
-    <a class="btn" href="/backups">Cancel</a>
+    <a class="btn" data-list-return href="{{.ReturnURL}}">Cancel</a>
   </div>
 </form>
 {{end}}

@@ -22,7 +22,7 @@
 {{if .Scanned}}
 {{if .Rows}}
 <section class="panel">
-  <form method="post" action="/discovery/network/import">
+  <form method="post" action="/discovery/network/import" data-selection-form>
   {{ csrfField }}
     <label>Import discovered hosts as type
       <select name="type">
@@ -31,11 +31,11 @@
     </label>
     <div class="table-wrap">
     <table>
-      <thead><tr><th scope="col"><span class="sr-only">Actions</span></th><th scope="col">Name</th><th scope="col">IP</th><th scope="col">Open ports</th><th scope="col">Status</th></tr></thead>
+      <thead><tr><th scope="col"><span class="sr-only">Selection</span><input class="js-only" type="checkbox" data-select-all aria-label="Select all importable hosts on this page"></th><th scope="col">Name</th><th scope="col">IP</th><th scope="col">Open ports</th><th scope="col">Status</th></tr></thead>
       <tbody>
       {{range .Rows}}
         <tr>
-          <td>{{if not .AlreadyTracked}}<input type="checkbox" name="host" value="{{.IP}}|{{.Name}}|{{.Ports}}" aria-label="Import {{.Name}} ({{.IP}})" checked>{{end}}</td>
+          <td>{{if not .AlreadyTracked}}<input type="checkbox" data-selection-item name="host" value="{{.IP}}|{{.Name}}|{{.Ports}}" aria-label="Import {{.Name}} ({{.IP}})" checked>{{end}}</td>
           <td>{{.Name}}</td>
           <td>{{.IP}}</td>
           <td>{{.Ports}}</td>
@@ -45,6 +45,7 @@
       </tbody>
     </table>
     </div>
+    <p class="muted js-only" data-selection-count role="status"></p>
     <div class="actions"><button class="btn btn-primary" type="submit"{{if not .NewCount}} disabled{{end}}>Import selected</button></div>
   </form>
 </section>

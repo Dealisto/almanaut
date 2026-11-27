@@ -12,6 +12,10 @@ instances, or as a portable copy of your data.
 > deleted and re-created from the file. It is not a merge. The import form
 > makes you tick a confirmation checkbox first.
 
+Import confirmation must be submitted with the upload. A query-string `confirm`
+cannot authorize an import. CSV imports likewise take their entity type from
+the uploaded form, so a URL parameter cannot replace the selected type.
+
 ## What the file contains
 
 Every entity type, with its relationships, tags, journal entries and custom
@@ -98,8 +102,11 @@ The same goes for a port's connection to, or NIC attribution to, something the
 file does not contain: it is cleared and counted. A connection written on one
 port only is completed on the other. Two ports connected to the same port, or
 a port on another host's NIC, fail the import.
-Tag names are normalised the way the UI stores them (`#Prod` → `prod`). A
-file written by a newer almanaut, with a higher `version`, is refused.
+Tag names are normalised the way the UI stores them (`#Prod` → `prod`).
+Exports escape a stored leading `#` with one additional `#`, so a literal
+`#prod` is written as `##prod` and keeps its identity on repeated restores.
+This does not change the format version.
+A file written by a newer almanaut, with a higher `version`, is refused.
 Duplicate normalized tags on one entity, duplicate custom-field names for one
 entity type, and multiple values for the same entity and field are rejected
 with an error identifying the conflicting records.
@@ -114,6 +121,11 @@ Invalid input receives a detailed form error. A storage failure returns a
 generic server error and logs its details on the server. In either case, the
 existing inventory is preserved; replacement and its history event commit
 together.
+
+YAML and CSV imports also roll back pending writes when request cancellation
+is observed before commit starts. Cancellation does not undo a completed
+commit, and interruption is not immediate during every parsing or database
+operation. Attachment uploads follow the same transaction rule.
 
 ## Additive CSV import
 

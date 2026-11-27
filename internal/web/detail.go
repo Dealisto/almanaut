@@ -1,6 +1,7 @@
 package web
 
 import (
+	"database/sql"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -155,6 +156,7 @@ func buildIPAMSection(u domain.NetworkUsage) ipamSection {
 func renderDetailExtra(
 	w http.ResponseWriter,
 	r *http.Request,
+	db *sql.DB,
 	cat entityCatalog,
 	tags *store.TagRepo,
 	rels *store.RelationshipRepo,
@@ -170,21 +172,10 @@ func renderDetailExtra(
 		serverError(w, r, err)
 		return
 	}
-	edges, err := rels.ListForEntity(entityType, entityID)
+	edges, labels, err := detailRelationships(r.Context(), db, cat, rels, entityType, entityID)
 	if err != nil {
 		serverError(w, r, err)
 		return
-	}
-	// Resolving relationship endpoints to labels requires loading the whole
-	// entity catalog, so skip that work entirely when the entity has no edges.
-	var labels map[string]string
-	if len(edges) > 0 {
-		opts, err := cat.options()
-		if err != nil {
-			serverError(w, r, err)
-			return
-		}
-		labels = labelMap(opts)
 	}
 
 	related := make([]relatedItem, 0, len(edges))

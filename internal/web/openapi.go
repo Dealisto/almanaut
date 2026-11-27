@@ -421,8 +421,9 @@ func buildOpenAPIDoc(resources []mountable, version string) *openAPIDoc {
 		Responses:  map[string]oaResponse{"200": paginatedArrayResp("A page of matching entities", "SearchResult"), "400": errorResp("Invalid pagination parameters")},
 	}}
 	doc.Paths["/api/relationships"] = &oaPathItem{Get: &oaOperation{
-		Tags: []string{"General"}, Summary: "List all relationships",
-		Responses: map[string]oaResponse{"200": jsonArrayResp("All relationships", "Relationship")},
+		Tags: []string{"General"}, Summary: "List a page of relationships ordered by ID",
+		Parameters: pagingParameters(),
+		Responses:  map[string]oaResponse{"200": paginatedArrayResp("A page of relationships", "Relationship"), "400": errorResp("Invalid pagination parameters")},
 	}}
 	doc.Paths["/metrics"] = &oaPathItem{Get: &oaOperation{
 		Tags: []string{"General"}, Summary: "Prometheus metrics (text exposition format)",
@@ -556,7 +557,7 @@ func buildAPIDocs(resources []mountable, version string) apiDocsData {
 		Name: "General",
 		Endpoints: []apiDocEndpoint{
 			{"GET", "/api/search?q=", "Search entities by free-text query"},
-			{"GET", "/api/relationships", "List all relationships"},
+			{"GET", "/api/relationships", "List a page of relationships (page, per_page)"},
 			{"GET", "/api/host-types", "List available host type names and labels"},
 			{"GET", "/metrics", "Prometheus metrics"},
 			{"GET", "/api/openapi.json", "This API's OpenAPI 3 document"},

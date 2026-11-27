@@ -203,11 +203,24 @@ func (s *Session) readLoop(ctx context.Context) {
 func (s *Session) write(ctx context.Context, frame string) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	return s.conn.Write(ctx, websocket.MessageText, []byte(frame))
+	// Cancellation may happen while waiting for a ping or another frame to
+	// finish. Do not pass an already canceled operation to the websocket: its
+	// cancellation path can close an otherwise healthy shared connection.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	err := s.conn.Write(ctx, websocket.MessageText, []byte(frame))
+	if err != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
 }
 
 // emit sends `42<id>["event",arg]` and waits for the matching `43<id>[...]`.
 func (s *Session) emit(ctx context.Context, event string, arg any) (json.RawMessage, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	payload, err := json.Marshal([]any{event, arg})
 	if err != nil {
 		return nil, err
@@ -230,6 +243,11 @@ func (s *Session) emit(ctx context.Context, event string, arg any) (json.RawMess
 	select {
 	case res, ok := <-ch:
 		if !ok {
+			// A canceled write can close the socket and wake both select
+			// cases. Preserve cancellation regardless of which case wins.
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			return nil, errors.New("connection closed")
 		}
 		return res, nil

@@ -43,8 +43,8 @@ func TestSendRedactsReflectedEndpointSegments(t *testing.T) {
 }
 
 func TestServerMessageRedactsOverlappingSecrets(t *testing.T) {
-	message := serverMessage(strings.NewReader(`{"error":"invalid /api/PRIVATE-token"}`), "/api", "/api/PRIVATE-token")
-	if strings.Contains(message, "PRIVATE") || !strings.Contains(message, "invalid") {
-		t.Fatalf("overlapping secret exposed: %s", message)
+	message, err := serverMessage(strings.NewReader(`{"error":"invalid /api/PRIVATE-token"}`), "/api", "/api/PRIVATE-token")
+	if err != nil || strings.Contains(message, "PRIVATE") || !strings.Contains(message, "invalid") {
+		t.Fatalf("overlapping secret exposed: %s, %v", message, err)
 	}
 }

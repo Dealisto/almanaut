@@ -32,20 +32,57 @@ func (r *WebhookOutboxRepo) Enqueue(d WebhookDelivery, due time.Time, capacity i
 	if db, ok := r.db.(*sql.DB); ok {
 		return WithTx(db, func(tx *sql.Tx) error { return r.WithTx(tx).Enqueue(d, due, capacity, byteLimit) })
 	}
-	var count int
-	var bytes int64
-	if err := r.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(length(body) + length(CAST(url AS BLOB)) + length(signature) + length(delivery_id)), 0) FROM webhook_outbox`).Scan(&count, &bytes); err != nil {
-		return fmt.Errorf("read webhook backlog: %w", err)
+	batch, err := newWebhookOutboxBatch(r.db, capacity, byteLimit)
+	if err != nil {
+		return err
 	}
+	return batch.Enqueue(d, due)
+}
+
+// WebhookOutboxBatch admits a sequence of deliveries with one backlog read.
+// It retains counters only; each body is inserted before the caller builds the
+// next one. Use it from one goroutine, within one write transaction, without
+// interleaving any other outbox mutations (including endpoint invalidation or
+// savepoint rollback). Discard it when the batch or transaction ends.
+// Admission failure must roll back the surrounding inventory transaction.
+type WebhookOutboxBatch struct {
+	db               DBTX
+	count, capacity  int
+	bytes, byteLimit int64
+}
+
+// NewWebhookOutboxBatch snapshots the budget under the transaction's write
+// lock. WithTx/WithTxContext acquire that lock before the accounting read, so
+// independent processes cannot concurrently admit past the shared limits.
+func NewWebhookOutboxBatch(tx *sql.Tx, capacity int, byteLimit int64) (*WebhookOutboxBatch, error) {
+	if tx == nil {
+		return nil, errors.New("webhook batch requires a write transaction")
+	}
+	return newWebhookOutboxBatch(tx, capacity, byteLimit)
+}
+
+func newWebhookOutboxBatch(db DBTX, capacity int, byteLimit int64) (*WebhookOutboxBatch, error) {
+	batch := &WebhookOutboxBatch{db: db, capacity: capacity, byteLimit: byteLimit}
+	if err := db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(length(body) + length(CAST(url AS BLOB)) + length(CAST(signature AS BLOB)) + length(CAST(delivery_id AS BLOB))), 0) FROM webhook_outbox`).Scan(&batch.count, &batch.bytes); err != nil {
+		return nil, fmt.Errorf("read webhook backlog: %w", err)
+	}
+	return batch, nil
+}
+
+// Enqueue charges the local budget only after a successful insert. Rejected
+// or failed inserts leave the budget unchanged, matching the stored rows.
+func (b *WebhookOutboxBatch) Enqueue(d WebhookDelivery, due time.Time) error {
 	size := int64(len(d.Body)) + int64(len(d.URL)) + int64(len(d.Signature)) + int64(len(d.ID))
-	if count >= capacity || size > byteLimit-bytes {
+	if b.count >= b.capacity || b.bytes > b.byteLimit || size > b.byteLimit-b.bytes {
 		return ErrWebhookBacklog
 	}
-	_, err := r.db.Exec(`INSERT INTO webhook_outbox (delivery_id, webhook_id, url, body, signature, due_at) VALUES (?, ?, ?, ?, ?, ?)`,
+	_, err := b.db.Exec(`INSERT INTO webhook_outbox (delivery_id, webhook_id, url, body, signature, due_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		d.ID, d.WebhookID, d.URL, d.Body, d.Signature, due.UnixMilli())
 	if err != nil {
 		return fmt.Errorf("enqueue webhook delivery: %w", err)
 	}
+	b.count++
+	b.bytes += size
 	return nil
 }
 

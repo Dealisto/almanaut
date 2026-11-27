@@ -6,22 +6,23 @@
   </div>
 </div>
 {{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
-{{if .Options}}
+{{if or .Options .Error}}
 {{if canWrite}}
 <section class="panel">
   <h2>Add relationship</h2>
+  {{if not .Options}}<p class="muted">Create some entities first, then you can link them here. Your submitted choices are shown below.</p>{{end}}
   <form class="rel-form" method="post" action="/relationships">
   {{ csrfField }}
     <label>From
-      <select name="from">{{range .Options}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+      <select name="from" required>{{if and .Error (not .Draft.From)}}<option value="" selected>Choose a source</option>{{end}}{{$foundFrom := false}}{{range .Options}}{{if eq .Value $.Draft.From}}{{$foundFrom = true}}{{end}}<option value="{{.Value}}"{{if eq .Value $.Draft.From}} selected{{end}}>{{.Label}}</option>{{end}}{{if and .Error .Draft.From (not $foundFrom)}}<option value="{{.Draft.From}}" selected>{{.Draft.From}} (unavailable)</option>{{end}}</select>
     </label>
     <label>Kind
-      <select name="kind">{{range .Kinds}}<option value="{{.}}">{{.}}</option>{{end}}</select>
+      <select name="kind" required>{{if and .Error (not .Draft.Kind)}}<option value="" selected>Choose a relationship kind</option>{{end}}{{$foundKind := false}}{{range .Kinds}}{{if eq . $.Draft.Kind}}{{$foundKind = true}}{{end}}<option value="{{.}}"{{if eq . $.Draft.Kind}} selected{{end}}>{{.}}</option>{{end}}{{if and .Error .Draft.Kind (not $foundKind)}}<option value="{{.Draft.Kind}}" selected>{{.Draft.Kind}} (unavailable)</option>{{end}}</select>
     </label>
     <label>To
-      <select name="to">{{range .Options}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select>
+      <select name="to" required>{{if and .Error (not .Draft.To)}}<option value="" selected>Choose a destination</option>{{end}}{{$foundTo := false}}{{range .Options}}{{if eq .Value $.Draft.To}}{{$foundTo = true}}{{end}}<option value="{{.Value}}"{{if eq .Value $.Draft.To}} selected{{end}}>{{.Label}}</option>{{end}}{{if and .Error .Draft.To (not $foundTo)}}<option value="{{.Draft.To}}" selected>{{.Draft.To}} (unavailable)</option>{{end}}</select>
     </label>
-    <button class="btn btn-primary" type="submit">Add relationship</button>
+    <button class="btn btn-primary" type="submit"{{if not .Options}} disabled{{end}}>Add relationship</button>
   </form>
 </section>
 {{end}}

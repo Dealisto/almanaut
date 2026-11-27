@@ -20,12 +20,12 @@ func generatePorts(rs resource[domain.Port], ports *store.PortRepo, d handlerDep
 	return func(w http.ResponseWriter, req *http.Request) {
 		ownerType, ownerID, err := parseRef(req.FormValue("owner"))
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			renderPortGenerationError(w, req, rs, d, err)
 			return
 		}
 		count, err := strconv.Atoi(strings.TrimSpace(req.FormValue("count")))
 		if err != nil {
-			http.Error(w, "count must be a whole number", http.StatusBadRequest)
+			renderPortGenerationError(w, req, rs, d, fmt.Errorf("count must be a whole number"))
 			return
 		}
 		count = min(max(count, 1), 256)
@@ -36,23 +36,23 @@ func generatePorts(rs resource[domain.Port], ports *store.PortRepo, d handlerDep
 		// Validate the template port once up front so an invalid owner fails
 		// before the transaction (name is per-port but constant-shaped).
 		if err := (domain.Port{OwnerType: ownerType, OwnerID: ownerID, Name: prefix + "1"}).Validate(); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			renderPortGenerationError(w, req, rs, d, err)
 			return
 		}
 
 		var events []webhook.Event
 		err = store.WithTx(d.db, func(tx *sql.Tx) error {
+			batchDeps := d
+			batchDeps.webhooks = webhook.ForTransaction(tx, d.webhooks)
 			// The existing-name check must see the same snapshot the inserts
 			// write into, so it reads through the tx-bound repo.
-			existing, err := ports.WithTx(tx).List()
+			existing, err := ports.WithTx(tx).NamesForOwner(ownerType, ownerID)
 			if err != nil {
 				return err
 			}
 			taken := map[string]bool{}
-			for _, p := range existing {
-				if p.OwnerType == ownerType && p.OwnerID == ownerID {
-					taken[p.Name] = true
-				}
+			for _, name := range existing {
+				taken[name] = true
 			}
 			for i := 1; i <= count; i++ {
 				name := prefix + strconv.Itoa(i)
@@ -60,7 +60,7 @@ func generatePorts(rs resource[domain.Port], ports *store.PortRepo, d handlerDep
 					continue
 				}
 				item := domain.Port{OwnerType: ownerType, OwnerID: ownerID, Name: name}
-				if _, err := rs.createEntityTx(tx, d, item, nil, actor(req), &events); err != nil {
+				if _, err := rs.createEntityTx(tx, batchDeps, item, nil, actor(req), &events); err != nil {
 					return fmt.Errorf("create %s: %w", name, err)
 				}
 			}
@@ -71,6 +71,30 @@ func generatePorts(rs resource[domain.Port], ports *store.PortRepo, d handlerDep
 			return
 		}
 		d.webhooks.Dispatch(events...)
-		http.Redirect(w, req, "/ports", http.StatusSeeOther)
+		http.Redirect(w, req, rs.listReturnPath(req), http.StatusSeeOther)
 	}
+}
+
+// renderPortGenerationError keeps the generator's draft separate from the
+// single-port form, whose fields were not submitted by this request.
+func renderPortGenerationError(w http.ResponseWriter, req *http.Request, rs resource[domain.Port], d handlerDeps, cause error) {
+	rows, err := d.customFieldFormRows(rs.sing, 0, nil)
+	if err != nil {
+		serverError(w, req, err)
+		return
+	}
+	extras, err := rs.extraData()
+	if err != nil {
+		serverError(w, req, err)
+		return
+	}
+	extras = withCustomFields(extras, rows)
+	extras["Generation"] = struct{ Owner, Prefix, Count string }{
+		Owner: req.PostFormValue("owner"), Prefix: req.PostFormValue("prefix"), Count: req.PostFormValue("count"),
+	}
+	renderStatus(w, req, rs.formTmpl, formData[domain.Port]{
+		Title: "New " + rs.sing, Heading: "New " + rs.sing,
+		Action: rs.basePath(), SubmitLabel: "Create", ReturnURL: formListReturnPath(req, rs.basePath()),
+		Item: rs.newItem, Extras: extras, Error: cause.Error(),
+	}, http.StatusBadRequest)
 }
