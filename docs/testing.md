@@ -41,10 +41,41 @@ inventory and search pages:
 - Bulk-action state when `pageshow` follows restored checkbox values, including
   partial selection and clearing all rows. The restoration event is simulated;
   this does not assert a browser's cache admission policy.
+- Discovery selection controls: select/clear all eligible imports or editable
+  fields within one form, keep unrelated host-link preferences, show mixed
+  selections and counts, prevent empty actions, and reconcile restored values.
+  A real server-rendered source page is checked against a deterministic fake
+  container scanner; no external engine is contacted.
 - Human-readable selection labels for all 17 inventory types, including quotes,
   ampersands, and HTML-looking names where domain validation permits them.
 - Distinct empty-search and out-of-range-search messages, with a working
   first-page URL that preserves the query.
+- List-to-detail return links for all 17 entity types, preserving filter, sort
+  and page state, plus actual navigation through a detail tab back to a filtered
+  list. Go tests reject external, malformed and unrelated return destinations.
+- New and Edit form navigation for all 17 inventory types, including actual
+  Cancel navigation and a validation-error/corrected-save flow that preserves
+  both the entered draft and the original list controls.
+- Adding and deleting tags, journal entries and attachments from a detail page,
+  preserving the list return context and Activity tab through real submissions.
+- Custom-field creation and label-edit retries, preserving draft values and
+  selected types after validation errors without interpreting entered HTML.
+- Relationship retries after self-links or deleted endpoints, preserving the
+  source and kind while correcting only the destination. Empty selections use
+  native required-field validation; unavailable endpoints stay explicit.
+- Bulk port generation retries with HTTP 400, retaining the exact draft and
+  list controls; correcting only the count creates ports on the intended owner.
+- Single-port edits with a peer taken by another edit or a NIC deleted after
+  loading: failed retries preserve both the unavailable choice and stored links
+  until the user explicitly selects a valid target or clears the relation.
+- Host edits after a custom type is deleted: failed retries preserve the
+  unavailable type and the stored replacement until a valid type is selected.
+- Numeric custom fields and dates accepted by the API but incompatible with
+  native inputs: editing unrelated fields preserves their values, while invalid
+  drafts remain visible for correction after a validation error.
+- Integer fields after server rejection, including exponent notation accepted
+  by native number inputs: retries retain the draft and leave stored values and
+  history unchanged until correction.
 - Out-of-range states for all 17 inventory lists, with a first-page link that
   preserves the query, sorting, and page size; empty filters stay distinct.
 - Mobile navigation focus, keyboard trapping, Escape, and search shortcuts on
@@ -55,6 +86,8 @@ inventory and search pages:
 - Print-media styles with the mobile drawer open, so its overlay and scroll
   lock cannot obscure the printed inventory.
 - A consistent light print palette with either explicit or system dark mode.
+- Appearance changes preserve the current document and unsaved inputs, with
+  accessible selection/status updates, keyboard use and safe error handling.
 - Native validation on the host-type form reveals invalid advanced fields in
   collapsed disclosures, focuses the offending control, and permits submission
   after correction without unnecessarily reopening the disclosure.
@@ -69,17 +102,34 @@ The complete run has a 120-second deadline. No personal browser profile is used.
 These focused checks complement the Go suite. They do not replace visual review,
 screen-reader testing, or cross-browser compatibility testing.
 
-## Numeric sorting benchmark
+## Authentication during request ingestion
 
-Measure comparisons of long decimal values that round to the same nonzero
-floating-point number:
+Regression tests change credentials or roles after initial authentication but
+before the body reader finishes, without timing-dependent sleeps:
 
 ```sh
-go test ./internal/store -run '^$' -bench '^BenchmarkInventoryLongDecimalOrder$' -benchmem
+go test -race ./internal/web -run 'TestHTMLMutationRechecksAuthenticationAfterBodyRead|TestAPIMutationsRecheckBearerAfterBodyRead'
 ```
 
-This exercises the list sorting comparator with million-digit inputs. Regression
-tests also cover exact ordering, negative values and equivalent decimal notation.
+The API cases cover entity creation, replacement and agent reports with revoked
+or expired tokens, reduced roles or scopes, storage failures, unchanged access
+and renamed owners. They assert that rejected requests leave inventory and
+history unchanged and that revalidation does not duplicate token-use audit events.
+
+## Numeric sorting benchmark
+
+Measure comparisons of long decimal values that round to the same floating-point
+number, including underflow to zero:
+
+```sh
+go test ./internal/store -run '^$' -bench 'BenchmarkInventory(LongDecimal|UnderflowDecimal)Order' -benchmem
+```
+
+The nonzero case uses million-digit inputs; the underflow case uses 200,000
+fractional zeros followed by differing digits and an `e-1000` exponent. These
+measure the comparator, not complete list queries or rendering. Regression tests
+also cover exact ordering, negative values, equivalent decimal notation and
+compatibility with the existing extreme-exponent and hexadecimal fallback.
 
 ## IPAM benchmarks
 
@@ -94,3 +144,133 @@ original linear reference, using the same mixed IPv4/IPv6 inventory. Index
 construction is included in the measurement. Differential tests compare their
 allocations, including mapped IPv4 addresses, duplicate prefixes and invalid
 inputs. Timings depend on inventory size and the machine running the benchmark.
+
+Measure fully reserved subnets and large reservation inventories separately:
+
+```sh
+go test ./internal/domain -run '^$' -bench 'BenchmarkBuildIPAMReservedSubnet|BenchmarkBuildIPAMManyReservations' -benchmem
+```
+
+Next-free differential tests compare range skipping with independent bounded
+enumeration across IPv4, IPv6, mapped addresses and maximum-address boundaries.
+
+## Webhook admission benchmark
+
+Measure one event staged against an existing queue with one or more matching
+endpoints:
+
+```sh
+go test ./internal/webhook -run '^$' -bench '^BenchmarkDurableStageBacklog$' -benchmem
+```
+
+Each sample rolls back so the backlog stays constant. Capacity accounting is
+shared within a single staging call. CSV imports, bulk actions, port generation
+and discovery imports additionally use an explicit transaction scope across rows.
+Regression tests cover concurrent database
+writers, exact byte limits, endpoint invalidation between staging calls, and
+rollback of both inventory and deliveries after failed admission.
+
+Measure the per-row staging pattern with a single endpoint and a shared
+transaction, comparing independent calls with the CSV transaction scope:
+
+```sh
+go test ./internal/webhook -run '^$' -bench '^BenchmarkTransactionStagingRows$' -benchmem
+```
+
+This measures webhook staging, excluding CSV parsing and inventory/history
+writes. CSV integration tests additionally cover indirect port events,
+cancellation, capacity rollback, and post-commit legacy dispatch.
+Discovery integration tests cover rollback of bindings and relationships,
+duplicate imports without events, independent source identities and post-commit
+dispatch. These staging measurements exclude network scans and discovery matching.
+
+For the actual CSV path, including parsing and inventory/history writes:
+
+```sh
+go test ./internal/web -run '^$' -bench '^BenchmarkCSVWebhookStaging$' -benchmem
+```
+
+Both variants roll back after the last staged row, preserving the same backlog
+between samples. Commit and delivery wake-up are excluded from this measurement.
+
+## Entity selector benchmark
+
+Measure construction of the complete selector list for 10,000 hosts with
+1 KiB of notes each:
+
+```sh
+go test ./internal/web -run '^$' -bench '^BenchmarkCatalogOptions$' -benchmem
+```
+
+This measures option construction, excluding HTML/browser rendering. It still
+returns every option. Tests compare labels and order for all 17 types with an
+independent oracle based on the original repository reads, including tied values
+and composite labels. Store tests cover snapshot consistency, cancellation and
+errors.
+
+## Detail relationship benchmark
+
+Measure the shared detail renderer for one relationship in a fixture with
+10,000 unrelated hosts:
+
+```sh
+go test ./internal/web -run '^$' -bench '^BenchmarkDetailSingleRelationship$' -benchmem
+```
+
+This includes tags, relationships, journal/history reads, the neighborhood graph
+and HTML rendering. Entity-specific extras such as IPAM, agent facts and rack
+elevation are excluded, as are the caller's entity lookup and browser rendering.
+
+## Tag drilldown benchmark
+
+Measure the rendered tag page for one tagged host in an inventory of 10,000
+hosts, using a host-only catalog:
+
+```sh
+go test ./internal/web -run '^$' -bench '^BenchmarkTagDrilldownSingleReference$' -benchmem
+```
+
+The measurement includes tag lookup, label resolution, template rendering and
+request/response setup. Database setup is excluded. It does not measure a tag
+containing the whole inventory or browser rendering.
+
+## Activity link lookup
+
+Measure existence lookup for five activity references in an inventory of
+20,000 hosts, compared with loading the full host inventory:
+
+```sh
+go test ./internal/store -run '^$' -bench '^BenchmarkActivityReferenceLookup$' -benchmem
+```
+
+The benchmark excludes page rendering and the old catalog's additional label
+formatting. Regression tests cover batches larger than 500 IDs, type/ID
+namespaces, unknown and deleted references, frozen labels, and storage errors.
+
+## Port generation name lookup
+
+Compare the owner's name query with the previous full port-list lookup in an
+inventory of 1,000 owners with 24 ports each:
+
+```sh
+go test ./internal/store -run '^$' -bench '^BenchmarkPortGenerationNameLookup$' -benchmem
+```
+
+Both cases build the same duplicate-name set inside a write transaction. This
+measures the lookup step only, excluding port creation, history and webhooks.
+
+## CSV validation allocations
+
+Measure allocations while rejecting CSV files with wide rows, an early invalid
+record, or a late invalid record:
+
+```sh
+go test ./internal/web -run '^$' -bench '^BenchmarkCSVValidationMemory$' -benchmem
+```
+
+These samples exercise parsing and validation without database writes. The
+reported bytes are total allocations per operation, not peak resident memory.
+Streaming avoids retaining the raw record list; valid imports still retain a
+typed write plan and post-commit events proportional to the number of rows.
+Regression tests check error precedence, cancellation, BOM/CRLF/multiline input,
+and that no inventory is written before the complete file has been read.

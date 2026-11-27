@@ -94,6 +94,26 @@ func (r *PortRepo) List() ([]domain.Port, error) {
 	return r.decorate(items)
 }
 
+// NamesForOwner reads only the names needed to avoid duplicate generated ports.
+// Call on the write transaction so the check and subsequent inserts share one
+// snapshot, without loading or decorating unrelated inventory.
+func (r *PortRepo) NamesForOwner(ownerType string, ownerID int64) ([]string, error) {
+	rows, err := r.db.Query(`SELECT name FROM ports WHERE owner_type = ? AND owner_id = ?`, ownerType, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("query owner port names: %w", err)
+	}
+	defer rows.Close()
+	names := []string{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan owner port name: %w", err)
+		}
+		names = append(names, name)
+	}
+	return names, rows.Err()
+}
+
 func (r *PortRepo) listRaw() ([]domain.Port, error) {
 	return r.queryRaw(`SELECT ` + portColumns + ` FROM ports ORDER BY owner_type, owner_id, LENGTH(name), name`)
 }

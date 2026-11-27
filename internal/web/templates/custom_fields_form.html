@@ -7,9 +7,9 @@
     {{if eq .Kind "bool"}}
       <input type="checkbox" name="cf_{{.Name}}"{{if eq .Value "true"}} checked{{end}}>
     {{else if eq .Kind "date"}}
-      <input type="date" name="cf_{{.Name}}" value="{{.Value}}">
+      <input type="{{dateInputType .Value}}" name="cf_{{.Name}}" value="{{.Value}}">
     {{else if eq .Kind "number"}}
-      <input type="number" step="any" name="cf_{{.Name}}" value="{{.Value}}">
+      <input {{if .NumberAsText}}type="text" inputmode="decimal"{{else}}type="number" step="any"{{end}} name="cf_{{.Name}}" value="{{.Value}}">
     {{else}}
       <input name="cf_{{.Name}}" value="{{.Value}}">
     {{end}}

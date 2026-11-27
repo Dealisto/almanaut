@@ -44,7 +44,7 @@ func (rs resource[T]) addAttachment(d handlerDeps) http.HandlerFunc {
 
 		// Read at most the cap + 1 byte so an oversize file is detected without
 		// buffering unbounded data.
-		content, err := io.ReadAll(io.LimitReader(file, domain.MaxAttachmentBytes+1))
+		content, err := io.ReadAll(io.LimitReader(contextReader{ctx: req.Context(), Reader: file}, domain.MaxAttachmentBytes+1))
 		if err != nil {
 			serverError(w, req, err)
 			return
@@ -73,7 +73,7 @@ func (rs resource[T]) addAttachment(d handlerDeps) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		err = store.WithTx(d.db, func(tx *sql.Tx) error {
+		err = store.WithTxContext(req.Context(), d.db, func(tx *sql.Tx) error {
 			if err := rs.existsTx(tx, id); err != nil {
 				return err
 			}

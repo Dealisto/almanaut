@@ -11,6 +11,10 @@ details are listed there.
 ## [Unreleased]
 
 ### Added
+- Audit successful role changes and API-token creation, revocation and rotation,
+  with safe metadata and no duplicate success events for ineffective requests.
+- Add select-all controls and selection counts to discovery imports and field
+  reviews, keeping forms independent and disabling actions with no selection.
 - Persist outbound webhook deliveries with inventory mutations in SQLite.
   Resume retries after restarts with stable delivery IDs, signatures and bodies;
   show pending deliveries on the Webhooks administration page.
@@ -54,6 +58,43 @@ details are listed there.
   when available; discovery never automatically removes inventory records.
 
 ### Changed
+- Build entity selector options from IDs and labels only, preserving the
+  catalog's ordering and composite names in a read-only snapshot without loading
+  full entities and their display decorations.
+- Resolve detail-page relationship labels only for the connected records.
+  Relationships and their labels share a read-only snapshot while unrelated
+  inventory is left unloaded.
+- Resolve tag drilldown labels only for the referenced records, using batched
+  queries and a consistent read-only snapshot instead of loading all inventory.
+- Compare bounded decimal values directly when they underflow to zero in
+  float64, avoiding large temporary binary mantissas during inventory sorting.
+  Preserve signed-zero equality and the existing fallback for extreme exponents
+  and hexadecimal notation.
+- Resolve activity-feed links with bounded, ID-only queries for referenced
+  records instead of loading and decorating the entire inventory.
+- Reuse webhook admission accounting across bulk edits, bulk deletions and
+  generated ports, including indirect changes, within each write transaction.
+  Discovery imports use the same transaction scope while preserving independent
+  source identities and atomic bindings, relationships and delivery writes.
+- Reuse webhook endpoint configuration and admission counters across CSV rows
+  within their inventory transaction. Keep legacy dispatchers compatible and
+  preserve atomic rollback when the delivery count or byte limit is reached.
+- Read only the selected owner's existing port names during bulk port
+  generation, avoiding full inventory loading and label decoration.
+- Parse CSV imports one record at a time, reusing the field slice and keeping
+  only the validated write plan instead of a second complete list of CSV rows.
+  Release that plan when a row is invalid while preserving error diagnostics
+  and all-or-nothing writes.
+- Read webhook backlog capacity once per staged batch instead of rescanning
+  the queue for every delivery, while retaining transactional count/byte limits
+  and inserting bodies individually.
+- Skip reserved IPAM intervals during next-free searches and reuse parsed
+  reservation ranges for local counts and global exclusions, reducing time and
+  allocations for large reserved subnets and reservation inventories.
+- Paginate `/api/relationships` in the database with the same default of 50,
+  maximum of 100, and navigation headers as entity collections. Clients needing
+  every relationship must follow the `Link` header; array response shape stays
+  unchanged. Count and page use one read-only snapshot.
 - Start notification channels independently and resume interrupted expiry passes
   fairly so a slow receiver or early item cannot starve later alerts.
 - Index IPAM network prefixes for address attribution, preserving longest-prefix
@@ -81,6 +122,73 @@ details are listed there.
   requires a pre-upgrade database backup.
 
 ### Fixed
+- Read bulk selections and parameters, import confirmations and CSV entity types
+  only from the submitted body. URL parameters cannot add unselected records or
+  override the import form. CSRF tokens must also come from the form body.
+- Keep list filters, sorting and pagination after adding or deleting tags,
+  journal entries and attachments from a detail page; preserve the Activity tab
+  for journal and attachment actions.
+- Change appearance without reloading the current page when JavaScript is
+  enabled, preserving unsaved form inputs. Failed requests keep the draft and
+  show an accessible message; native forms retain their redirect behavior.
+- Preserve submitted rack positions, heights and VLAN IDs after form errors,
+  preventing rejected integer input from turning into a saved zero on retry.
+- Preserve cancellation, timeout and truncated-read errors while reading
+  Docker/Podman HTTP error responses, retaining the status without displaying
+  an incomplete response diagnostic.
+- Preserve numeric custom fields and dates whose accepted representation would
+  be erased by native browser inputs. Use editable text for those values and
+  invalid drafts, preventing unrelated edits from silently clearing them.
+- Recheck API bearer tokens, scopes and owner roles after reading entity writes
+  and agent reports, rejecting credentials revoked or restricted during ingestion.
+- Preserve unavailable or empty host types after form errors so retries cannot
+  silently overwrite a type reassigned while the form was open.
+- Recheck UI sessions and roles after form/upload ingestion so revocation,
+  expiry or demotion during a slow body read cannot retain stale permissions.
+- Preserve unavailable NIC and peer-port selections after form errors, avoiding
+  silent disconnections on retry; explicit clearing remains available.
+- Keep the bulk port generator's owner, prefix, count and list return context
+  after invalid input, rendering an editable form with the existing HTTP 400
+  status instead of a plain-text error.
+- Reject JSON API mutations whose request cancellation is observed while
+  reading the body, including already-buffered bodies and cancellation at EOF.
+- Preserve cancellation, timeout, and truncated-read errors from agent report
+  error responses. Classify interrupted reads as transient failures instead of
+  permanent rejections or identity conflicts, while retaining the HTTP status
+  and redacting credentials.
+- Preserve source, kind, and destination selections after relationship form
+  errors, including explicit unavailable choices for deleted endpoints.
+- Revoke the current browser's unfinished two-factor login challenge together
+  with its session on logout, preventing that challenge from restoring access
+  without another password check. Failed revocation rolls back both changes.
+- Retain custom-field creation drafts after validation or duplicate-name errors,
+  and keep failed label editors open with their submitted text.
+- Match certificate subjects with Go's TLS hostname verifier, accepting
+  absolute DNS names while rejecting false matches caused by malformed SANs,
+  invalid wildcard labels, or Unicode case folding.
+- Preserve literal leading `#` characters in tags across repeated YAML
+  export/import cycles and tag overview links and searches.
+- Roll back pending YAML/CSV import and attachment writes when request
+  cancellation is observed before commit starts; preserve cancellation errors
+  and avoid dispatching webhooks for rolled-back imports.
+- Probe repeated network-discovery ports once per address, reject invalid
+  configured ports, and stop starting probes after cancellation.
+- Preserve search, filters, sort order and pagination when opening inventory
+  records, creating or editing them, and returning with Back to list or Cancel,
+  across all 17 entity types. Keep this context after validation errors and
+  successful saves; validate return destinations against the canonical list
+  and supported query controls.
+- Exclude reservations, gateways, and reserved IPv4 subnet endpoints across
+  overlapping networks from IPAM next-free suggestions, while preserving local
+  capacity counts and IPv4-mapped address equivalence.
+- Limit current-password guesses across a user's sessions independently of
+  login throttling, and reject oversized bcrypt inputs on every verification path.
+- Shorten oversized Discord embed fields without splitting Unicode characters,
+  preventing long inventory labels from permanently failing notification delivery.
+- Record canceled or timed-out scheduled passes as failures even when their
+  callbacks stop without returning an error.
+- Reject already canceled Kuma operations before writing to their shared
+  connection, preserving the cancellation cause and keeping the session usable.
 - Respect fractional cgroup CPU quotas in agent reports and preserve known IP
   addresses when an interface address lookup returns only partial information.
 - Revalidate custom-field definitions inside inventory write transactions and

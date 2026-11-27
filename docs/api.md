@@ -93,7 +93,7 @@ update. Host JSON continues to use the same string `type` field.
 | `DELETE /api/{type}/{id}` | `204` on success, `404` if absent |
 | `GET /api/host-types` | Available host types as `[{"name":"vm","label":"Virtual machine"}, …]` |
 | `GET /api/search?q=<term>` | A bounded page of matches: `[{"type","id","label","path"}]` |
-| `GET /api/relationships` | All relationships |
+| `GET /api/relationships` | Relationships ordered by ID, paginated |
 | `GET /api/openapi.json` | The OpenAPI 3 document describing every route and schema |
 | `POST /api/agent/report` | Ingest one report from `almanaut-agent`. Requires an **`agent`**-scoped token. `200` + `{"host_id","changed"}`, `400` on malformed JSON/failed validation/unknown `schema_version`, `409` when the agent id is bound to a different machine, `422` when several unbound hosts match its name or IPs |
 
@@ -104,6 +104,15 @@ bodies use the same shape. Responses are `application/json`.
 
 Request bodies are limited to 32 MiB. Exceeding the limit returns
 `413 {"error":"request body too large"}`, including chunked uploads.
+Cancellation observed during body ingestion returns a JSON `400` and prevents
+the mutation, including when the body was already buffered. This check does
+not cancel an operation that has progressed past body ingestion.
+
+After reading a JSON entity mutation or agent report, the server rechecks the
+original bearer token and its owner's current role before applying the request.
+A token revoked or expired during ingestion returns `401`; a scope or role that
+no longer permits the operation returns `403`. This recheck does not make
+authorization atomic with the later inventory transaction.
 
 Numeric values in `custom_fields` retain their submitted precision in storage
 and JSON responses. Clients that need exact large integers or decimal values
@@ -126,8 +135,9 @@ curl -s http://localhost:8080/api/certificates \
 
 ## Pagination and filtering
 
-Entity collection endpoints and `/api/search` return **50 records per page by
-default**, with a maximum of **100**. The JSON body remains an array. Existing
+Entity collection endpoints, `/api/search`, and `/api/relationships` return
+**50 records per page by default**, with a maximum of **100**. The JSON body
+remains an array. Existing
 clients that need the full inventory must follow the `Link` header's `next`
 relation until it is absent; a single request no longer returns an unlimited
 collection. Whole-inventory YAML exports remain complete.
@@ -143,6 +153,9 @@ returns `[]` with the total count and links back to existing pages. Ordering is
 stable for unchanged data, with entity IDs breaking ties. Pages are read from a
 consistent database snapshot; inventory changes between separate requests can
 still move records between pages.
+
+Relationships are ordered by their numeric ID and accept `page` and `per_page`;
+the entity-specific filtering and sorting parameters below do not apply to them.
 
 Entity lists accept the same `q`, `tag`, `field`, `value`, `sort`, and `dir`
 parameters as the browser UI. Field and sort names are visible labels such as

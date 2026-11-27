@@ -8,20 +8,21 @@
 {{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
 <form class="stack" method="post" action="{{.Action}}">
 {{ csrfField }}
+<input type="hidden" name="return_to" value="{{.ReturnURL}}">
   <label>Name<input name="name" value="{{.Item.Name}}" required></label>
   <label>Kind<input name="kind" value="{{.Item.Kind}}" placeholder="vps, domain, software license…"></label>
   <label>Provider<input name="provider" value="{{.Item.Provider}}" placeholder="Hetzner, Namecheap…"></label>
   <label>Amount<input name="amount" value="{{.Item.Amount}}" placeholder="12.99"></label>
   <label>Currency<input name="currency" value="{{.Item.Currency}}" placeholder="CAD, USD…"></label>
   <label>Billing cycle<input name="billing_cycle" value="{{.Item.BillingCycle}}" placeholder="monthly, yearly, one-time"></label>
-  <label>Renewal date<input type="date" name="renewal_date" value="{{.Item.RenewalDate}}"></label>
+  <label>Renewal date<input type="{{dateInputType .Item.RenewalDate}}" name="renewal_date" value="{{.Item.RenewalDate}}"></label>
   <label><input type="checkbox" name="auto_renew" {{if .Item.AutoRenew}}checked{{end}}> Auto-renew</label>
   <label>Status<input name="status" value="{{.Item.Status}}" placeholder="active, cancelled"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
   {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
-    <a class="btn" href="/subscriptions">Cancel</a>
+    <a class="btn" data-list-return href="{{.ReturnURL}}">Cancel</a>
   </div>
 </form>
 {{end}}

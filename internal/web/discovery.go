@@ -175,6 +175,7 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB, 
 		result := discoveryImportResult{Title: "Discovery import complete", Source: DiscoverySource{ID: "default", Kind: "network", Name: "Network scan"}, InventoryPath: "/hosts"}
 		var events []webhook.Event
 		txErr := store.WithTx(db, func(tx *sql.Tx) error {
+			staged := webhook.ForTransaction(tx, dispatcher)
 			if err := store.NewHostTypeRepo(db).WithTx(tx).Require(hostType); err != nil {
 				return err
 			}
@@ -231,7 +232,7 @@ func importNetwork(hosts *store.HostRepo, opts NetDiscoveryOptions, db *sql.DB, 
 				if err != nil {
 					return err
 				}
-				if err := recordDiscoveryMutation(tx, cl, dispatcher, store.ChangeEvent{
+				if err := recordDiscoveryMutation(tx, cl, staged, store.ChangeEvent{
 					EntityType: "host", EntityID: newID, Label: h.Name,
 					Action: domain.ActionImport, Actor: actor(req),
 				}, h, &events); err != nil {

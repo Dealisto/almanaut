@@ -53,6 +53,36 @@
   check("deep links reveal a previously hidden panel", !panels[2].hidden && panels[0].hidden);
   check("deep links scroll to their heading", scrollY > 1000, `scrollY=${scrollY}`);
 
+  const importForm = document.getElementById("discovery-import");
+  const changesForm = document.getElementById("discovery-changes");
+  const importAll = importForm.querySelector("[data-select-all]");
+  const importItems = [...importForm.querySelectorAll("[data-selection-item]")];
+  const changesAll = changesForm.querySelector("[data-select-all]");
+  const changesItems = [...changesForm.querySelectorAll("[data-selection-item]")];
+  check("discovery reflects initially selected imports", importAll.checked && !importAll.indeterminate &&
+    importForm.querySelector("[data-selection-count]").textContent === "2 selected" && !importForm.querySelector("button").disabled);
+  check("discovery changes require an explicit field selection", !changesAll.checked && changesForm.querySelector("button").disabled);
+  importAll.click();
+  check("discovery clear-all disables empty imports and preserves host-link preferences", importItems.every((item) => !item.checked) &&
+    importForm.querySelector("button").disabled && importForm.elements.link.checked);
+  changesAll.click();
+  check("discovery select-all stays within the selected resource", changesItems.every((item) => item.checked) &&
+    !changesForm.querySelector("button").disabled && importItems.every((item) => !item.checked));
+  changesItems[0].click();
+  check("discovery partial selections expose an indeterminate select-all", changesAll.indeterminate && !changesAll.checked &&
+    changesForm.querySelector("[data-selection-count]").textContent === "1 selected");
+  check("discovery submits only selected fields without select-all metadata", JSON.stringify([...new FormData(changesForm)]) ===
+    JSON.stringify([["field", "ram"]]));
+  importItems[0].checked = true;
+  changesItems[1].checked = false;
+  window.dispatchEvent(new PageTransitionEvent("pageshow", {persisted: true}));
+  check("restored discovery values reconcile each form independently", importAll.indeterminate &&
+    !importForm.querySelector("button").disabled && changesForm.querySelector("button").disabled &&
+    !changesAll.checked && !changesAll.indeterminate);
+  const trackedForm = document.getElementById("discovery-tracked");
+  check("already tracked discovery resources cannot be selected", trackedForm.querySelector("[data-select-all]").disabled &&
+    trackedForm.querySelector("button").disabled);
+
   const checks = [...document.querySelectorAll('input[name="ids"]')];
   const selectAll = document.querySelector("[data-select-all]");
   const submit = document.querySelector("#bulkform button");
@@ -89,6 +119,40 @@
     const label = doc.querySelector('input[name="ids"]')?.getAttribute("aria-label");
     check(`${list} selection identifies the record and escapes its name`, label === expected &&
       !doc.querySelector("script:not([src])"), `label=${label}`);
+    const originQuery = new URLSearchParams({q: "Browser", sort: "id", dir: "desc", page: "1", per_page: "1"});
+    originQuery.sort();
+    const origin = `/${list}?${originQuery}`;
+    const filtered = await page(origin);
+    const record = [...filtered.querySelectorAll("tbody a")].find((link) =>
+      new URL(link.getAttribute("href"), location.href).pathname === `/${list}/1`);
+    const recordURL = record && new URL(record.getAttribute("href"), location.href);
+    check(`${list} record links carry their originating filters, sort and page`, recordURL?.searchParams.get("return_to") === origin);
+    if (recordURL) {
+      const detail = await page(recordURL.pathname + recordURL.search);
+      check(`${list} server-rendered Back to list preserves list controls without JavaScript`,
+        detail.querySelector("[data-list-return]")?.getAttribute("href") === origin);
+      const detailEdit = detail.querySelector(".ph-actions a");
+      const detailEditURL = detailEdit && new URL(detailEdit.getAttribute("href"), location.href);
+      check(`${list} detail Edit carries the originating list`, detailEditURL?.pathname === `/${list}/1/edit` &&
+        detailEditURL.searchParams.get("return_to") === origin);
+    }
+    for (const [label, target, action] of [["New", `/${list}/new`, `/${list}`], ["Edit", `/${list}/1/edit`, `/${list}/1`]]) {
+      const link = [...filtered.querySelectorAll("main a")].find((link) =>
+        new URL(link.getAttribute("href"), location.href).pathname === target);
+      const linkURL = link && new URL(link.getAttribute("href"), location.href);
+      check(`${list} list ${label} link preserves list controls`, linkURL?.searchParams.get("return_to") === origin);
+      if (linkURL) {
+        const formPage = await page(linkURL.pathname + linkURL.search);
+        const form = [...formPage.querySelectorAll("main form")].find((form) => form.getAttribute("action") === action);
+        check(`${list} ${label} form retains Cancel and submitted context with a canonical action`,
+          form?.querySelector('[name="return_to"]')?.value === origin &&
+          form.querySelector("[data-list-return]")?.getAttribute("href") === origin);
+        if (list === "ports" && label === "New") {
+          check("port generation carries the same validated list context", formPage.querySelector(
+            'form[action="/ports/generate"] input[name="return_to"]')?.value === origin);
+        }
+      }
+    }
     const query = new URLSearchParams({q: "Browser", sort: "id", dir: "desc", page: "999", per_page: "1"});
     const outOfRange = await page(`/${list}?${query}`);
     const emptyState = outOfRange.querySelector(".empty");

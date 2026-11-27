@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"crypto/x509"
 	"fmt"
 	"net"
 	"strings"
@@ -38,38 +39,9 @@ func ComputeCertMismatches(subject string, prev *CertProbeStatus, serial, issuer
 	return out
 }
 
-// sanCovers reports whether name is matched by any SAN, case-insensitively,
-// honouring a single leading-wildcard label (*.example.com matches a.example.com
-// but not example.com or a.b.example.com). IP literals compare only against
-// the typed IP SANs, using address equality rather than textual spelling.
+// sanCovers uses the same DNS wildcard, case and IP SAN rules as Go's TLS
+// hostname verifier. This checks identity only, not certificate trust or expiry.
 func sanCovers(sans []string, name string, ipSANs ...net.IP) bool {
-	ipName := name
-	if len(ipName) >= 2 && ipName[0] == '[' && ipName[len(ipName)-1] == ']' {
-		ipName = ipName[1 : len(ipName)-1]
-	}
-	if ip := net.ParseIP(ipName); ip != nil {
-		for _, candidate := range ipSANs {
-			if ip.Equal(candidate) {
-				return true
-			}
-		}
-		return false
-	}
-	name = strings.ToLower(name)
-	for _, san := range sans {
-		san = strings.ToLower(strings.TrimSpace(san))
-		if san == name {
-			return true
-		}
-		if strings.HasPrefix(san, "*.") {
-			suffix := san[1:] // ".example.com"
-			if strings.HasSuffix(name, suffix) {
-				host := name[:len(name)-len(suffix)]
-				if host != "" && !strings.Contains(host, ".") {
-					return true
-				}
-			}
-		}
-	}
-	return false
+	cert := x509.Certificate{DNSNames: sans, IPAddresses: ipSANs}
+	return cert.VerifyHostname(name) == nil
 }

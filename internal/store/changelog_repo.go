@@ -65,6 +65,41 @@ func (r *ChangelogRepo) ListRecent(limit int) ([]ChangeEvent, error) {
 	)
 }
 
+// ExistingRefs resolves only the inventory references shown in an activity
+// feed. Labels stay frozen in the events; loading complete entities or their
+// related display data is unnecessary just to decide whether to show a link.
+func (r *ChangelogRepo) ExistingRefs(refs []domain.EntityRef) (map[domain.EntityRef]bool, error) {
+	byType := make(map[string][]int64)
+	for _, ref := range refs {
+		if _, known := entityTables[ref.Type]; known && ref.ID > 0 {
+			byType[ref.Type] = append(byType[ref.Type], ref.ID)
+		}
+	}
+	live := make(map[domain.EntityRef]bool)
+	for typ, ids := range byType {
+		err := eachIDBatch(ids, func(placeholders string, args []any) error {
+			// Identifiers come only from the shared entity table allowlist.
+			rows, err := r.db.Query(`SELECT id FROM `+entityTables[typ]+` WHERE id IN (`+placeholders+`)`, args...)
+			if err != nil {
+				return fmt.Errorf("query activity references: %w", err)
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var id int64
+				if err := rows.Scan(&id); err != nil {
+					return fmt.Errorf("scan activity reference: %w", err)
+				}
+				live[domain.EntityRef{Type: typ, ID: id}] = true
+			}
+			return rows.Err()
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return live, nil
+}
+
 // LastActivity returns, per entity, the timestamp of its most recent changelog
 // event (create/update/import/acknowledge/…) as an RFC3339 string. Timestamps
 // are written in UTC (see nowRFC3339), so MAX over the text column is also the

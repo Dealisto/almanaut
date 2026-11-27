@@ -5,7 +5,7 @@
     <h1>Networks</h1><p class="page-description">Your subnets, gateways and IP allocations in one place.</p>
   </div>
   <div class="ph-actions">
-    {{if canWrite}}<a class="btn btn-primary" href="/networks/new">+ New network</a>{{end}}
+    {{if canWrite}}<a class="btn btn-primary" href="{{listFormURL .Controls.BasePath (printf "%s/new" .Controls.BasePath)}}">+ New network</a>{{end}}
   </div>
 </div>
 {{template "listcontrols" .Controls}}
@@ -18,13 +18,13 @@
   <tbody>
   {{range .Items}}
     <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select {{.Name}}">{{end}}</td>
-      <td><div class="entity-cell"><span class="entity-icon">{{icon "network"}}</span><a href="/networks/{{.ID}}">{{.Name}}</a></div></td>
+      <td><div class="entity-cell"><span class="entity-icon">{{icon "network"}}</span><a href="{{listRecordURL $.Controls.BasePath .ID}}">{{.Name}}</a></div></td>
       <td><code>{{.CIDR}}</code></td>
       <td>{{.Gateway}}</td>
       <td>
         {{if canWrite}}
         <details class="row-menu"><summary>Actions</summary>
-        <a class="btn" href="/networks/{{.ID}}/edit">Edit</a>
+        <a class="btn" href="{{listFormURL $.Controls.BasePath (printf "%s/%d/edit" $.Controls.BasePath .ID)}}">Edit</a>
         <form class="form-inline" method="post" action="/networks/{{.ID}}/delete"
               data-confirm="Delete this network?">
           {{ csrfField }}
@@ -39,7 +39,7 @@
 </table>
 </div>
 {{else}}
-<div class="table-wrap"><div class="empty">{{if gt .Controls.Pagination.Total 0}}{{template "listpageempty" .Controls.Pagination}}{{else if .Controls.Active}}{{icon "search"}}<strong>No matching records.</strong><p>Try a different search or clear your filters.</p><a class="btn" href="{{.Controls.BasePath}}">Clear filters</a>{{else}}{{icon "box"}}<strong>No networks yet.</strong><p>Add your first record to start documenting your inventory.</p>{{if canWrite}}<a class="btn" href="{{.Controls.BasePath}}/new">Add a record</a>{{end}}{{end}}</div></div>
+<div class="table-wrap"><div class="empty">{{if gt .Controls.Pagination.Total 0}}{{template "listpageempty" .Controls.Pagination}}{{else if .Controls.Active}}{{icon "search"}}<strong>No matching records.</strong><p>Try a different search or clear your filters.</p><a class="btn" href="{{.Controls.BasePath}}">Clear filters</a>{{else}}{{icon "box"}}<strong>No networks yet.</strong><p>Add your first record to start documenting your inventory.</p>{{if canWrite}}<a class="btn" href="{{listFormURL .Controls.BasePath (printf "%s/new" .Controls.BasePath)}}">Add a record</a>{{end}}{{end}}</div></div>
 {{end}}
 {{template "pagination" .Controls.Pagination}}
 {{end}}

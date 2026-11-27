@@ -75,8 +75,50 @@
     updateNavigation(open ? !focusInSidebar : mobile.matches && focusInSidebar);
   });
   const themeForm = document.querySelector(".theme-switch");
-  themeForm?.addEventListener("submit", () => {
+  let themePending = false;
+  themeForm?.addEventListener("submit", async (event) => {
     themeForm.elements.return_to.value = location.pathname + location.search + location.hash;
+    if (!window.fetch || !window.AbortController) return;
+    event.preventDefault();
+    if (themePending) return;
+    const status = document.getElementById("theme-status");
+    const buttons = [...themeForm.querySelectorAll('button[name="theme"]')];
+    const body = new URLSearchParams(new FormData(themeForm));
+    body.set("theme", event.submitter?.value || "system");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    themePending = true;
+    themeForm.setAttribute("aria-busy", "true");
+    // Keep the focused button focusable while ignoring further submissions.
+    buttons.forEach(button => button.setAttribute("aria-disabled", "true"));
+    if (status) status.textContent = "Saving appearance…";
+    try {
+      const response = await fetch(themeForm.action, {
+        method: "POST", body, headers: {Accept: "application/json"},
+        credentials: "same-origin", mode: "same-origin", redirect: "error", signal: controller.signal
+      });
+      if (!response.ok || response.redirected || response.headers.get("Content-Type")?.split(";")[0] !== "application/json") {
+        throw new Error("Appearance was not confirmed");
+      }
+      const result = await response.json();
+      if (!["system", "light", "dark"].includes(result.theme)) throw new Error("Invalid appearance response");
+      document.documentElement.dataset.theme = result.theme;
+      for (const button of buttons) {
+        const selected = button.value === result.theme;
+        button.classList.toggle("active", selected);
+        button.setAttribute("aria-pressed", String(selected));
+      }
+      if (status) status.textContent = "Appearance saved.";
+    } catch {
+      // Never fall back to navigation here: it would discard the draft that
+      // this enhancement protects, including after a session expires.
+      if (status) status.textContent = "Could not save appearance. Your unsaved changes are still here. Try again.";
+    } finally {
+      clearTimeout(timeout);
+      themePending = false;
+      themeForm.removeAttribute("aria-busy");
+      buttons.forEach(button => button.removeAttribute("aria-disabled"));
+    }
   });
   document.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k" && search) {
@@ -187,26 +229,32 @@
     window.addEventListener("afterprint", activate);
   }
 
-  const bulk = document.getElementById("bulkform");
-  const checks = [...document.querySelectorAll('input[name="ids"][form="bulkform"]')];
-  const selectAll = document.querySelector("[data-select-all]");
-  function updateSelection() {
-    const selected = checks.filter((checkbox) => checkbox.checked).length;
-    const count = document.querySelector("[data-selection-count]");
-    if (count) count.textContent = selected ? `${selected} selected` : "Select rows on this page to apply an action";
-    if (bulk) bulk.querySelectorAll('button[type="submit"]').forEach((button) => { button.disabled = selected === 0; });
-    if (selectAll) {
-      selectAll.checked = selected > 0 && selected === checks.length;
-      selectAll.indeterminate = selected > 0 && selected < checks.length;
+  function enhanceSelection(form, checks, selectAll, count) {
+    if (!form) return;
+    function updateSelection() {
+      const selected = checks.filter((checkbox) => checkbox.checked).length;
+      if (count) count.textContent = selected ? `${selected} selected` : "Select rows on this page to apply an action";
+      form.querySelectorAll('button[type="submit"]').forEach((button) => { button.disabled = selected === 0; });
+      if (selectAll) {
+        selectAll.disabled = checks.length === 0;
+        selectAll.checked = selected > 0 && selected === checks.length;
+        selectAll.indeterminate = selected > 0 && selected < checks.length;
+      }
+      for (const checkbox of checks) checkbox.closest("tr")?.classList.toggle("selected", checkbox.checked);
     }
-    for (const checkbox of checks) checkbox.closest("tr")?.classList.toggle("selected", checkbox.checked);
+    selectAll?.addEventListener("change", () => { for (const checkbox of checks) checkbox.checked = selectAll.checked; updateSelection(); });
+    for (const checkbox of checks) checkbox.addEventListener("change", updateSelection);
+    updateSelection();
+    // History can restore values without dispatching change events.
+    window.addEventListener("pageshow", updateSelection);
   }
-  selectAll?.addEventListener("change", () => { for (const checkbox of checks) checkbox.checked = selectAll.checked; updateSelection(); });
-  for (const checkbox of checks) checkbox.addEventListener("change", updateSelection);
-  updateSelection();
-  // Browsers can restore form values after initialization when returning to
-  // a list. Keep the count, selected rows and destructive buttons in sync.
-  window.addEventListener("pageshow", updateSelection);
+  enhanceSelection(document.getElementById("bulkform"),
+    [...document.querySelectorAll('input[name="ids"][form="bulkform"]')],
+    document.querySelector("[data-select-all]"), document.querySelector("[data-selection-count]"));
+  for (const form of document.querySelectorAll("[data-selection-form]")) {
+    enhanceSelection(form, [...form.querySelectorAll("[data-selection-item]")],
+      form.querySelector("[data-select-all]"), form.querySelector("[data-selection-count]"));
+  }
 
   // Wide tables can be scrolled with the keyboard without trapping focus.
   function updateTables() {

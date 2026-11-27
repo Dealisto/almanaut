@@ -37,6 +37,13 @@ Before each delivery, the item is read again so a renewal or deletion while
 earlier alerts were being sent does not trigger an obsolete queued alert.
 The refreshed deadline and label are used if the item is still due.
 
+Discord embed titles and descriptions are shortened with an ellipsis when they
+exceed the [service's field limits](https://discord.com/developers/docs/resources/message#embed-object-embed-limits)
+(256 and 4096 characters respectively). Unicode
+characters remain intact; supplementary characters count as two units for a
+conservative limit. Long inventory labels therefore do not leave an alert
+permanently rejected. The full value remains available in the inventory.
+
 Notification URLs must point directly to their final ntfy or Discord endpoint.
 HTTP redirects are treated as failed deliveries, including redirects that
 preserve the POST method; this prevents a redirected request from being mistaken
@@ -67,6 +74,9 @@ saved can cause a repeated delivery. Exhausted retries are logged and removed.
 The queue holds up to 10,000 deliveries and 64 MiB of retained request data.
 If either bound is reached, the inventory mutation rolls back and returns HTTP
 `503` with `Retry-After`; events are not silently dropped to make room.
+CSV rows, bulk edits/deletions, generated ports and discovery imports share
+admission accounting within their respective transactions, including events for
+indirectly changed records. Hitting a limit rolls back the complete operation.
 Administrators can see the pending count on **Webhooks** and check unavailable
 receivers. Disabling, deleting, or changing an endpoint's URL, secret or filters
 cancels its queued deliveries. A delivery already in progress may still complete.
@@ -113,6 +123,10 @@ Things to know:
   acknowledgements omit the response payload; refusal messages are redacted
   before truncation so long secrets cannot leak a partial value.
   Malformed login acknowledgements are reported without their raw contents.
+- Operations whose context is already canceled or expired are not sent to Kuma
+  and leave the shared session usable. Concurrent connection failures preserve
+  the cancellation cause so callers can distinguish an interruption from a
+  remote refusal.
 - A whole-inventory YAML import does not itself trigger a sync — use **Sync
   now** on `/kuma` afterwards.
 - If a create's acknowledgment is lost mid-flight (e.g. Kuma restarting during

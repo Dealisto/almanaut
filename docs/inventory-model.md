@@ -44,6 +44,11 @@ hosts, select a replacement before deleting it. All affected hosts are updated
 in one transaction; their other details and custom fields are preserved, and
 the changes appear in host history and update webhooks.
 
+If a type disappears while a host form is open, a failed save preserves the
+submitted type as unavailable. Select a valid replacement explicitly before
+retrying; the form does not silently select the first catalog entry. An empty
+submitted type likewise remains empty until a choice is made.
+
 ## Navigating a record
 
 Record pages have three sections:
@@ -57,6 +62,36 @@ Record pages have three sections:
 Section links can be bookmarked. With JavaScript enabled, use the arrow keys to
 move between tabs; without it, all three sections remain visible on one page.
 Journal and attachment actions return to **Activity & files**.
+
+Relationship lists and their neighborhood graphs resolve names only for
+connected records, using one read-only snapshot for the relationships and their
+labels. Other detail sections are loaded independently. Deleted neighbors remain
+identified as deleted, without a link to a missing record.
+
+### Form validation
+
+If an integer field fails validation, forms retain the submitted text rather
+than replacing it with zero. This covers rack positions and device heights,
+rack height, and VLAN IDs. Retrying the same invalid draft does not change the
+stored value; correct the field explicitly before saving.
+
+With JavaScript enabled, **System / Light / Dark** changes appearance without
+reloading the page or losing unsaved form inputs. The preference is saved in the
+browser's cookie. If saving fails, the current page stays open with a status
+message; retrying does not submit the inventory form. Without JavaScript, the
+theme form keeps its normal submit-and-return behavior.
+
+## Relationships
+
+Entity selectors load IDs and labels in catalog order, including composed port
+and NIC names, without loading full inventory records and their decorations.
+They still include the complete inventory, so the option count grows with it.
+
+The **Relationships** page links a source entity to a destination with a chosen
+relationship kind. If a submission is invalid, the form keeps all three choices
+for correction. An entity deleted in another tab remains visible as an
+unavailable choice instead of being silently replaced by the first option.
+Choose an existing endpoint before retrying; invalid submissions create no link.
 
 ## Sites, locations & racks
 
@@ -82,12 +117,20 @@ both ports' detail pages and on both owners', and either end can change or
 clear it. A port has one cable: the form only offers free ports, and a port
 that is already connected elsewhere is refused (by the API and CSV import
 too).
+If a submitted NIC or peer port is no longer available when the form is
+redisplayed, its selection remains visible as unavailable. Retrying does not
+silently replace it with **none** or **not connected**. Choose a valid target
+or explicitly clear the relation before saving.
 
 A host's port can also belong to a **NIC**, an onboard or expansion card of
 that same host. Deleting a NIC, or moving it to another host, keeps the ports
 and only clears their NIC. The new-port page can generate "Port 1" to
 "Port N" for an owner in one step, skipping names that already exist, which
 is the quick way to fill in a 24-port switch.
+If the generator rejects the input, it keeps the submitted owner, prefix and
+count for correction, together with the original list filters. The single-port
+form on the same page remains independent. Duplicate-name checks read only
+the selected owner's names inside the generation transaction.
 
 ## IPAM: VLANs & IP reservations
 
@@ -108,22 +151,30 @@ When networks overlap, host usage is attributed to the most specific subnet;
 equal prefixes use the first network in inventory order. Capacity counts follow
 that attribution. The "next free" suggestion additionally excludes every IP
 assigned to a host, including hosts attributed to a child subnet or an equivalent
-network. IPv4 and IPv4-mapped IPv6 spellings identify the same address. Gateway
-and reservation exclusions apply to the network where they are configured.
+network. It also excludes gateways, reserved ranges, and IPv4 network/broadcast
+addresses belonging to overlapping networks; /31 and /32 networks have no
+reserved endpoints. IPv4 and IPv4-mapped IPv6 spellings identify the same address.
+Native IPv6 reservations do not reserve IPv4 addresses. Reservation ranges are
+clipped to their own networks before they affect suggestions elsewhere.
 A network can therefore have a positive local free-address count but no safe
-suggestion when hosts attributed to overlapping networks occupy the candidates.
+suggestion when overlapping networks occupy or reserve all candidates.
 
 Reservation counts remain exact for networks with up to 30 host bits, including
 networks too large for the next-free search. That search is limited to 65,536
 addresses; larger networks leave the suggestion empty. Networks with 31 or more
 host bits show unbounded capacity instead of a numeric free-address count.
+Within that search bound, reserved intervals are skipped as whole ranges instead
+of visiting each address. Local capacity and global exclusions reuse parsed
+reservation ranges, reducing work for inventories with many reservations.
 
 ## Tags
 
 Tags are free-form labels on any entity. Each name is normalized before it is
 stored — surrounding whitespace trimmed, a leading `#` dropped, and the rest
 lowercased — so `#Prod`, `prod` and ` PROD ` are all the same tag rather than
-three near-duplicates.
+three near-duplicates. Only one leading `#` is removed: enter `##prod` to
+store the distinct literal name `#prod`. Tag overview links and YAML exports
+preserve that distinction.
 
 **Tags** (`/tags`) is their cross-type view: a cloud of every tag in use with
 how many entities carry it, and clicking one drills down to that tag's
@@ -131,6 +182,10 @@ entities — across every type at once. That is what tags are for that
 relationships are not: a `needs-upgrade` or `prod` label can span hosts,
 services and certificates, and this page is the only place that collects them
 into one list.
+
+A tag's entity list resolves only its referenced records, using the same
+snapshot for associations and names. It preserves composite port and NIC names
+without loading the rest of the inventory.
 
 Tags are searchable from global search, filterable on
 [list pages](lists-and-views.md#filtering--sorting), applicable in
@@ -142,6 +197,15 @@ Admins define **custom fields** at `/custom-fields`: each field belongs to one
 entity type and has a kind (text, number, bool, or date). Defined fields
 appear on that type's edit forms and detail pages, their values are searchable
 from global search, and they round-trip through the YAML export.
+Numeric values such as `+12`, `1_000` or `0x1p2` remain editable as text when a
+native number input would erase them. Dates use the same fallback for values
+such as year zero or surrounding spaces; this also applies to inventory date
+fields. Invalid drafts remain visible after an error. Ordinary compatible
+values retain native number controls and date pickers, and validation remains
+on the server.
+If creating a definition fails validation or conflicts with an existing name,
+the form retains its label, optional name, entity type, and value type. A failed
+label edit keeps the affected editor open with the submitted text.
 
 Boolean values accept `true`, `on`, `1`, `yes`, or `y`, and `false`, `off`,
 `0`, `no`, or `n` (case-insensitive, with surrounding whitespace ignored).
@@ -165,6 +229,9 @@ you add as a running log — and a collapsible **Change history**. A global
 latest changes across every entity; delete events remain visible there even
 after the entity is gone. Journal entries are included in the YAML export;
 the change log is not.
+Activity links resolve only the referenced record IDs; the frozen event labels
+remain visible even after a rename or deletion. Delete and import events stay
+unlinked.
 
 ---
 

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"errors"
@@ -36,36 +37,39 @@ func csvFields(sample any) map[string]bool {
 // rowErrs describe invalid CSV syntax or bad rows. A non-nil err is an
 // infrastructure failure (reader or database error).
 func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, int, []string, error) {
-	cr := csv.NewReader(r)
+	return rs.importCSVContext(context.Background(), d, r, actor)
+}
+
+func (rs resource[T]) importCSVContext(ctx context.Context, d handlerDeps, r io.Reader, actor string) (int, int, []string, error) {
+	cr := csv.NewReader(contextReader{ctx: ctx, Reader: r})
 	cr.FieldsPerRecord = -1 // we length-check each row ourselves for row-level errors
-	records, err := cr.ReadAll()
-	if err != nil {
-		var syntax *csv.ParseError
-		if errors.As(err, &syntax) {
-			return 0, 0, []string{"invalid CSV: " + syntax.Error()}, nil
-		}
-		return 0, 0, nil, err
-	}
-	if len(records) == 0 {
+	cr.ReuseRecord = true   // only the current record's field slice is needed
+	header, err := cr.Read()
+	if errors.Is(err, io.EOF) {
 		return 0, 0, []string{"the file is empty"}, nil
+	}
+	if err != nil {
+		rowErrs, readErr := csvReadError(err)
+		return 0, 0, rowErrs, readErr
 	}
 	// Spreadsheets that save as "CSV UTF-8" prepend a BOM; strip it so the first
 	// header cell is not read as "\uFEFFname" and rejected as an unknown column.
-	records[0][0] = strings.TrimPrefix(records[0][0], "\uFEFF")
-
-	header := records[0]
+	header[0] = strings.TrimPrefix(header[0], "\uFEFF")
+	columnCount := len(header)
 	allowed := csvFields(rs.newItem)
-	seen := make(map[string]bool, len(header))
+	columns := make(map[string]int, columnCount)
+	var headerErr string
 	for i, raw := range header {
 		col := strings.TrimSpace(raw)
 		if !allowed[col] {
-			return 0, 0, []string{fmt.Sprintf("unknown column %q for this type", col)}, nil
+			headerErr = fmt.Sprintf("unknown column %q for this type", col)
+			break
 		}
-		if seen[col] {
-			return 0, 0, []string{fmt.Sprintf("duplicate column %q", col)}, nil
+		if _, exists := columns[col]; exists {
+			headerErr = fmt.Sprintf("duplicate column %q", col)
+			break
 		}
-		seen[col] = true
-		header[i] = col
+		columns[col] = i
 	}
 
 	type pending struct {
@@ -74,48 +78,81 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 		line   int
 	}
 	var (
-		plan    []pending
-		rowErrs []string
+		plan          []pending
+		rowErrs       []string
+		validationErr error
 	)
-	for i, rec := range records[1:] {
-		line := i + 2 // 1-based, and +1 for the header row
-		if len(rec) != len(header) {
-			rowErrs = append(rowErrs, fmt.Sprintf("row %d: has %d columns, expected %d", line, len(rec), len(header)))
+	reject := func(message string) {
+		// Any invalid row makes the entire plan unusable. Keep validating the
+		// remaining rows for diagnostics, but release the entities already built.
+		plan = nil
+		rowErrs = append(rowErrs, message)
+	}
+	for line := 2; ; line++ { // record numbers, preserving multiline-cell diagnostics
+		rec, readErr := cr.Read()
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil {
+			rowErrs, readErr := csvReadError(readErr)
+			return 0, 0, rowErrs, readErr
+		}
+		if err := ctx.Err(); err != nil {
+			return 0, 0, nil, err
+		}
+		// ReadAll historically reported syntax/reader failures before header
+		// or validation errors. Drain without retaining rows to keep that order.
+		if headerErr != "" || validationErr != nil {
 			continue
 		}
-		row := make(map[string]string, len(header))
-		for j, col := range header {
-			row[col] = rec[j]
+		if len(rec) != columnCount {
+			reject(fmt.Sprintf("row %d: has %d columns, expected %d", line, len(rec), columnCount))
+			continue
 		}
-		get := func(field string) string { return row[field] }
+		get := func(field string) string {
+			if index, exists := columns[field]; exists {
+				return rec[index]
+			}
+			return ""
+		}
 
 		id, create := int64(0), true
-		if raw := strings.TrimSpace(row["id"]); raw != "" {
+		if raw := strings.TrimSpace(get("id")); raw != "" {
 			parsed, perr := strconv.ParseInt(raw, 10, 64)
 			if perr != nil {
-				rowErrs = append(rowErrs, fmt.Sprintf("row %d: invalid id %q", line, raw))
+				reject(fmt.Sprintf("row %d: invalid id %q", line, raw))
 				continue
 			}
 			if _, gerr := rs.repo.Get(parsed); gerr != nil {
 				if errors.Is(gerr, store.ErrNotFound) {
-					rowErrs = append(rowErrs, fmt.Sprintf("row %d: id %d does not exist", line, parsed))
+					reject(fmt.Sprintf("row %d: id %d does not exist", line, parsed))
 					continue
 				}
-				return 0, 0, nil, gerr
+				validationErr = gerr
+				plan, rowErrs = nil, nil
+				continue
 			}
 			id, create = parsed, false
 		}
 
 		item, parseErr := rs.parseInput(get, id)
 		if parseErr != nil {
-			rowErrs = append(rowErrs, fmt.Sprintf("row %d: %v", line, parseErr))
+			reject(fmt.Sprintf("row %d: %v", line, parseErr))
 			continue
 		}
 		if verr := item.Validate(); verr != nil {
-			rowErrs = append(rowErrs, fmt.Sprintf("row %d: %v", line, verr))
+			reject(fmt.Sprintf("row %d: %v", line, verr))
 			continue
 		}
-		plan = append(plan, pending{item: item, create: create, line: line})
+		if len(rowErrs) == 0 {
+			plan = append(plan, pending{item: item, create: create, line: line})
+		}
+	}
+	if headerErr != "" {
+		return 0, 0, []string{headerErr}, nil
+	}
+	if validationErr != nil {
+		return 0, 0, nil, validationErr
 	}
 	if len(rowErrs) > 0 {
 		return 0, 0, rowErrs, nil // all-or-nothing: write nothing
@@ -124,23 +161,33 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 	var created, updated int
 	var events []webhook.Event
 	failedLine := 0
-	err = store.WithTx(d.db, func(tx *sql.Tx) error {
+	err = store.WithTxContext(ctx, d.db, func(tx *sql.Tx) error {
+		// This import owns all staging for the transaction, including indirect
+		// mutation events. Keep the scope local; post-commit dispatch uses d.
+		batchDeps := d
+		batchDeps.webhooks = webhook.ForTransaction(tx, d.webhooks)
 		for _, p := range plan {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			failedLine = p.line
 			if p.create {
-				if _, e := rs.createEntityTx(tx, d, p.item, nil, actor, &events); e != nil {
+				if _, e := rs.createEntityTx(tx, batchDeps, p.item, nil, actor, &events); e != nil {
 					return e
 				}
 				created++
 				continue
 			}
-			if e := rs.updateEntityTx(tx, d, p.item, nil, actor, &events); e != nil {
+			if e := rs.updateEntityTx(tx, batchDeps, p.item, nil, actor, &events); e != nil {
 				return e
 			}
 			updated++
 		}
 		return nil
 	})
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return 0, 0, nil, err
+	}
 	if c := constraintError(err); c != nil {
 		// A row that contradicts the rows before it is a row error too; the
 		// rollback has already undone the earlier rows.
@@ -151,4 +198,13 @@ func (rs resource[T]) importCSV(d handlerDeps, r io.Reader, actor string) (int, 
 	}
 	d.webhooks.Dispatch(events...)
 	return created, updated, nil, nil
+}
+
+// csvReadError keeps malformed input separate from transport/storage failures.
+func csvReadError(err error) ([]string, error) {
+	var syntax *csv.ParseError
+	if errors.As(err, &syntax) {
+		return []string{"invalid CSV: " + syntax.Error()}, nil
+	}
+	return nil, err
 }

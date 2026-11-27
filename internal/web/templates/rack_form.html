@@ -6,8 +6,10 @@
   </div>
 </div>
 {{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
+{{$u_height := integerFormInput .Error "u_height" .Item.UHeight}}
 <form class="stack" method="post" action="{{.Action}}">
 {{ csrfField }}
+<input type="hidden" name="return_to" value="{{.ReturnURL}}">
   <label>Name<input name="name" value="{{.Item.Name}}" required></label>
   <label>Location
     <select name="location_id">
@@ -15,12 +17,12 @@
       {{$foundLocationID := false}}{{range .Extras.Locations}}{{if eq .ID $.Item.LocationID}}{{$foundLocationID = true}}{{end}}<option value="{{.ID}}"{{if eq .ID $.Item.LocationID}} selected{{end}}>{{.Name}}</option>{{end}}{{if and (gt .Item.LocationID 0) (not $foundLocationID)}}<option value="{{.Item.LocationID}}" selected>location:{{.Item.LocationID}} (deleted)</option>{{end}}
     </select>
   </label>
-  <label>Height (U)<input type="number" name="u_height" min="1" max="60" value="{{.Item.UHeight}}" required></label>
+  <label>Height (U)<input type="{{$u_height.Type}}" inputmode="numeric" name="u_height" min="1" max="60" value="{{$u_height.Value}}" required></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
   {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">
     <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
-    <a class="btn" href="/racks">Cancel</a>
+    <a class="btn" data-list-return href="{{.ReturnURL}}">Cancel</a>
   </div>
 </form>
 {{end}}

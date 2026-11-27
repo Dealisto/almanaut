@@ -3,6 +3,7 @@ package web
 import (
 	"html/template"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"unicode"
@@ -50,10 +51,19 @@ func displayTime(value string) string {
 	return parsed.UTC().Format("Jan 2, 2006, 15:04 UTC")
 }
 
-// Only an application-owned fragment may be appended to the canonical path.
+// Keep list provenance on the canonical detail path after a child mutation.
+// Both the list destination and the optional section are constrained; request
+// URLs and referrers never supply a mutation's return context.
 func detailReturnPath(r *http.Request, path string) string {
-	if r.FormValue("return_section") == "activity" {
-		return path + "#activity"
+	if slash := strings.LastIndex(path, "/"); slash > 0 {
+		base := path[:slash]
+		origin := inventoryListReturnPath(base, r.PostFormValue("return_to"))
+		if origin != base {
+			path += "?" + url.Values{"return_to": {origin}}.Encode()
+		}
+	}
+	if r.PostFormValue("return_section") == "activity" {
+		path += "#activity"
 	}
 	return path
 }

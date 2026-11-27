@@ -5,17 +5,20 @@
 <div class="settings-grid">
 <section class="panel" aria-labelledby="fields-heading"><div class="panel-head"><h2 id="fields-heading">Defined fields</h2><span class="badge">{{len .Defs}} fields</span></div>
 {{if .Defs}}<ul class="record-list">{{range .Defs}}<li><div class="record-heading"><span class="entity-icon">{{icon "settings"}}</span><div class="record-identity"><h3>{{.Label}}</h3><p>{{.EntityType}} · {{.Kind}} · <code>{{.Name}}</code></p></div></div>
-{{if canWrite}}<details class="disclosure"><summary>Edit field<span class="sr-only"> {{.Label}}</span></summary>
-  <form class="inline-editor" method="post" action="/custom-fields/{{.ID}}">{{ csrfField }}<label>Display label<input name="label" value="{{.Label}}" aria-label="Display label for {{.Name}}" required></label><button class="btn" type="submit">Save label</button></form>
+{{if canWrite}}<details class="disclosure"{{if eq $.EditID .ID}} open{{end}}><summary>Edit field<span class="sr-only"> {{.Label}}</span></summary>
+  <form class="inline-editor" method="post" action="/custom-fields/{{.ID}}">{{ csrfField }}<label>Display label<input name="label" value="{{if eq $.EditID .ID}}{{$.EditLabel}}{{else}}{{.Label}}{{end}}" aria-label="Display label for {{.Name}}" required></label><button class="btn" type="submit">Save label</button></form>
   <form class="destructive-action" method="post" action="/custom-fields/{{.ID}}/delete" data-confirm="Delete this field and all its values?">{{ csrfField }}<p class="muted">Deleting this field also removes its values from every record.</p><button class="btn btn-danger" type="submit">Delete field<span class="sr-only"> {{.Label}}</span></button></form>
 </details>{{end}}</li>{{end}}</ul>
 {{else}}<div class="empty">{{icon "settings"}}<strong>No custom fields defined yet.</strong><p>Add a field to make it available on records of the selected type.</p>{{if canWrite}}<a class="btn" href="#add-field">Add your first field</a>{{end}}</div>{{end}}
 </section>
 <aside class="settings-aside">
 {{if canWrite}}<section class="panel" id="add-field"><h2>Add a field</h2><form class="stack" method="post" action="/custom-fields">{{ csrfField }}
-<label>Label<input name="label" placeholder="e.g. Asset tag" required></label>
-<div class="form-grid"><label>Entity type<select name="entity_type">{{range .EntityTypes}}<option value="{{.}}">{{.}}</option>{{end}}</select></label><label>Value type<select name="kind">{{range .Kinds}}<option value="{{.}}">{{.}}</option>{{end}}</select></label></div>
-<details class="disclosure"><summary>Advanced: field name</summary><label>Name (optional)<input name="name" placeholder="Generated from the label" aria-describedby="field-name-help"></label><p id="field-name-help" class="form-help">A stable name used in exports and the API. Leave blank to generate it from the label.</p></details>
+<label>Label<input name="label" value="{{.Draft.Label}}" placeholder="e.g. Asset tag" required></label>
+<div class="form-grid">
+<label>Entity type<select name="entity_type">{{$foundType := false}}{{range .EntityTypes}}{{if eq . $.Draft.EntityType}}{{$foundType = true}}{{end}}<option value="{{.}}"{{if eq . $.Draft.EntityType}} selected{{end}}>{{.}}</option>{{end}}{{if and .Error (not .EditID) (not $foundType)}}<option value="{{.Draft.EntityType}}" selected>{{if .Draft.EntityType}}{{.Draft.EntityType}} (unavailable){{else}}Choose an entity type{{end}}</option>{{end}}</select></label>
+<label>Value type<select name="kind">{{$foundKind := false}}{{range .Kinds}}{{if eq . $.Draft.Kind}}{{$foundKind = true}}{{end}}<option value="{{.}}"{{if eq . $.Draft.Kind}} selected{{end}}>{{.}}</option>{{end}}{{if and .Error (not .EditID) (not $foundKind)}}<option value="{{.Draft.Kind}}" selected>{{if .Draft.Kind}}{{.Draft.Kind}} (unavailable){{else}}Choose a value type{{end}}</option>{{end}}</select></label>
+</div>
+<details class="disclosure"{{if .Draft.Name}} open{{end}}><summary>Advanced: field name</summary><label>Name (optional)<input name="name" value="{{.Draft.Name}}" placeholder="Generated from the label" aria-describedby="field-name-help"></label><p id="field-name-help" class="form-help">A stable name used in exports and the API. Leave blank to generate it from the label.</p></details>
 <div class="actions"><button class="btn btn-primary" type="submit">Add field</button></div>
 </form></section>{{end}}
 <section class="help-card"><h2>Make every record easier to find</h2><p>Values appear on record forms and details. You can search and filter by them, and they are included in inventory exports.</p><p class="muted">Renaming a label keeps the field's stored name and values.</p></section>

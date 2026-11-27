@@ -5,8 +5,8 @@
     <h1>{{.Heading}}</h1><p class="page-description">Details, connections and the history behind this record.</p>
   </div>
   <div class="ph-actions">
-    {{if canWrite}}<a class="btn btn-primary" href="{{.EditURL}}">Edit</a>{{end}}
-    <a class="btn" href="{{.ListURL}}">Back to list</a>
+    {{if canWrite}}<a class="btn btn-primary" href="{{listFormURL .ListURL .EditURL}}">Edit</a>{{end}}
+    <a class="btn" data-list-return href="{{listReturnURL .ListURL}}">Back to list</a>
   </div>
 </div>
 
@@ -28,6 +28,7 @@
           {{if canWrite}}
           <form class="form-inline" method="post" action="/tags/delete">
             {{ csrfField }}
+            <input type="hidden" name="return_to" value="{{listReturnURL $.ListURL}}">
             <input type="hidden" name="id" value="{{.ID}}">
             <input type="hidden" name="entity_type" value="{{.EntityType}}">
             <input type="hidden" name="entity_id" value="{{.EntityID}}">
@@ -40,6 +41,7 @@
     {{if canWrite}}
     <form class="tag-form" method="post" action="/tags">
       {{ csrfField }}
+      <input type="hidden" name="return_to" value="{{listReturnURL $.ListURL}}">
       <input type="hidden" name="entity_type" value="{{.EntityType}}">
       <input type="hidden" name="entity_id" value="{{.EntityID}}">
       <input name="tag" placeholder="Add a tag" aria-label="Tag name" required>
@@ -258,6 +260,7 @@
   {{if canWrite}}
   <form class="journal-add" method="post" action="{{.ListURL}}/{{.EntityID}}/attachments" enctype="multipart/form-data">
     {{ csrfField }}
+    <input type="hidden" name="return_to" value="{{listReturnURL $.ListURL}}">
     <input type="hidden" name="return_section" value="activity">
     <input type="file" name="file" aria-label="Attachment file" required>
     <button class="btn btn-primary" type="submit">Upload</button>
@@ -273,6 +276,7 @@
       <form class="form-inline" method="post" action="/attachments/{{.ID}}/delete"
             data-confirm="Delete this attachment?">
         {{ csrfField }}
+        <input type="hidden" name="return_to" value="{{listReturnURL $.ListURL}}">
         <input type="hidden" name="return_section" value="activity">
         <button class="tag-x" type="submit" aria-label="Delete attachment {{.Filename}}">&times;</button>
       </form>
@@ -288,6 +292,7 @@
   {{if canWrite}}
   <form class="journal-add" method="post" action="{{.ListURL}}/{{.EntityID}}/journal">
     {{ csrfField }}
+    <input type="hidden" name="return_to" value="{{listReturnURL $.ListURL}}">
     <input type="hidden" name="return_section" value="activity">
     <select name="kind" aria-label="kind">
       {{range .JournalKinds}}<option value="{{.}}">{{.}}</option>{{end}}
@@ -306,6 +311,7 @@
       {{if canWrite}}
       <form class="form-inline" method="post" action="/journal/{{.ID}}/delete" data-confirm="Delete this journal entry?">
         {{ csrfField }}
+        <input type="hidden" name="return_to" value="{{listReturnURL $.ListURL}}">
         <input type="hidden" name="return_section" value="activity">
         <button class="tag-x" type="submit" aria-label="Delete journal entry">&times;</button>
       </form>

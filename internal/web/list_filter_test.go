@@ -2,12 +2,23 @@ package web
 
 import (
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 )
 
 // idxOf is the position of sub in s, or -1; used to assert relative ordering.
 func idxOf(s, sub string) int { return strings.Index(s, sub) }
+
+// recordLinkIndex compares the record path while allowing list return state in
+// its query. Edit links and similarly prefixed IDs do not count as record links.
+func recordLinkIndex(body, path string) int {
+	match := regexp.MustCompile(`href="` + regexp.QuoteMeta(path) + `(?:\?[^"<>]*)?"`).FindStringIndex(body)
+	if match == nil {
+		return -1
+	}
+	return match[0]
+}
 
 func TestListSortByName(t *testing.T) {
 	srv, _ := newTestServerDB(t)
@@ -98,17 +109,17 @@ func TestListSearchCombinesFieldsTagsAndSort(t *testing.T) {
 	}
 	for _, query := range []string{"  ZEBRA  ", "10.20.30", "emergency", "asset-9000"} {
 		body := getBody(t, srv, "/hosts?q="+url.QueryEscape(query))
-		if !strings.Contains(body, `href="/hosts/1"`) {
+		if recordLinkIndex(body, "/hosts/1") < 0 {
 			t.Errorf("query %q did not match host", query)
 		}
 	}
 	body := getBody(t, srv, "/hosts?q=asset-9000&tag=prod&field=Status&value=running&sort=Name&dir=asc")
-	a, z := idxOf(body, `href="/hosts/2"`), idxOf(body, `href="/hosts/1"`)
-	if a < 0 || z < 0 || a >= z || strings.Contains(body, `href="/hosts/3"`) {
+	a, z := recordLinkIndex(body, "/hosts/2"), recordLinkIndex(body, "/hosts/1")
+	if a < 0 || z < 0 || a >= z || recordLinkIndex(body, "/hosts/3") >= 0 {
 		t.Fatal("combined search, tag, field filter and sort returned the wrong rows or order")
 	}
 	body = getBody(t, srv, "/hosts?q=asset-9000&field=Status&value=stopped")
-	if strings.Contains(body, `href="/hosts/1"`) || !strings.Contains(body, "No matching records") {
+	if recordLinkIndex(body, "/hosts/1") >= 0 || !strings.Contains(body, "No matching records") {
 		t.Fatal("field filter must still apply to a matching text search")
 	}
 }
@@ -153,7 +164,7 @@ func TestListSortMixedNumbersAndText(t *testing.T) {
 		body := getBody(t, srv, "/hosts?sort=Name&dir="+tc.direction)
 		previous := -1
 		for _, id := range tc.ids {
-			position := strings.Index(body, `href="/hosts/`+id+`"`)
+			position := recordLinkIndex(body, "/hosts/"+id)
 			if position <= previous {
 				t.Fatalf("%s order: host %s occurs at %d after position %d", tc.direction, id, position, previous)
 			}

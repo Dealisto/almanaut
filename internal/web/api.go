@@ -17,10 +17,22 @@ import (
 
 // readAPIBody keeps body-limit failures distinct from malformed or interrupted
 // requests, including uploads that omit Content-Length (such as chunked bodies).
-func readAPIBody(w http.ResponseWriter, r *http.Request, invalidMessage string) ([]byte, bool) {
-	body, err := io.ReadAll(r.Body)
+// Buffered bytes must not let a canceled request proceed to a mutation. This
+// only guards body ingestion, not cancellation after a write has started.
+// The returned request carries the refreshed bearer identity and required scope.
+func readAPIBody(w http.ResponseWriter, r *http.Request, invalidMessage string, requiredScope domain.Scope) ([]byte, *http.Request, bool) {
+	body, err := io.ReadAll(contextReader{ctx: r.Context(), Reader: r.Body})
 	if err == nil {
-		return body, true
+		// A reader may return its last bytes and EOF together, with no next
+		// Read on which contextReader could observe concurrent cancellation.
+		err = r.Context().Err()
+	}
+	if err == nil {
+		fresh, ok := refreshAPIBodyAuth(w, r, requiredScope)
+		if !ok {
+			return nil, r, false
+		}
+		return body, fresh, true
 	}
 	var tooLarge *http.MaxBytesError
 	if errors.As(err, &tooLarge) {
@@ -28,7 +40,7 @@ func readAPIBody(w http.ResponseWriter, r *http.Request, invalidMessage string) 
 	} else {
 		writeJSONError(w, http.StatusBadRequest, invalidMessage)
 	}
-	return nil, false
+	return nil, r, false
 }
 
 // writeJSON marshals v to a buffer first (so an encode error never yields a
@@ -141,14 +153,31 @@ func writeEntityJSON(w http.ResponseWriter, status int, item any, vals []domain.
 	_, _ = w.Write(buf)
 }
 
-// apiRelationships returns all relationships as JSON.
-func apiRelationships(rels *store.RelationshipRepo) http.HandlerFunc {
+// apiRelationships returns a bounded, ID-ordered page of relationships.
+func apiRelationships(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		list, err := rels.List()
+		p, err := parsePagination(req)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		tx, err := db.BeginTx(req.Context(), &sql.TxOptions{ReadOnly: true})
 		if err != nil {
 			apiServerError(w, req, err)
 			return
 		}
+		defer tx.Rollback()
+		list, total, err := store.RelationshipPage(req.Context(), tx, p.PerPage, p.offset())
+		if err != nil {
+			apiServerError(w, req, err)
+			return
+		}
+		if err := tx.Commit(); err != nil {
+			apiServerError(w, req, err)
+			return
+		}
+		p.finish(req, total)
+		p.headers(w)
 		writeJSON(w, http.StatusOK, list)
 	}
 }

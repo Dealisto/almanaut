@@ -44,6 +44,24 @@ use the **Logout** button to end one early. Failed logins are throttled
 per-username: after 5 consecutive failures, further attempts for that username
 are refused for 15 minutes (state is in-memory and resets on restart).
 
+UI mutations recheck the authenticated session and current role after reading
+the form or upload. Revocation, expiry or demotion during that read therefore
+blocks the action. SSO requests refresh the same local identity without
+recreating an account deleted during the read. This is a check before the
+handler runs, not an atomic permission check through its eventual commit.
+
+UI forms require the CSRF token in the submitted body, matching the CSRF cookie,
+alongside the browser origin checks. A query-string token cannot supply a missing
+form token or override one in a multipart upload. This applies to scripted UI
+clients too; send the hidden `csrf_token` field in the body.
+
+Changing your password has a separate per-user limit: after five incorrect
+current-password attempts, further attempts return HTTP `429` with `Retry-After`
+for 15 minutes. The limit is shared across that user's sessions, and signing in
+again does not reset it. A successful password change clears its failure count;
+server restarts clear this in-memory limit. Password verification consistently
+rejects inputs longer than bcrypt's 72-byte limit instead of ignoring a suffix.
+
 [`/api/*`](api.md) returns a plain `401` JSON error when called without valid
 credentials (a session cookie or a bearer token).
 
@@ -108,6 +126,11 @@ usable for a retry.
 With 2FA on, logging in becomes two steps — the password form, then a challenge
 at `/login/2fa` reached through a short-lived cookie that is only valid between
 the two. A correct password alone creates no session.
+Logging out revokes both the current browser's session and its unfinished
+second-factor challenge, including a login started in another tab. Both cookies
+are cleared after the revocation commits. Other browsers' sessions and challenges
+remain valid; a storage failure leaves this browser's credentials intact for a
+retry and does not record a successful logout.
 
 Admins can clear a user's second factor at **Users** (`/users`, see
 [Roles](#roles)) for a lost phone with no recovery codes left. Doing so also
@@ -169,7 +192,15 @@ Admins get an append-only trail of authentication events at **Audit**
 | `2fa_success` / `2fa_failure` | A second factor was accepted or rejected |
 | `sso_login` | A proxy-asserted identity was accepted |
 | `token_used` | An [API token](api.md#api-tokens) authenticated a request |
+| `role_changed` | An admin changed a user's role; details identify the previous/new roles and acting user ID |
+| `token_created` / `token_revoked` | A user created or actually removed an API token |
+| `token_rotation_started` / `token_rotation_completed` | A replacement token was prepared or its original was retired after successful use |
 | `session_revoked` | Sessions were invalidated (a user deleted, their password changed or reset, or their 2FA reset) |
+
+Role and token lifecycle events describe successful mutations only. Repeated
+requests that make no change, rejected requests, and rolled-back transactions
+do not add success events. Token details use numeric IDs, scope and expiration
+metadata; token values, hashes and free-form labels are never included.
 
 Two details make this trail trustworthy rather than decorative:
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Dealisto/almanaut/internal/domain"
@@ -57,7 +58,12 @@ type Snapshot struct {
 // writer for the duration of an export. WAL already gives it the stable
 // snapshot it needs without any lock.
 func Export(db *sql.DB) (Snapshot, error) {
-	tx, err := db.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	return ExportContext(context.Background(), db)
+}
+
+// ExportContext stops gathering the snapshot when the caller cancels.
+func ExportContext(ctx context.Context, db *sql.DB) (Snapshot, error) {
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("begin: %w", err)
 	}
@@ -91,8 +97,19 @@ func Export(db *sql.DB) (Snapshot, error) {
 		CustomFieldDefs:   exportList(&listErr, NewCustomFieldRepo(db).WithTx(tx).ListAllDefs),
 		CustomFieldValues: exportList(&listErr, NewCustomFieldRepo(db).WithTx(tx).ListAllValues),
 	}
+	if err := ctx.Err(); err != nil {
+		return Snapshot{}, err
+	}
 	if listErr != nil {
 		return Snapshot{}, listErr
+	}
+	// Import accepts tag input syntax and removes one leading '#'. Escape a
+	// literal prefix already stored in a name so restoring our own export
+	// neither renames it nor collides with a distinct tag without that prefix.
+	for i := range snap.Tags {
+		if strings.HasPrefix(snap.Tags[i].Name, "#") {
+			snap.Tags[i].Name = "#" + snap.Tags[i].Name
+		}
 	}
 	return snap, nil
 }
@@ -129,6 +146,15 @@ func (e *ImportValidationError) Unwrap() error { return e.err }
 // Rows outside the snapshot that are keyed by entity id are reconciled with
 // the new inventory: see reconcileSideTables.
 func Import(db *sql.DB, snap Snapshot) error {
+	return ImportContext(context.Background(), db, snap)
+}
+
+// ImportContext validates and replaces inventory, rolling back pending work if
+// the caller cancels before commit starts. Import remains available to jobs.
+func ImportContext(ctx context.Context, db *sql.DB, snap Snapshot) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if snap.Version < 1 {
 		return &ImportValidationError{fmt.Errorf("snapshot version must be at least 1")}
 	}
@@ -231,7 +257,7 @@ func Import(db *sql.DB, snap Snapshot) error {
 	snap.Ports = ports
 	skipped += unlinked + unattributed
 
-	return WithTx(db, func(tx *sql.Tx) error {
+	return WithTxContext(ctx, db, func(tx *sql.Tx) error {
 		if err := replaceInventory(tx, snap); err != nil {
 			return err
 		}

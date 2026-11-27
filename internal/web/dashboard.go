@@ -309,7 +309,7 @@ func dashboard(repos entityRepos, rels *store.RelationshipRepo, cat entityCatalo
 			fail(err)
 			return
 		}
-		recent, err := buildActivityRows(cat, recentEvents)
+		recent, err := buildActivityRows(cat, changelog, recentEvents)
 		if err != nil {
 			fail(err)
 			return

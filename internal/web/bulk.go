@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"slices"
 	"sort"
 	"strconv"
@@ -28,8 +27,10 @@ func (rs resource[T]) bulk(d handlerDeps) http.HandlerFunc {
 			http.Error(w, "invalid form", http.StatusBadRequest)
 			return
 		}
-		action := req.FormValue("action")
-		ids, err := parseIDs(req.Form["ids"])
+		// Query parameters must not add unchecked rows or supply an action
+		// that was absent from the submitted form.
+		action := req.PostFormValue("action")
+		ids, err := parseIDs(req.PostForm["ids"])
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -42,9 +43,9 @@ func (rs resource[T]) bulk(d handlerDeps) http.HandlerFunc {
 
 		// Validate action-specific inputs up front so bad input is a 400, not a
 		// rolled-back 500.
-		tag := strings.TrimSpace(req.FormValue("tag"))
-		field := strings.TrimSpace(req.FormValue("field"))
-		value := req.FormValue("value")
+		tag := strings.TrimSpace(req.PostFormValue("tag"))
+		field := strings.TrimSpace(req.PostFormValue("field"))
+		value := req.PostFormValue("value")
 		switch action {
 		case "tag-add", "tag-remove":
 			if domain.NormalizeTag(tag) == "" {
@@ -66,15 +67,17 @@ func (rs resource[T]) bulk(d handlerDeps) http.HandlerFunc {
 		actor := actor(req)
 		var events []webhook.Event
 		err = store.WithTx(d.db, func(tx *sql.Tx) error {
+			batchDeps := d
+			batchDeps.webhooks = webhook.ForTransaction(tx, d.webhooks)
 			for _, id := range ids {
 				var err error
 				switch action {
 				case "delete":
-					err = rs.deleteEntityTx(tx, d, id, actor, &events)
+					err = rs.deleteEntityTx(tx, batchDeps, id, actor, &events)
 				case "tag-add", "tag-remove":
-					err = rs.bulkTag(tx, d, id, action, tag, actor)
+					err = rs.bulkTag(tx, batchDeps, id, action, tag, actor)
 				case "set-field":
-					err = rs.bulkSetField(tx, d, id, field, value, actor, &events)
+					err = rs.bulkSetField(tx, batchDeps, id, field, value, actor, &events)
 				}
 				if err != nil {
 					return err
@@ -102,25 +105,7 @@ func (rs resource[T]) bulk(d handlerDeps) http.HandlerFunc {
 // a bulk action. Only query state on this resource's canonical route is accepted;
 // submitted external URLs or another resource's route cannot become redirects.
 func (rs resource[T]) listReturnPath(req *http.Request) string {
-	base := rs.basePath()
-	u, err := url.Parse(req.PostFormValue("return_to"))
-	if err != nil || u.IsAbs() || u.Host != "" || u.User != nil || u.Path != base {
-		return base
-	}
-	query, err := url.ParseQuery(u.RawQuery)
-	if err != nil {
-		return base
-	}
-	retained := make(url.Values)
-	for _, key := range []string{"q", "tag", "sort", "dir", "field", "value", "page", "per_page"} {
-		if query.Has(key) {
-			retained.Set(key, query.Get(key))
-		}
-	}
-	if len(retained) == 0 {
-		return base
-	}
-	return base + "?" + retained.Encode()
+	return inventoryListReturnPath(rs.basePath(), req.PostFormValue("return_to"))
 }
 
 // bulkValidationError distinguishes invalid submitted values from storage

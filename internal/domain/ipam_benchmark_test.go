@@ -77,3 +77,26 @@ func BenchmarkIPAMAttribution(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkBuildIPAMReservedSubnet(b *testing.B) {
+	for _, tc := range []struct {
+		name, cidr, start, end, next string
+	}{
+		{"IPv4 full", "10.0.0.0/16", "10.0.0.1", "10.0.255.254", ""},
+		{"IPv4 final free", "10.0.0.0/16", "10.0.0.1", "10.0.255.253", "10.0.255.254"},
+		{"IPv6 full", "2001:db8::/112", "2001:db8::", "2001:db8::ffff", ""},
+		{"IPv6 final free", "2001:db8::/112", "2001:db8::", "2001:db8::fffe", "2001:db8::ffff"},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			networks := []Network{{ID: 1, CIDR: tc.cidr}}
+			reservations := []Reservation{{NetworkID: 1, StartIP: tc.start, EndIP: tc.end}}
+			b.ReportAllocs()
+			for b.Loop() {
+				got := BuildIPAM(networks, nil, reservations).Networks[0]
+				if got.NextFree != tc.next {
+					b.Fatalf("next free = %q, want %q", got.NextFree, tc.next)
+				}
+			}
+		})
+	}
+}

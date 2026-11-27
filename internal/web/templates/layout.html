@@ -84,6 +84,7 @@
         <button name="theme" value="light" class="{{if eq (theme) "light"}}active{{end}}" aria-pressed="{{eq (theme) "light"}}">{{icon "sun"}}Light</button>
         <button name="theme" value="dark" class="{{if eq (theme) "dark"}}active{{end}}" aria-pressed="{{eq (theme) "dark"}}">{{icon "moon"}}Dark</button>
       </form>
+      <p class="form-help" id="theme-status" role="status"></p>
       {{if currentUser}}
       <details class="account-menu"{{if isActive "/account"}} open{{end}}>
         <summary><span class="avatar">{{initials (currentUser)}}</span><span class="profile-name">{{currentUser}}<small>Your account</small></span>{{icon "chevron"}}</summary>

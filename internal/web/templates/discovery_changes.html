@@ -12,13 +12,13 @@
 {{if .Missing}}<p><strong>Not observed</strong> in this successful scan. This does not mean the resource was deleted. Container discovery lists running containers only. The inventory record is preserved.</p>
 {{else if .Conflict}}<p><strong>Identity conflict</strong>. Review the source before changing this record.</p>
 {{else if .Fields}}
-<form method="post" action="{{$.Source.Path}}/changes">
+<form method="post" action="{{$.Source.Path}}/changes" data-selection-form>
 {{csrfField}}
 <input type="hidden" name="external_id" value="{{.ExternalID}}"><input type="hidden" name="entity_type" value="{{.EntityType}}"><input type="hidden" name="entity_id" value="{{.EntityID}}">
-<div class="table-wrap"><table><thead><tr><th scope="col">Apply</th><th scope="col">Field</th><th scope="col">Saved inventory</th><th scope="col">Observed source</th></tr></thead><tbody>
-{{range .Fields}}<tr><td>{{if and .Editable canWrite}}<input type="checkbox" name="field" value="{{.Name}}" aria-label="Apply {{.Label}}"><input type="hidden" name="expected_{{.Name}}" value="{{.Expected}}">{{else}}—{{end}}</td><th scope="row">{{.Label}}</th><td>{{if .Current}}{{.Current}}{{else}}—{{end}}</td><td>{{if .Observed}}{{.Observed}}{{else}}—{{end}}</td></tr>{{end}}
+<div class="table-wrap"><table><thead><tr><th scope="col">Apply{{if and .Editable canWrite}} <input class="js-only" type="checkbox" data-select-all aria-label="Select all editable fields for {{.Name}}">{{end}}</th><th scope="col">Field</th><th scope="col">Saved inventory</th><th scope="col">Observed source</th></tr></thead><tbody>
+{{range .Fields}}<tr><td>{{if and .Editable canWrite}}<input type="checkbox" data-selection-item name="field" value="{{.Name}}" aria-label="Apply {{.Label}}"><input type="hidden" name="expected_{{.Name}}" value="{{.Expected}}">{{else}}—{{end}}</td><th scope="row">{{.Label}}</th><td>{{if .Current}}{{.Current}}{{else}}—{{end}}</td><td>{{if .Observed}}{{.Observed}}{{else}}—{{end}}</td></tr>{{end}}
 </tbody></table></div>
-{{if and .Editable canWrite}}<button class="btn btn-primary" type="submit">Apply selected fields</button>{{end}}
+{{if and .Editable canWrite}}<p class="muted js-only" data-selection-count role="status"></p><button class="btn btn-primary" type="submit">Apply selected fields</button>{{end}}
 </form>
 {{else}}<p>No available field changes.</p>{{end}}
 </section>

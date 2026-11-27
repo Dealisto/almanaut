@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -42,9 +43,9 @@ type listData[T any] struct {
 }
 
 type formData[T any] struct {
-	Title, Heading, Action, SubmitLabel, Error string
-	Item                                       T
-	Extras                                     map[string]any
+	Title, Heading, Action, SubmitLabel, Error, ReturnURL string
+	Item                                                  T
+	Extras                                                map[string]any
 }
 
 // handlerDeps bundles the cross-entity dependencies the show/delete handlers need,
@@ -133,19 +134,6 @@ func (rs resource[T]) labelTx(tx *sql.Tx, id int64) (string, error) {
 	return entityOptionOf(rs.sing, id, rs.label(item)).Label, nil
 }
 
-// options lists this resource's entities as relationship/catalog options.
-func (rs resource[T]) options() ([]entityOption, error) {
-	items, err := rs.repo.List()
-	if err != nil {
-		return nil, err
-	}
-	opts := make([]entityOption, 0, len(items))
-	for _, it := range items {
-		opts = append(opts, entityOptionOf(rs.sing, rs.id(it), rs.label(it)))
-	}
-	return opts, nil
-}
-
 func (rs resource[T]) extraData() (map[string]any, error) {
 	if rs.loadExtras != nil {
 		return rs.loadExtras()
@@ -226,6 +214,7 @@ func (rs resource[T]) newForm(d handlerDeps) http.HandlerFunc {
 			Title:       "New " + rs.sing,
 			Heading:     "New " + rs.sing,
 			Action:      rs.basePath(),
+			ReturnURL:   formListReturnPath(req, rs.basePath()),
 			SubmitLabel: "Create",
 			Item:        rs.newItem,
 			Extras:      withCustomFields(extras, rows),
@@ -257,7 +246,8 @@ func (rs resource[T]) editForm(d handlerDeps) http.HandlerFunc {
 		render(w, req, rs.formTmpl, formData[T]{
 			Title: "Edit " + rs.sing, Heading: "Edit " + rs.sing,
 			Action: fmt.Sprintf("%s/%d", rs.basePath(), id), SubmitLabel: "Save",
-			Item: item, Extras: withCustomFields(extras, rows),
+			ReturnURL: formListReturnPath(req, rs.basePath()),
+			Item:      item, Extras: withCustomFields(extras, rows),
 		})
 	}
 }
@@ -519,7 +509,7 @@ func (rs resource[T]) create(d handlerDeps) http.HandlerFunc {
 			serverError(w, req, err)
 			return
 		}
-		http.Redirect(w, req, rs.basePath(), http.StatusSeeOther)
+		http.Redirect(w, req, formListReturnPath(req, rs.basePath()), http.StatusSeeOther)
 	}
 }
 
@@ -539,7 +529,8 @@ func (rs resource[T]) renderCreateError(w http.ResponseWriter, req *http.Request
 	render(w, req, rs.formTmpl, formData[T]{
 		Title: "New " + rs.sing, Heading: "New " + rs.sing,
 		Action: rs.basePath(), SubmitLabel: "Create",
-		Item: item, Extras: withCustomFields(extras, rows), Error: cause.Error(),
+		ReturnURL: formListReturnPath(req, rs.basePath()),
+		Item:      item, Extras: withCustomFields(extras, rows), Error: cause.Error(),
 	})
 }
 
@@ -571,7 +562,7 @@ func (rs resource[T]) update(d handlerDeps) http.HandlerFunc {
 			notFoundOrServerError(w, req, rs.sing, err)
 			return
 		}
-		http.Redirect(w, req, rs.basePath(), http.StatusSeeOther)
+		http.Redirect(w, req, formListReturnPath(req, rs.basePath()), http.StatusSeeOther)
 	}
 }
 
@@ -591,7 +582,8 @@ func (rs resource[T]) renderUpdateError(w http.ResponseWriter, req *http.Request
 	render(w, req, rs.formTmpl, formData[T]{
 		Title: "Edit " + rs.sing, Heading: "Edit " + rs.sing,
 		Action: fmt.Sprintf("%s/%d", rs.basePath(), id), SubmitLabel: "Save",
-		Item: item, Extras: withCustomFields(extras, rows), Error: cause.Error(),
+		ReturnURL: formListReturnPath(req, rs.basePath()),
+		Item:      item, Extras: withCustomFields(extras, rows), Error: cause.Error(),
 	})
 }
 
@@ -650,7 +642,7 @@ func (rs resource[T]) show(d handlerDeps) http.HandlerFunc {
 				ID: a.ID, Filename: a.Filename, Size: humanizeBytes(a.Size), UploadedAt: a.UploadedAt,
 			})
 		}
-		renderDetailExtra(w, req, d.cat, d.tags, d.rels, d.journal, d.changelog, rs.sing, id,
+		renderDetailExtra(w, req, d.db, d.cat, d.tags, d.rels, d.journal, d.changelog, rs.sing, id,
 			rs.heading+": "+rs.label(item), rs.notes(item),
 			fmt.Sprintf("%s/%d/edit", rs.basePath(), id), rs.basePath(), rs.fields(item),
 			detailExtras{ipam: ipam, children: children, elevation: elevation, probe: probe, agent: agent, customFields: cfValues, attachments: attViews})
@@ -743,7 +735,7 @@ func (rs resource[T]) getJSON(d handlerDeps) http.HandlerFunc {
 // id (if any) is ignored. Returns 201 with the created entity and a Location.
 func (rs resource[T]) createJSON(d handlerDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		body, ok := readAPIBody(w, req, "invalid JSON body")
+		body, req, ok := readAPIBody(w, req, "invalid JSON body", domain.ScopeReadWrite)
 		if !ok {
 			return
 		}
@@ -803,7 +795,7 @@ func (rs resource[T]) updateJSON(d handlerDeps) http.HandlerFunc {
 			writeJSONError(w, http.StatusBadRequest, "invalid id")
 			return
 		}
-		body, ok := readAPIBody(w, req, "invalid JSON body")
+		body, req, ok := readAPIBody(w, req, "invalid JSON body", domain.ScopeReadWrite)
 		if !ok {
 			return
 		}
@@ -888,7 +880,6 @@ func (rs resource[T]) mountAPI(r chi.Router, d handlerDeps) {
 type mountable interface {
 	mount(r chi.Router, d handlerDeps)
 	mountAPI(r chi.Router, d handlerDeps)
-	options() ([]entityOption, error)
 	singular() string
 	existsTx(tx *sql.Tx, id int64) error
 	labelTx(tx *sql.Tx, id int64) (string, error)
@@ -896,7 +887,7 @@ type mountable interface {
 	apiResource() apiResourceInfo
 	searchHeading() string
 	querySpec() store.InventoryQuery
-	importCSV(d handlerDeps, r io.Reader, actor string) (int, int, []string, error)
+	importCSVContext(ctx context.Context, d handlerDeps, r io.Reader, actor string) (int, int, []string, error)
 }
 
 // parseFormBool interprets a checkbox ("on") or a CSV-style boolean cell.

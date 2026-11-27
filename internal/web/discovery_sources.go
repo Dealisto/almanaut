@@ -332,6 +332,7 @@ func importDiscoverySource(source DiscoverySource, db *sql.DB, dispatcher webhoo
 		}
 		var events []webhook.Event
 		err = store.WithTx(db, func(tx *sql.Tx) error {
+			staged := webhook.ForTransaction(tx, dispatcher)
 			hr := store.NewHostRepo(db).WithTx(tx)
 			sr := store.NewServiceRepo(db).WithTx(tx)
 			br := store.NewDiscoveryBindingRepo(db).WithTx(tx)
@@ -413,7 +414,7 @@ func importDiscoverySource(source DiscoverySource, db *sql.DB, dispatcher webhoo
 					if err != nil {
 						return err
 					}
-					if err := recordDiscoveryMutation(tx, cr, dispatcher, store.ChangeEvent{
+					if err := recordDiscoveryMutation(tx, cr, staged, store.ChangeEvent{
 						EntityType: m.EntityType, EntityID: id, Label: name,
 						Action: domain.ActionImport, Actor: actor(req),
 					}, data, &events); err != nil {

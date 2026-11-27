@@ -16,10 +16,11 @@ import (
 // customFieldFormRow is one custom field rendered on an entity form: its slug
 // name (input key cf_<Name>), human label, kind, and current value.
 type customFieldFormRow struct {
-	Name  string
-	Label string
-	Kind  string
-	Value string
+	Name         string
+	Label        string
+	Kind         string
+	Value        string
+	NumberAsText bool
 }
 
 // parseCustomFields reads cf_<name> for each definition of entityType, validates
@@ -168,6 +169,18 @@ func jsonValueToString(v any) string {
 	}
 }
 
+// numberNeedsTextInput protects representations accepted by the domain but
+// erased by an HTML number input (such as +12 or hexadecimal notation), and
+// preserves invalid drafts for correction. JSON numbers are a conservative
+// subset of HTML number syntax, avoiding a second numeric grammar here.
+func numberNeedsTextInput(value string) bool {
+	if value == "" {
+		return false
+	}
+	_, err := strconv.ParseFloat(value, 64)
+	return err != nil || !json.Valid([]byte(value))
+}
+
 // customFieldFormRows builds the form rows for entityType: one per definition.
 // When get is non-nil, values come from the submitted form (used on a
 // validation-error re-render); otherwise they come from the stored values for
@@ -198,6 +211,7 @@ func (d handlerDeps) customFieldFormRows(entityType string, entityID int64, get 
 		}
 		rows = append(rows, customFieldFormRow{
 			Name: def.Name, Label: def.Label, Kind: string(def.Kind), Value: value,
+			NumberAsText: def.Kind == domain.KindNumber && numberNeedsTextInput(value),
 		})
 	}
 	return rows, nil
@@ -221,6 +235,9 @@ type customFieldsPageData struct {
 	EntityTypes []string
 	Kinds       []domain.CustomFieldKind
 	Error       string
+	Draft       domain.CustomFieldDef
+	EditID      int64
+	EditLabel   string
 }
 
 func customFieldsPage(repo *store.CustomFieldRepo) http.HandlerFunc {
@@ -239,27 +256,28 @@ func customFieldsPage(repo *store.CustomFieldRepo) http.HandlerFunc {
 
 func createCustomField(repo *store.CustomFieldRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		label := req.FormValue("label")
-		name := req.FormValue("name")
-		if name == "" {
-			name = domain.SlugifyCustomField(label)
-		} else {
-			name = domain.SlugifyCustomField(name)
-		}
-		def := domain.CustomFieldDef{
+		draft := domain.CustomFieldDef{
 			EntityType: req.FormValue("entity_type"),
-			Name:       name,
-			Label:      label,
+			Name:       req.FormValue("name"),
+			Label:      req.FormValue("label"),
 			Kind:       domain.CustomFieldKind(req.FormValue("kind")),
-			CreatedAt:  nowRFC3339(),
 		}
+		// Preserve the submitted name separately from its normalized storage
+		// value so an error never silently rewrites or discards the draft.
+		def := draft
+		if def.Name == "" {
+			def.Name = domain.SlugifyCustomField(def.Label)
+		} else {
+			def.Name = domain.SlugifyCustomField(def.Name)
+		}
+		def.CreatedAt = nowRFC3339()
 		if err := def.Validate(); err != nil {
-			renderCustomFieldsError(w, req, repo, err)
+			renderCustomFieldsError(w, req, repo, err, customFieldsPageData{Draft: draft})
 			return
 		}
 		if _, err := repo.CreateDef(def); err != nil {
 			if c := constraintError(err); c != nil {
-				renderCustomFieldsError(w, req, repo, c)
+				renderCustomFieldsError(w, req, repo, c, customFieldsPageData{Draft: draft})
 			} else {
 				serverError(w, req, err)
 			}
@@ -269,17 +287,16 @@ func createCustomField(repo *store.CustomFieldRepo) http.HandlerFunc {
 	}
 }
 
-func renderCustomFieldsError(w http.ResponseWriter, req *http.Request, repo *store.CustomFieldRepo, cause error) {
+func renderCustomFieldsError(w http.ResponseWriter, req *http.Request, repo *store.CustomFieldRepo, cause error, data customFieldsPageData) {
 	defs, err := repo.ListAllDefs()
 	if err != nil {
 		serverError(w, req, err)
 		return
 	}
-	render(w, req, "custom_fields.html", customFieldsPageData{
-		Title: "Custom fields", Defs: defs,
-		EntityTypes: domain.EntityTypes, Kinds: domain.CustomFieldKinds,
-		Error: cause.Error(),
-	})
+	data.Title, data.Defs = "Custom fields", defs
+	data.EntityTypes, data.Kinds = domain.EntityTypes, domain.CustomFieldKinds
+	data.Error = cause.Error()
+	render(w, req, "custom_fields.html", data)
 }
 
 func deleteCustomField(repo *store.CustomFieldRepo) http.HandlerFunc {
@@ -306,7 +323,7 @@ func updateCustomFieldLabel(repo *store.CustomFieldRepo) http.HandlerFunc {
 		}
 		label := req.FormValue("label")
 		if strings.TrimSpace(label) == "" {
-			renderCustomFieldsError(w, req, repo, fmt.Errorf("label is required"))
+			renderCustomFieldsError(w, req, repo, fmt.Errorf("label is required"), customFieldsPageData{EditID: id, EditLabel: label})
 			return
 		}
 		if err := repo.UpdateDefLabel(id, label); err != nil {

@@ -130,7 +130,10 @@ func noRedirect(*http.Request, []*http.Request) error {
 // message on a 401/403) reaches the operator instead of a bare status code.
 func statusError(source string, resp *http.Response) error {
 	const maxExcerpt = 512
-	excerpt, _ := io.ReadAll(io.LimitReader(resp.Body, maxExcerpt))
+	excerpt, err := io.ReadAll(io.LimitReader(resp.Body, maxExcerpt))
+	if err != nil {
+		return fmt.Errorf("%s API status %d: read response: %w", source, resp.StatusCode, err)
+	}
 	if msg := strings.TrimSpace(string(excerpt)); msg != "" {
 		return fmt.Errorf("%s API status %d: %s", source, resp.StatusCode, msg)
 	}

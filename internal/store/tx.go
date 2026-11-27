@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -39,7 +40,13 @@ func boolToInt(b bool) int {
 // a ReadOnly transaction instead so it does not hold the lock — Export is the
 // example.
 func WithTx(db *sql.DB, fn func(*sql.Tx) error) error {
-	tx, err := db.Begin()
+	return WithTxContext(context.Background(), db, fn)
+}
+
+// WithTxContext keeps the same panic-safe transaction semantics as WithTx,
+// but cancellation before commit starts rolls back outstanding work.
+func WithTxContext(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) error {
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
@@ -50,12 +57,22 @@ func WithTx(db *sql.DB, fn func(*sql.Tx) error) error {
 		}
 	}()
 	if err := fn(tx); err != nil {
-		if rbErr := tx.Rollback(); rbErr != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			err = errors.Join(err, ctxErr)
+		}
+		if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
 			return fmt.Errorf("%w (rollback failed: %v)", err, rbErr)
 		}
 		return err
 	}
+	if err := ctx.Err(); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
 	if err := tx.Commit(); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			err = errors.Join(err, ctxErr)
+		}
 		return fmt.Errorf("commit tx: %w", err)
 	}
 	return nil

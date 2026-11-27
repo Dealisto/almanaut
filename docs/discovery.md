@@ -51,6 +51,10 @@ associations but do not contain source credentials or configuration.
 scan, resource count at that success, and estimated next scheduled scan, with
 timestamps in UTC. A failed scan shows its error while preserving the previous
 successful count. Sources without a configured schedule are labelled accordingly.
+Docker/Podman HTTP failures include a diagnostic excerpt of at most 512 bytes.
+If reading that excerpt is interrupted, the error retains the cancellation,
+timeout or truncated-response cause and HTTP status instead of showing partial
+diagnostic text. Responses remain failures; the successful baseline is unchanged.
 Admins can start **Run now** from the source card or open **Scheduled tasks**
 and **Scan history**. Editors and viewers cannot run the admin-only scheduler jobs.
 
@@ -59,6 +63,13 @@ Opening **Review source** fetches current inventory. Filter the table by **New**
 addresses, or displayed details. Only visible selected rows are submitted for
 import. Names already matched to local records link directly to those records.
 An empty filtered view is distinct from an empty source or a failed scan.
+
+With JavaScript enabled, the table-header checkbox selects or clears all
+importable rows in the current view, and a count shows the current selection.
+Already tracked or conflicting rows remain excluded. Empty selections disable
+the import button; optional host-link preferences are independent of row
+selection. Network-scan imports provide the same controls. Browser-restored
+selections update the count and action buttons automatically.
 
 ## Replacing a source identity
 
@@ -92,6 +103,9 @@ records. For each record, choose individual fields and apply only those values:
 
 No field is selected automatically. Missing source details such as CPU, memory,
 disk, or IP addresses are not proposed as blank replacements for manual values.
+With JavaScript enabled, each record has its own select-all control for editable
+fields and an active-selection count. The apply button stays disabled until a
+field is selected; selecting fields on one record does not affect another.
 The displayed image difference is informational: images are read from the
 discovery-generated provenance line in service notes, and free-form notes are
 never rewritten. Other unselected fields and relationships remain unchanged.
@@ -169,6 +183,9 @@ to pre-fill the form). Then navigate to **Discover → Network scan**, enter a
 subnet (CIDR) and optional ports, and import the live hosts you select. The
 scan is a lightweight pure-Go TCP-connect probe (a host is "live" if at least
 one probed port is open). Subnets larger than 1024 hosts are rejected.
+Repeated port numbers are tested once per address, in their first-listed order.
+Ports must be between 1 and 65535. Cancellation stops subsequent probes and
+returns an error instead of presenting partial results as a completed scan.
 
 ## Proxmox VE
 
