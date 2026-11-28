@@ -57,7 +57,7 @@ existing configuration needs neither argument.
 
 ## What it reports, and what it never touches
 
-Each report replaces the host's `os`, `cpu`, `ram`, `disk`, and `ips` with
+By default, each report replaces the host's `os`, `cpu`, `ram`, `disk`, and `ips` with
 whatever the agent observed; a value it couldn't determine (common inside an
 LXC container without `lxcfs`) is sent empty rather than guessed, and an
 empty value never overwrites an existing one. `name` and `type` are set once
@@ -66,6 +66,29 @@ report creates the host; rename it by hand afterwards and it stays renamed.
 Everything else on the host record — `notes`, `status`, `check_address`,
 rack placement, tags, relationships, and custom fields — the agent never
 writes at all.
+
+### Protecting manual values
+
+Edit a host and use **Agent synchronization** to protect any of its IP addresses,
+operating system, CPU, RAM, or disk fields. Protection keeps the selected
+inventory values unchanged when reports arrive, including when an agent first
+adopts an existing host. The host's **Agent** panel still shows the latest
+observed values, so differences remain visible. Protection applies to the
+whole IP list, not individual addresses. Other fields continue to synchronize.
+
+Editors and administrators can change protection using the normal host form or
+API. Manual edits and explicitly confirmed discovery changes can still update
+protected fields. Turning protection off resumes synchronization on the next
+successful nonempty report; it does not immediately apply an older report.
+
+The API and YAML field is `agent_protected_fields`, a list containing any of
+`ips`, `os`, `cpu`, `ram`, and `disk`. Unknown or repeated field names are
+rejected. Existing hosts start with no protected fields. JSON updates that
+omit this field or set it to `null` preserve the current policy; an explicit
+`[]` clears it. CSV accepts a quoted comma-separated cell, such as `"ips,os"`:
+omitting the column preserves protection, while a present empty cell clears it.
+YAML inventory exports preserve protection in format version 4. Older exports
+without this field restore hosts with no protection.
 
 OS names follow the [os-release format](https://www.freedesktop.org/software/systemd/man/latest/os-release.html),
 including quoted names and escaped characters. `/etc/os-release` takes
@@ -93,7 +116,8 @@ Existing host types remain unchanged by agent updates; a newly created host
 with undetermined virtualization still uses the server's `physical` default
 and can be classified manually.
 
-**A nonempty usable IP list replaces `ips`; it is not merged.** An empty list
+**Unless IP addresses are protected, a nonempty usable IP list replaces `ips`;
+it is not merged.** An empty list
 preserves the existing addresses. If the agent cannot read the addresses of any
 reportable interface, it leaves all addresses unknown while retaining interface
 names and MACs, so a partial collection does not erase known IPs.
@@ -101,8 +125,10 @@ Loopback and common container interfaces (`docker*`, `podman*`, `br-*`,
 `veth*`, `virbr*`, `cni*`, `flannel*`, `kube-*`, and `cali*`) are excluded
 from both addresses and machine identity. Tailscale interfaces remain included.
 As described under [API tokens](api.md#api-tokens), a successful nonempty report
-still removes out-of-band management addresses such as IPMI, iDRAC, or iLO that
-the OS cannot see. Keep those on a separate host or in a network reservation.
+removes out-of-band management addresses such as IPMI, iDRAC, or iLO that
+the OS cannot see when IP protection is disabled. Enable **Protect IP addresses**
+to maintain that host's complete address list manually, or keep those addresses
+on a separate host or in a network reservation.
 
 ## Checking on it
 

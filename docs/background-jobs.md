@@ -39,6 +39,7 @@ whether your ntfy topic works, trigger the job and read the outcome.
 
 | Job | Enabled by | Does |
 |---|---|---|
+| Database backup | `ALMANAUT_BACKUP_DIR` | Creates and verifies a complete SQLite snapshot, then retains the configured number of managed snapshots |
 | Expiry notifications | `ALMANAUT_NTFY_URL` and/or `ALMANAUT_DISCORD_WEBHOOK_URL` | Pushes alerts for certificates, warranties and renewals falling due — see [Notifications & integrations](integrations.md) |
 | Liveness checks | `ALMANAUT_LIVENESS_ENABLED` | TCP-dials every host and service that has a check address |
 | Certificate probing | `ALMANAUT_CERT_PROBE_ENABLED` | Reads expiry from the live TLS endpoint |
@@ -47,6 +48,28 @@ whether your ntfy topic works, trigger the job and read the outcome.
 | Discovery: Proxmox | `ALMANAUT_DISCOVERY_PROXMOX_INTERVAL` | Scheduled [Proxmox discovery](discovery.md#proxmox-ve) |
 | Discovery: Xen Orchestra | `ALMANAUT_DISCOVERY_XO_INTERVAL` | Scheduled [XCP-ng discovery](discovery.md#xcp-ng-via-xen-orchestra) |
 | Discovery: configured source name | Positive `interval` in the discovery source file | One independent job per configured Docker, Podman, Proxmox or XO source |
+
+## Database backups
+
+Set `ALMANAUT_BACKUP_DIR` to enable database snapshots. The job runs once at
+startup, then after each `ALMANAUT_BACKUP_INTERVAL` (default `24h`), and can
+be triggered by an administrator from **Scheduled tasks**. Each pass has a
+separate `ALMANAUT_BACKUP_TIMEOUT` (default `10m`); concurrent requests through
+the scheduler never run two copies of the job at once.
+
+Only a successfully created and verified snapshot can trigger retention cleanup.
+`ALMANAUT_BACKUP_KEEP` defaults to `7` and must be positive. Explicit invalid
+backup durations or retention counts prevent startup instead of silently using
+defaults. Snapshot files and manifests remain on disk across server restarts;
+the scheduler's displayed last-run status is in memory and resets on restart.
+The admin-only **Database backups** page (`/database-backups`) reads completed
+snapshot manifests from disk, so the successful snapshot list survives restarts.
+It also links to the existing task trigger and explains offline verification.
+
+These snapshots include the complete database, including attachments and
+authentication state. External configuration and secret files must be backed up
+separately. See [Export & import](export-import.md#complete-backups) for coverage,
+verification commands, and offline restoration.
 
 ## Liveness checks
 

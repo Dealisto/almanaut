@@ -21,13 +21,16 @@
       <a href="/" class="nav-top {{if isActive "/"}}active{{end}}"{{if isActive "/"}} aria-current="page"{{end}}>{{icon "grid"}}Overview</a>
       <a href="/hosts" class="{{if isActive "/hosts"}}active{{end}}"{{if isActive "/hosts"}} aria-current="page"{{end}}>{{icon "server"}}Hosts</a>
       <a href="/services" class="{{if isActive "/services"}}active{{end}}"{{if isActive "/services"}} aria-current="page"{{end}}>{{icon "layers"}}Services</a>
-      <details class="nav-group"{{if or (isActive "/networks") (isActive "/vlans") (isActive "/reservations") (isActive "/nics") (isActive "/ports") (isActive "/domains") (isActive "/certificates")}} open{{end}}>
+      <details class="nav-group"{{if or (isActive "/networks") (isActive "/interfaces") (isActive "/ip-addresses") (isActive "/vlans") (isActive "/reservations") (isActive "/nics") (isActive "/ports") (isActive "/topology") (isActive "/domains") (isActive "/certificates")}} open{{end}}>
         <summary>{{icon "network"}}Network{{icon "chevron"}}</summary>
         <a href="/networks" class="{{if isActive "/networks"}}active{{end}}"{{if isActive "/networks"}} aria-current="page"{{end}}>Networks & IPs</a>
+          <a class="nav-sub {{if isActive "/interfaces"}}active{{end}}" href="/interfaces">Interfaces</a>
+          <a class="nav-sub {{if isActive "/ip-addresses"}}active{{end}}" href="/ip-addresses">IP addresses</a>
         <a href="/vlans" class="{{if isActive "/vlans"}}active{{end}}"{{if isActive "/vlans"}} aria-current="page"{{end}}>VLANs</a>
         <a href="/reservations" class="{{if isActive "/reservations"}}active{{end}}"{{if isActive "/reservations"}} aria-current="page"{{end}}>IP reservations</a>
         <a href="/nics" class="{{if isActive "/nics"}}active{{end}}"{{if isActive "/nics"}} aria-current="page"{{end}}>Network cards</a>
         <a href="/ports" class="{{if isActive "/ports"}}active{{end}}"{{if isActive "/ports"}} aria-current="page"{{end}}>Ports & cabling</a>
+        <a href="/topology" class="{{if isActive "/topology"}}active{{end}}"{{if isActive "/topology"}} aria-current="page"{{end}}>Physical topology</a>
         <a href="/domains" class="{{if isActive "/domains"}}active{{end}}"{{if isActive "/domains"}} aria-current="page"{{end}}>Domains</a>
         <a href="/certificates" class="{{if isActive "/certificates"}}active{{end}}"{{if isActive "/certificates"}} aria-current="page"{{end}}>Certificates</a>
       </details>
@@ -48,6 +51,8 @@
       <span class="nav-label nav-label-spaced">Manage</span>
       <a href="/checks" class="{{if isActive "/checks"}}active{{end}}"{{if isActive "/checks"}} aria-current="page"{{end}}>{{icon "pulse"}}Needs attention</a>
       {{if canWrite}}<a href="/discovery" class="{{if isActive "/discovery"}}active{{end}}"{{if isActive "/discovery"}} aria-current="page"{{end}}>{{icon "radar"}}Discover</a>{{end}}
+        <a class="nav-sub {{if isActive "/discovery/snmp"}}active{{end}}" href="/discovery/snmp">SNMP &amp; LLDP</a>
+        <a class="nav-sub {{if isActive "/discovery/deviations"}}active{{end}}" href="/discovery/deviations">Discovery deviations</a>
       <a href="/history" class="{{if isActive "/history"}}active{{end}}"{{if isActive "/history"}} aria-current="page"{{end}}>{{icon "history"}}Activity</a>
       <details class="nav-group nav-tools"{{if or (isActive "/relationships") (isActive "/impact") (isActive "/health-report") (isActive "/tags")}} open{{end}}>
         <summary>{{icon "shield"}}Inventory health{{icon "chevron"}}</summary>
@@ -56,7 +61,7 @@
         <a href="/impact" class="{{if isActive "/impact"}}active{{end}}"{{if isActive "/impact"}} aria-current="page"{{end}}>Impact analysis</a>
         <a href="/tags" class="{{if isActive "/tags"}}active{{end}}"{{if isActive "/tags"}} aria-current="page"{{end}}>Tags</a>
       </details>
-      <details class="nav-group nav-tools"{{if or (isActive "/custom-fields") (isActive "/host-types") (isActive "/data") (isActive "/users") (isActive "/audit") (isActive "/webhooks") (isActive "/tasks") (isActive "/kuma") (isActive "/api/docs")}} open{{end}}>
+      <details class="nav-group nav-tools"{{if or (isActive "/custom-fields") (isActive "/host-types") (isActive "/data") (isActive "/users") (isActive "/audit") (isActive "/webhooks") (isActive "/tasks") (isActive "/database-backups") (isActive "/kuma") (isActive "/api/docs")}} open{{end}}>
         <summary>{{icon "settings"}}Settings & data{{icon "chevron"}}</summary>
         {{if canWrite}}<a href="/host-types" class="{{if isActive "/host-types"}}active{{end}}"{{if isActive "/host-types"}} aria-current="page"{{end}}>Host types</a>{{end}}
         {{if canWrite}}<a href="/custom-fields" class="{{if isActive "/custom-fields"}}active{{end}}"{{if isActive "/custom-fields"}} aria-current="page"{{end}}>Custom fields</a>{{end}}
@@ -65,6 +70,7 @@
         {{if isAdmin}}<a href="/audit" class="{{if isActive "/audit"}}active{{end}}"{{if isActive "/audit"}} aria-current="page"{{end}}>Audit log</a>{{end}}
         {{if isAdmin}}<a href="/webhooks" class="{{if isActive "/webhooks"}}active{{end}}"{{if isActive "/webhooks"}} aria-current="page"{{end}}>Webhooks</a>{{end}}
         {{if isAdmin}}<a href="/tasks" class="{{if isActive "/tasks"}}active{{end}}"{{if isActive "/tasks"}} aria-current="page"{{end}}>Scheduled tasks</a>{{end}}
+        {{if isAdmin}}<a href="/database-backups" class="{{if isActive "/database-backups"}}active{{end}}"{{if isActive "/database-backups"}} aria-current="page"{{end}}>Database backups</a>{{end}}
         {{if isAdmin}}{{if kumaEnabled}}<a href="/kuma" class="{{if isActive "/kuma"}}active{{end}}"{{if isActive "/kuma"}} aria-current="page"{{end}}>Uptime Kuma</a>{{end}}{{end}}
         <a href="/api/docs" class="{{if isActive "/api/docs"}}active{{end}}"{{if isActive "/api/docs"}} aria-current="page"{{end}}>API reference</a>
       </details>

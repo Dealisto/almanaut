@@ -91,7 +91,7 @@ func limitBodyBytes(limit int64, next http.Handler) http.Handler {
 }
 
 // securityHeaders sets conservative response headers on every request: block
-// MIME sniffing, deny framing (clickjacking), suppress the Referer header, and
+// MIME sniffing, deny framing (clickjacking), suppress cross-origin Referer, and
 // apply the same-origin Content-Security-Policy above. Dynamic responses may
 // contain inventory, API tokens, or authentication secrets, so browsers and
 // shared caches must not store them. Static asset handlers override this policy
@@ -101,7 +101,9 @@ func securityHeaders(next http.Handler) http.Handler {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
-		h.Set("Referrer-Policy", "no-referrer")
+		// Preserve Origin on same-origin HTTP form submissions. no-referrer makes
+		// browsers send Origin: null, which the CSRF origin guard must reject.
+		h.Set("Referrer-Policy", "same-origin")
 		h.Set("Cache-Control", "no-store")
 		h.Set("Content-Security-Policy", contentSecurityPolicy)
 		next.ServeHTTP(w, r)

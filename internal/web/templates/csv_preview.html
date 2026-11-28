@@ -1,0 +1,13 @@
+{{define "content"}}
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Settings &amp; data</span><h1>Review CSV changes</h1><p class="page-description">No inventory changes have been saved.</p></div><div class="ph-actions"><a class="btn" href="/data">Back to imports</a></div></div>
+{{if .Errors}}
+<div class="error" role="alert"><strong>Preview failed — no changes were made.</strong><p>Correct the file and upload it again.</p><ul>{{range .Errors}}<li>{{.}}</li>{{end}}</ul></div>
+{{else}}
+<section class="panel"><h2>{{.Summary.EntityType}} import · {{.Summary.Mode}} mode</h2><p>{{.Summary.Created}} to create, {{.Summary.Updated}} to update, {{.Summary.Unchanged}} unchanged. Related records changed by links are listed below.</p><p class="form-help">This preview expires in 15 minutes and can be applied once. Changes to reviewed records require a fresh preview.</p></section>
+{{range .Summary.Changes}}
+<section class="panel"><h2 class="discovery-identity">Row {{.Row}} · {{.EntityType}} · {{.Label}}</h2><p>{{.Action}}{{if .EntityID}} · #{{.EntityID}}{{end}}</p>
+{{if .Changes}}<div class="table-wrap"><table><thead><tr><th scope="col">Field</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody>{{range .Changes}}<tr><th scope="row">{{.Field}}</th><td><pre>{{.Old}}</pre></td><td><pre>{{.New}}</pre></td></tr>{{end}}</tbody></table></div>{{end}}</section>
+{{end}}
+{{if canWrite}}<form class="stack panel" method="post" action="/import-csv/apply">{{csrfField}}<input type="hidden" name="preview_token" value="{{.Token}}"><label class="check"><input type="checkbox" name="confirm" required><span>Apply these reviewed changes together.</span></label><div class="actions"><button class="btn btn-primary" type="submit">Apply CSV changes</button><a class="btn" href="/data">Cancel</a></div></form>{{end}}
+{{end}}
+{{end}}

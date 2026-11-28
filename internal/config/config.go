@@ -17,6 +17,10 @@ type Config struct {
 	DiscoverySources     []DiscoverySource // engine sources loaded from a file or legacy environment settings
 	Addr                 string            // TCP listen address, e.g. ":8080"
 	DataDir              string            // directory holding the SQLite database and exports
+	BackupDir            string            // empty disables scheduled database snapshots
+	BackupInterval       time.Duration     // delay between scheduled snapshots
+	BackupTimeout        time.Duration     // maximum time for a snapshot and verification
+	BackupKeep           int               // verified managed snapshots retained
 	DockerSocket         string            // path to the Docker or Podman compatibility socket for discovery
 	NetworkScanEnabled   bool              // whether the opt-in subnet scan is exposed
 	ScanSubnet           string            // default subnet (CIDR) pre-filled in the scan form
@@ -150,6 +154,9 @@ func Load() (Config, error) {
 		ProxyAuthAllowlist:     getenv("ALMANAUT_PROXY_AUTH_ALLOWLIST", ""),
 		ProxyAuthAutoProvision: getenvBool("ALMANAUT_PROXY_AUTH_AUTOPROVISION", false),
 		ProxyAuthDefaultRole:   getenv("ALMANAUT_PROXY_AUTH_DEFAULT_ROLE", "viewer"),
+	}
+	if err := loadBackupConfig(&cfg); err != nil {
+		return Config{}, err
 	}
 	cfg.DiscoverySources, err = loadDiscoverySources(sourceFile, cfg)
 	if err != nil {

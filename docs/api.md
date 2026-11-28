@@ -25,13 +25,28 @@ above still applies, the token's owner also needs a role that can write
 Issue one per host running [`almanaut-agent`](agent.md); it never needs read access to
 the rest of the API. A report never overwrites `notes`, `status`,
 `check_address`, rack placement, tags, relationships or custom fields — it
-only ever updates `os`, `cpu`, `ram`, `disk` and `ips`. `name` and `type` are
+only ever updates unprotected `os`, `cpu`, `ram`, `disk` and `ips` fields. `name` and `type` are
 the exception: both are set once, from the reported hostname and virtualization
 kind, only when the report creates the host; a host renamed by hand (or
 re-typed) afterwards keeps that value forever, since later reports never touch
 either field again.
 
-**A nonempty reported IP list replaces `ips`; it is not merged.** The server
+Hosts can protect any of those five fields with `agent_protected_fields`, a
+JSON array of unique names from `ips`, `os`, `cpu`, `ram`, and `disk`. For
+example, `"agent_protected_fields": ["ips"]` preserves the inventory's complete
+IP list while the latest agent report still exposes observed addresses.
+Editors and administrators can change the policy through the normal host form
+or a write-authorized API token. Agent tokens cannot change it.
+
+On host updates, omitting `agent_protected_fields` or passing `null` preserves
+the current policy, so older clients cannot silently remove protection. An
+explicit empty array clears the policy. This is a compatibility exception to
+the API's normal full-replacement semantics. Newly created hosts without a
+policy have no protected fields; existing hosts keep their synchronization
+behavior until protection is explicitly configured.
+
+**For unprotected hosts, a nonempty reported IP list replaces `ips`; it is not
+merged.** The server
 normalizes addresses and keeps only valid global-unicast addresses (including
 private addresses). If none remain, it preserves the host's existing IPs.
 The agent also leaves all addresses unknown when any reportable interface's
@@ -41,9 +56,10 @@ from inside its own OS disappears from the record — most commonly an out-of-ba
 management address such as IPMI, iDRAC or iLO. That matters beyond the host
 page: `host.ips` feeds IPAM attribution, so a dropped BMC address will show as
 free capacity and could be handed out as the next free address while the
-interface is live. If you track such addresses, keep them on a separate host
-record, or as a reservation on the network, rather than on the agent-managed
-host.
+interface is live. If you track such addresses, protect `ips` on that host,
+or keep them on a separate host record or as a network reservation. Protecting
+`ips` freezes the whole inventory list; newly observed addresses remain in the
+agent report for manual review.
 
 The raw token (`alm_...`) is shown **once**, right after creation — copy it
 then, since only its hash is stored. Revoke a token from the same page at any
@@ -183,3 +199,14 @@ match the running build.
 ---
 
 **See also:** [Authentication & access control](authentication.md) · [The inventory model](inventory-model.md) · [Inventory agent](agent.md) · [Monitoring](monitoring.md)
+
+### Structured network inventory
+
+`/api/interfaces` and `/api/ip-addresses` provide the standard CRUD endpoints.
+Interface fields are `owner_type` (`host` or `hardware`), `owner_id`, `name`,
+`kind`, `port_id`, `vlan_id`, `mac`, `mtu`, `enabled`, and `notes`. Address fields
+are `address`, `interface_id`, `status`, `dns_name`, and `notes`; optional reference
+IDs use zero for unassigned. Writes check references inside the transaction.
+IPv4/IPv6 addresses are canonicalized while retaining supplied host prefix bits.
+Existing `/api/hosts` `ips` data remains independent. See the generated API docs
+for schemas and [inventory model](inventory-model.md) for IPAM semantics.

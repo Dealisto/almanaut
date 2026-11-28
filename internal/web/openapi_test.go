@@ -19,7 +19,7 @@ var everyEntityBase = []string{
 	"/api/certificates", "/api/backups", "/api/hardware", "/api/subscriptions",
 	"/api/accounts", "/api/sites", "/api/locations", "/api/racks",
 	"/api/contacts", "/api/vlans", "/api/reservations",
-	"/api/nics", "/api/ports",
+	"/api/nics", "/api/ports", "/api/interfaces", "/api/ip-addresses",
 }
 
 func TestOpenAPISpecServed(t *testing.T) {
@@ -274,5 +274,31 @@ func TestAPIDocsPageRenders(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("docs page missing %q", want)
 		}
+	}
+}
+
+func TestOpenAPIExternalBackupReports(t *testing.T) {
+	h := newTestServer(t)
+	rec := getJSONResp(t, h, "/api/openapi.json")
+	var doc struct {
+		Paths      map[string]map[string]any `json:"paths"`
+		Components struct {
+			Schemas map[string]struct {
+				Properties map[string]any `json:"properties"`
+			} `json:"schemas"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Paths["/api/backups/{id}/runs"]["post"] == nil || doc.Paths["/api/backups/{id}/runs"]["get"] == nil {
+		t.Fatal("missing run endpoints")
+	}
+	p := doc.Components.Schemas["BackupRunReport"].Properties
+	if p["run_id"] == nil || p["completed_at"] == nil || p["status"] == nil || p["backup_id"] != nil || p["received_at"] != nil {
+		t.Fatalf("incorrect report schema: %+v", p)
+	}
+	if !strings.Contains(getBody(t, h, "/api/docs"), "/api/backups/{id}/runs") {
+		t.Fatal("human reference omits report endpoint")
 	}
 }

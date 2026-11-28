@@ -189,6 +189,17 @@ func entitySchema(t reflect.Type) *oaSchema {
 	if s.Properties == nil {
 		s.Properties = newProps()
 	}
+	if t == reflect.TypeOf(domain.Host{}) {
+		if protection := s.Properties.vals["agent_protected_fields"]; protection != nil {
+			protection.Nullable = true
+			protection.Description = "Fields the inventory agent must preserve: ips, os, cpu, ram, disk. Names must be unique. Omitted or null preserves the policy on update; an explicit empty array clears it. Raw observations remain available."
+		}
+	}
+	if t == reflect.TypeOf(domain.Backup{}) {
+		if interval := s.Properties.vals["expected_interval_hours"]; interval != nil {
+			interval.Description = "Expected successful external backup interval in hours (0 disables, maximum 87600). Omitted or null preserves the policy on updates."
+		}
+	}
 	s.Properties.set("custom_fields", &oaSchema{
 		Type:                 "object",
 		AdditionalProperties: &oaSchema{},
@@ -403,10 +414,22 @@ func buildOpenAPIDoc(resources []mountable, version string) *openAPIDoc {
 				Tags: []string{tag}, Summary: "Delete a " + info.Singular, Parameters: []oaParameter{idParam},
 				Responses: map[string]oaResponse{
 					"204": {Description: "Deleted"},
+					"409": errorResp("Referenced inventory must be unassigned before deletion"),
 					"404": errorResp(info.Singular + " not found"),
 				},
 			},
 		}
+	}
+
+	doc.Components.Schemas["BackupRun"] = schemaForType(reflect.TypeOf(domain.BackupRun{}))
+	doc.Components.Schemas["BackupRunReport"] = backupRunReportSchema()
+	doc.Paths["/api/backups/{id}/runs"] = &oaPathItem{
+		Get: &oaOperation{Tags: []string{"Backup jobs"}, Summary: "List the latest 200 reported runs, newest completion first", Parameters: []oaParameter{idParam}, Responses: map[string]oaResponse{"200": jsonArrayResp("Retained external job outcomes", "BackupRun"), "404": errorResp("Backup not found")}},
+		Post: &oaOperation{Tags: []string{"Backup jobs"}, Summary: "Report a completed external backup run; requires a read-write bearer token", Parameters: []oaParameter{idParam}, RequestBody: jsonBody("BackupRunReport"), Responses: map[string]oaResponse{
+			"201": jsonResp("New run recorded atomically with history and webhook delivery", "BackupRun"),
+			"200": jsonResp("Identical retained run already recorded; no duplicate events", "BackupRun"),
+			"400": errorResp("Invalid run report"), "401": errorResp("Bearer token required"), "403": errorResp("Read-write token and editor or admin role required"), "404": errorResp("Backup not found"), "409": errorResp("Conflicting run_id or report outside retained history"), "413": errorResp("Report exceeds 16 KiB"),
+		}},
 	}
 
 	// Catalog settings are not entities with relationships or custom fields.
@@ -576,7 +599,24 @@ func buildAPIDocs(resources []mountable, version string) apiDocsData {
 		Name:   "AgentReport",
 		Fields: schemaFields(schemaForType(reflect.TypeOf(agentapi.Report{}))),
 	})
+	data.Sections = append(data.Sections, apiDocSection{Name: "Backup jobs", Endpoints: []apiDocEndpoint{
+		{"GET", "/api/backups/{id}/runs", "List the latest 200 reported outcomes"},
+		{"POST", "/api/backups/{id}/runs", "Report an external run with a read-write bearer token; run_id is idempotent within retained history"},
+	}})
+	data.Schemas = append(data.Schemas, apiDocSchema{Name: "BackupRunReport", Fields: schemaFields(backupRunReportSchema())}, apiDocSchema{Name: "BackupRun", Fields: schemaFields(schemaForType(reflect.TypeOf(domain.BackupRun{})))})
 	return data
+}
+
+func backupRunReportSchema() *oaSchema {
+	all := schemaForType(reflect.TypeOf(domain.BackupRun{}))
+	props := newProps()
+	for _, name := range []string{"run_id", "status", "started_at", "completed_at", "duration_seconds", "size_bytes", "message"} {
+		props.set(name, all.Properties.vals[name])
+	}
+	props.vals["status"].Description = "Required: success or failed."
+	props.vals["run_id"].Description = "Required stable external run identifier; identical retries are idempotent within the retained 200-run history."
+	props.vals["completed_at"].Description = "Required RFC3339 completion timestamp; at most five minutes in the future."
+	return &oaSchema{Type: "object", Properties: props}
 }
 
 // schemaFields flattens an object schema's top-level properties (in order) into

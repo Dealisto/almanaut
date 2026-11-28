@@ -1,0 +1,19 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles"><span class="ph-eyebrow">Discovery</span><h1>SNMP discovery</h1><p class="page-description">Read-only observations from explicitly configured devices. Inventory changes require review.</p></div>
+  <a class="btn" href="/discovery">All discovery sources</a>
+</div>
+{{if .Sources}}
+<div class="table-wrap" role="region" aria-label="SNMP discovery sources" tabindex="0">
+  <table><caption class="sr-only">Configured SNMP sources and their latest collection status</caption>
+    <thead><tr><th scope="col">Source</th><th scope="col">Last successful observation</th><th scope="col">Last attempt</th><th scope="col">Status</th></tr></thead>
+    <tbody>{{range .Sources}}<tr>
+      <th scope="row" class="wrap-cell"><a href="/discovery/snmp/{{.Source.ID}}">{{.Source.Name}}</a></th>
+      <td>{{if .Snapshot.ObservedAt}}{{displayTime .Snapshot.ObservedAt}}{{else}}Never scanned{{end}}</td>
+      <td>{{if .Snapshot.AttemptedAt}}{{displayTime .Snapshot.AttemptedAt}}{{end}}</td>
+      <td class="wrap-cell">{{.Snapshot.LastError}}</td>
+    </tr>{{end}}</tbody>
+  </table>
+</div>
+{{else}}<section class="panel"><p>No SNMP sources configured. An administrator can opt in using the SNMP sources file.</p></section>{{end}}
+{{end}}

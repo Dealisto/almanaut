@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Dealisto/almanaut/internal/backup"
 	"github.com/Dealisto/almanaut/internal/certprobe"
 	"github.com/Dealisto/almanaut/internal/config"
 	"github.com/Dealisto/almanaut/internal/discovery"
@@ -24,6 +25,7 @@ import (
 	"github.com/Dealisto/almanaut/internal/liveness"
 	"github.com/Dealisto/almanaut/internal/notify"
 	"github.com/Dealisto/almanaut/internal/scheddiscovery"
+	"github.com/Dealisto/almanaut/internal/snmp"
 	"github.com/Dealisto/almanaut/internal/store"
 	"github.com/Dealisto/almanaut/internal/web"
 	"github.com/Dealisto/almanaut/internal/webhook"
@@ -34,6 +36,11 @@ import (
 var version = "dev"
 
 func main() {
+	// Backup tools operate on explicit database paths. They must not load
+	// server secrets, migrate data, bootstrap users, or start integrations.
+	if len(os.Args) > 1 && (os.Args[1] == "backup" || os.Args[1] == "backup-verify") {
+		os.Exit(runBackupCommand(os.Args[1:], os.Stdout, os.Stderr))
+	}
 	// "almanaut healthcheck" probes the local /healthz endpoint and exits 0/1.
 	// It backs the container HEALTHCHECK, which cannot use a shell on the
 	// distroless image, so the binary doubles as its own probe client.
@@ -50,6 +57,11 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("load config: %v", err)
+	}
+
+	snmpSources, err := config.LoadSNMPSources(os.Getenv("ALMANAUT_SNMP_SOURCES_FILE"))
+	if err != nil {
+		log.Fatalf("load SNMP sources: %v", err)
 	}
 
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
@@ -112,6 +124,21 @@ func main() {
 	// page reflects it); it is always constructed so /tasks is always mounted
 	// for admins, even before any job is registered below.
 	runner := job.New(log.Default())
+	var databaseBackups *backup.Manager
+	if cfg.BackupDir != "" {
+		manager, err := backup.New(db, dbPath, cfg.BackupDir, cfg.BackupKeep, version)
+		if err != nil {
+			log.Fatalf("configure database backups: %v", err)
+		}
+		runner.Register(job.Definition{
+			Name:     "database-backup",
+			Title:    "Database backup",
+			Interval: cfg.BackupInterval,
+			Timeout:  cfg.BackupTimeout,
+			Run:      manager.Run,
+		})
+		databaseBackups = manager
+	}
 
 	// The prober is always built so the manual "Probe now" button works even
 	// when scheduled probing is disabled; only the background job below is
@@ -144,7 +171,19 @@ func main() {
 		scheduledSources = append(scheduledSources, ss)
 	}
 
-	handler := web.New(web.Config{
+	webSNMP := make([]web.SNMPSource, 0, len(snmpSources))
+	for _, source := range snmpSources {
+		collector, err := snmp.NewCollector(source)
+		if err != nil {
+			log.Fatalf("configure SNMP source %s: %v", source.ID, err)
+		}
+		manager := snmp.NewManager(db, source.ID, collector, source.Fingerprint())
+		webSNMP = append(webSNMP, web.SNMPSource{ID: source.ID, Name: source.Name, OwnerType: source.OwnerType, OwnerID: source.OwnerID, Scanner: manager, Fingerprint: source.Fingerprint()})
+		if source.Interval > 0 {
+			runner.Register(job.Definition{Name: "snmp-" + source.ID, Title: "SNMP: " + source.Name, Interval: source.Interval, Timeout: snmp.ScanTimeout, Run: manager.Run})
+		}
+	}
+	webConfig := web.Config{
 		Hosts:                  store.NewHostRepo(db),
 		Services:               store.NewServiceRepo(db),
 		Networks:               store.NewNetworkRepo(db),
@@ -169,6 +208,7 @@ func main() {
 		CertProbes:             certProbes,
 		DB:                     db,
 		DiscoverySources:       webSources,
+		SNMPSources:            webSNMP,
 		NetScan:                discovery.NewNetworkScanner(),
 		NetOpts:                web.NetDiscoveryOptions{Enabled: cfg.NetworkScanEnabled, DefaultSubnet: cfg.ScanSubnet},
 		AuthEnabled:            true,
@@ -184,7 +224,12 @@ func main() {
 		ProxyAuthAllowlist:     cfg.ProxyAuthAllowlist,
 		ProxyAuthAutoProvision: cfg.ProxyAuthAutoProvision,
 		ProxyAuthDefaultRole:   cfg.ProxyAuthDefaultRole,
-	})
+	}
+	// Do not put a typed nil in the optional backup interface.
+	if databaseBackups != nil {
+		webConfig.DatabaseBackups = databaseBackups
+	}
+	handler := web.New(webConfig)
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           handler,
@@ -279,7 +324,7 @@ func main() {
 		if source.Interval <= 0 {
 			continue
 		}
-		detector := scheddiscovery.NewSource(scheduledSources[i], store.NewServiceRepo(db), store.NewHostRepo(db), store.NewDiscoveryBindingRepo(db), discoveryRuns, sender, store.NewDiscoveryObservationRepo(db))
+		detector := scheddiscovery.NewSource(scheduledSources[i], store.NewServiceRepo(db), store.NewHostRepo(db), store.NewDiscoveryBindingRepo(db), discoveryRuns, sender, store.NewDiscoveryObservationRepo(db)).WithSnapshotRecorder(store.NewDiscoverySnapshotRepo(db))
 		name := "discovery-" + source.Kind
 		if source.ID != "default" {
 			name += "-" + source.ID

@@ -66,7 +66,7 @@ func duplicateIPs(hosts []Host) []IPConflict {
 				continue
 			}
 			seen[key] = true
-			byIP[s] = append(byIP[s], Allocation{IP: s, HostID: h.ID, HostName: h.Name})
+			byIP[s] = append(byIP[s], hostAllocation(h, s))
 		}
 	}
 	var out []IPConflict

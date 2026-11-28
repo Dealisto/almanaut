@@ -14,7 +14,7 @@
 {{template "bulkactions" .Controls}}
 <div class="table-wrap">
 <table>
-  <thead><tr><th scope="col" class="bulk-col"><span class="sr-only">Selection</span>{{if canWrite}}<input type="checkbox" class="js-only" data-select-all aria-label="Select all rows on this page">{{end}}</th><th scope="col">Source</th><th scope="col">Destination</th><th scope="col">Frequency</th><th scope="col">Last run</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+  <thead><tr><th scope="col" class="bulk-col"><span class="sr-only">Selection</span>{{if canWrite}}<input type="checkbox" class="js-only" data-select-all aria-label="Select all rows on this page">{{end}}</th><th scope="col">Source</th><th scope="col">Destination</th><th scope="col">Frequency</th><th scope="col">Documented last run</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
   <tbody>
   {{range .Items}}
     <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select {{.Source}}">{{end}}</td>
@@ -26,6 +26,7 @@
         {{if canWrite}}
         <details class="row-menu"><summary>Actions</summary>
         <a class="btn" href="{{listFormURL $.Controls.BasePath (printf "%s/%d/edit" $.Controls.BasePath .ID)}}">Edit</a>
+        <a class="btn" href="/backups/{{.ID}}/runs">Reported job runs</a>
         <form class="form-inline" method="post" action="/backups/{{.ID}}/delete"
               data-confirm="Delete this backup?">
           {{ csrfField }}

@@ -28,6 +28,16 @@
     <label>RAM<input name="ram" value="{{.Item.RAM}}" placeholder="e.g. 32 GB"></label>
     <label>Disk<input name="disk" value="{{.Item.Disk}}" placeholder="e.g. 1 TB NVMe"></label>
   </div></fieldset>
+  <fieldset class="form-section"><legend>Agent synchronization</legend>
+    <input type="hidden" name="agent_protection_present" value="1">
+    <p class="form-help">Keep selected inventory values under manual control. The agent still reports what it observes; these values remain unchanged until you edit them or turn protection off.</p>
+    <label><input type="checkbox" name="agent_protect_ips"{{if .Item.AgentProtects "ips"}} checked{{end}}> Protect IP addresses</label>
+    <label><input type="checkbox" name="agent_protect_os"{{if .Item.AgentProtects "os"}} checked{{end}}> Protect operating system</label>
+    <label><input type="checkbox" name="agent_protect_cpu"{{if .Item.AgentProtects "cpu"}} checked{{end}}> Protect CPU</label>
+    <label><input type="checkbox" name="agent_protect_ram"{{if .Item.AgentProtects "ram"}} checked{{end}}> Protect RAM</label>
+    <label><input type="checkbox" name="agent_protect_disk"{{if .Item.AgentProtects "disk"}} checked{{end}}> Protect disk</label>
+    <p class="form-help">IP protection keeps the whole address list, including management addresses the operating system cannot see. Manual edits and confirmed discovery changes remain available.</p>
+  </fieldset>
   <fieldset class="form-section"><legend>Physical location</legend>
     <label>Rack<select name="rack_id"><option value="0">No rack assigned</option>{{$foundRackID := false}}{{range .Extras.Racks}}{{if eq .ID $.Item.RackID}}{{$foundRackID = true}}{{end}}<option value="{{.ID}}"{{if eq .ID $.Item.RackID}} selected{{end}}>{{.Name}}</option>{{end}}{{if and (gt .Item.RackID 0) (not $foundRackID)}}<option value="{{.Item.RackID}}" selected>rack:{{.Item.RackID}} (deleted)</option>{{end}}</select></label>
     <div class="form-grid"><label>Rack position (U)<input type="{{$rack_position.Type}}" inputmode="numeric" name="rack_position" min="0" max="60" value="{{$rack_position.Value}}"></label><label>Height (U)<input type="{{$u_height.Type}}" inputmode="numeric" name="u_height" min="0" max="60" value="{{$u_height.Value}}"></label></div>

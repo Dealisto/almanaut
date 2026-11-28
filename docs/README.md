@@ -9,6 +9,8 @@ the documentation from the same tag; the `:dev` container follows `master`.
 | Page | What's in it |
 |---|---|
 | [Installation](installation.md) | Docker, Compose, prebuilt binaries, from source, first login, sample data |
+| [External backup jobs](backup-jobs.md) | Report job outcomes and monitor expected successful runs |
+| [SNMP and LLDP](snmp.md) | Configure read-only collection and review inventory changes |
 | [Configuration](configuration.md) | Every environment variable, secrets from files, reverse proxy & TLS, the security model |
 | [Authentication & access control](authentication.md) | Roles, sessions, login throttling, lockout recovery, TOTP 2FA, reverse-proxy SSO, the audit log |
 | [The inventory model](inventory-model.md) | The 17 entity types, sites/locations/racks, NICs & ports, IPAM, custom fields, attachments, history |

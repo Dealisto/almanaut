@@ -1157,7 +1157,7 @@ func TestExportImport(t *testing.T) {
 		t.Errorf("Content-Type = %q, want application/x-yaml", ct)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "proxmox") || !strings.Contains(body, "version: 3") {
+	if !strings.Contains(body, "proxmox") || !strings.Contains(body, "version: 4") {
 		t.Fatalf("export body unexpected:\n%s", body)
 	}
 

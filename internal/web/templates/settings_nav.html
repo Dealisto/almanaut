@@ -5,10 +5,12 @@
   {{if canWrite}}<a href="/host-types"{{if isActive "/host-types"}} aria-current="page"{{end}}>Host types</a>{{end}}
   {{if canWrite}}<a href="/custom-fields"{{if isActive "/custom-fields"}} aria-current="page"{{end}}>Custom fields</a>{{end}}
   {{if isAdmin}}
+  <a href="/health-rules"{{if isActive "/health-rules"}} aria-current="page"{{end}}>Health rules</a>
   <a href="/users"{{if isActive "/users"}} aria-current="page"{{end}}>Users</a>
   <a href="/audit"{{if isActive "/audit"}} aria-current="page"{{end}}>Audit log</a>
   <a href="/webhooks"{{if isActive "/webhooks"}} aria-current="page"{{end}}>Webhooks</a>
   <a href="/tasks"{{if isActive "/tasks"}} aria-current="page"{{end}}>Scheduled tasks</a>
+  <a href="/database-backups"{{if isActive "/database-backups"}} aria-current="page"{{end}}>Database backups</a>
   {{end}}
 </nav>
 {{end}}

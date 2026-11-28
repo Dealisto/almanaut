@@ -59,6 +59,7 @@ type Config struct {
 	XenOrchestra xenOrchestraScanner
 	XOOpts       XenOrchestraOptions
 	// DiscoverySources replaces legacy engine configuration when non-nil.
+	SNMPSources      []SNMPSource
 	DiscoverySources []DiscoverySource
 	AuthEnabled      bool   // require login (main.go always sets this true; tests leave it false)
 	SecureCookies    bool   // force the Secure flag on cookies (TLS-terminating proxy)
@@ -71,6 +72,9 @@ type Config struct {
 	// Tasks exposes the background job runner to the Scheduled-tasks admin
 	// page. Nil => the page and routes are not mounted.
 	Tasks jobRunner
+	// DatabaseBackups reads verified snapshot manifests from the configured
+	// backup directory. Nil keeps the administration page in setup mode.
+	DatabaseBackups databaseBackupLister
 	// DiscoveryRuns backs the read-only discovery run-history admin page.
 	// Nil => the page and route are not mounted.
 	DiscoveryRuns *store.DiscoveryRunRepo
@@ -108,6 +112,8 @@ func New(cfg Config) http.Handler {
 	if nics == nil {
 		nics = store.NewNICRepo(cfg.DB)
 	}
+	interfaces := store.NewInterfaceRepo(cfg.DB)
+	addresses := store.NewIPAddressRepo(cfg.DB)
 	ports := cfg.Ports
 	if ports == nil {
 		ports = store.NewPortRepo(cfg.DB)
@@ -140,12 +146,13 @@ func New(cfg Config) http.Handler {
 			sqlField("Rack position (U)", sqlRackPosition()),
 			sqlField("Liveness", sqlLiveness("host")),
 		),
-		repo:  hosts,
-		parse: parseHost,
-		label: func(h domain.Host) string { return h.Name },
-		id:    func(h domain.Host) int64 { return h.ID },
-		setID: func(h *domain.Host, id int64) { h.ID = id },
-		notes: func(h domain.Host) string { return h.Notes },
+		repo:         hosts,
+		parse:        parseHost,
+		restoreDraft: restoreHostProtectionDraft,
+		label:        func(h domain.Host) string { return h.Name },
+		id:           func(h domain.Host) int64 { return h.ID },
+		setID:        func(h *domain.Host, id int64) { h.ID = id },
+		notes:        func(h domain.Host) string { return h.Notes },
 		fields: func(h domain.Host) []fieldRow {
 			return []fieldRow{
 				{"Type", h.TypeLabel}, {"OS", h.OS}, {"CPU", h.CPU}, {"RAM", h.RAM},
@@ -155,7 +162,7 @@ func New(cfg Config) http.Handler {
 			}
 		},
 		children: func(h domain.Host, cat entityCatalog) (*childrenSection, error) {
-			return ownedPortsChildren(ports, "host", h.ID, cat)
+			return ownedNetworkChildren(ports, interfaces, "host", h.ID, cat)
 		},
 		agent:    agentSectionFor(agents, hosts),
 		newItem:  domain.Host{Type: "physical", UHeight: 1},
@@ -367,11 +374,11 @@ func New(cfg Config) http.Handler {
 				if err != nil {
 					return nil
 				}
-				hostList, err := hosts.List()
+				resList, err := reservations.List()
 				if err != nil {
 					return nil
 				}
-				resList, err := reservations.List()
+				hostList, err := store.IPAMHosts(db)
 				if err != nil {
 					return nil
 				}
@@ -448,12 +455,14 @@ func New(cfg Config) http.Handler {
 				sqlField("Frequency", "e.frequency"),
 				sqlField("Last run", "e.last_run"),
 			),
-			repo:  backups,
-			parse: parseBackup,
-			label: func(b domain.Backup) string { return b.Source },
-			id:    func(b domain.Backup) int64 { return b.ID },
-			setID: func(b *domain.Backup, id int64) { b.ID = id },
-			notes: func(b domain.Backup) string { return b.Notes },
+			repo:         backups,
+			parse:        parseBackup,
+			restoreDraft: restoreBackupPolicyDraft,
+			children:     backupRunsChildren,
+			label:        func(b domain.Backup) string { return b.Source },
+			id:           func(b domain.Backup) int64 { return b.ID },
+			setID:        func(b *domain.Backup, id int64) { b.ID = id },
+			notes:        func(b domain.Backup) string { return b.Notes },
 			fields: func(b domain.Backup) []fieldRow {
 				return []fieldRow{
 					{"Destination", b.Destination},
@@ -500,7 +509,7 @@ func New(cfg Config) http.Handler {
 				}
 			},
 			children: func(h domain.Hardware, cat entityCatalog) (*childrenSection, error) {
-				return ownedPortsChildren(ports, "hardware", h.ID, cat)
+				return ownedNetworkChildren(ports, interfaces, "hardware", h.ID, cat)
 			},
 			loadExtras: func() (map[string]any, error) {
 				rackList, err := racks.List()
@@ -766,6 +775,41 @@ func New(cfg Config) http.Handler {
 			newItem:  domain.Reservation{},
 			listTmpl: "reservations.html", formTmpl: "reservation_form.html",
 		},
+
+		resource[domain.NetworkInterface]{
+			name: "interfaces", sing: "interface", title: "Interfaces", heading: "Interface",
+			search: []string{"e.name", "e.kind", "e.mac", "e.notes"},
+			query:  inventoryQuery("network_interfaces", "e.owner_type || ':' || e.owner_id || ' / ' || e.name", "e.owner_type, e.owner_id, e.name", sqlField("Kind", "e.kind"), sqlField("Owner type", "e.owner_type"), sqlField("Owner ID", "e.owner_id"), sqlField("MAC", "e.mac"), sqlField("MTU", "e.mtu"), sqlField("Enabled", "e.enabled")),
+			repo:   interfaces, parse: parseInterface, label: networkInterfaceLabel,
+			id: func(v domain.NetworkInterface) int64 { return v.ID }, setID: func(v *domain.NetworkInterface, id int64) { v.ID = id }, notes: func(v domain.NetworkInterface) string { return v.Notes },
+			fields: func(v domain.NetworkInterface) []fieldRow {
+				return []fieldRow{{"Owner", fmt.Sprintf("%s:%d", v.OwnerType, v.OwnerID)}, {"Kind", v.Kind}, {"MAC", v.MAC}, {"MTU", strconv.Itoa(v.MTU)}, {"Enabled", strconv.FormatBool(v.Enabled)}}
+			},
+			children: interfaceChildren(addresses), loadExtras: interfaceExtras(hosts, hardware, ports, vlans),
+			newItem: domain.NetworkInterface{OwnerType: "host", Kind: "physical", Enabled: true}, listTmpl: "interfaces.html", formTmpl: "interface_form.html",
+		},
+		resource[domain.IPAddress]{
+			name: "ip-addresses", sing: "ipaddress", title: "IP addresses", heading: "IP address",
+			search: []string{"e.address", "e.dns_name", "e.status", "e.notes"},
+			query:  inventoryQuery("ip_addresses", "e.address", "e.address", sqlField("Status", "e.status"), sqlField("DNS name", "e.dns_name"), sqlField("Interface", sqlReference("network_interfaces", "interface_id", "r.owner_type || ':' || r.owner_id || ' / ' || r.name"))),
+			repo:   addresses, parse: parseIPAddress, label: func(v domain.IPAddress) string { return v.Address },
+			id: func(v domain.IPAddress) int64 { return v.ID }, setID: func(v *domain.IPAddress, id int64) { v.ID = id }, notes: func(v domain.IPAddress) string { return v.Notes },
+			fields: func(v domain.IPAddress) []fieldRow {
+				return []fieldRow{{"Address", v.Address}, {"Status", v.Status}, {"DNS name", v.DNSName}}
+			},
+			children: func(v domain.IPAddress, cat entityCatalog) (*childrenSection, error) {
+				items := []childRef{}
+				if v.InterfaceID != 0 {
+					items = append(items, childRef{Label: "Assigned interface", Path: cat.path("interface", v.InterfaceID)})
+				}
+				return &childrenSection{Title: "Assignment", Items: items}, nil
+			},
+			loadExtras: func() (map[string]any, error) {
+				list, err := interfaces.List()
+				return map[string]any{"Interfaces": list, "Statuses": domain.IPAddressStatuses}, err
+			},
+			newItem: domain.IPAddress{Status: "active"}, listTmpl: "ip_addresses.html", formTmpl: "ip_address_form.html",
+		},
 		nicRS,
 		portRS,
 	}
@@ -784,6 +828,7 @@ func New(cfg Config) http.Handler {
 	tokenUses := newTokenUseLog()
 	ssoLog := newTokenUseLog()
 	cat := entityCatalog{db: db, resources: resources}
+	previews := newCSVPreviewStore()
 	deps := handlerDeps{cat: cat, tags: tags, rels: relationships, changelog: changelog, journal: journal, customFields: customFields, attachments: attachments, db: db, webhooks: cfg.Webhooks}
 	r := chi.NewRouter()
 	logger := cfg.Logger
@@ -849,7 +894,7 @@ func New(cfg Config) http.Handler {
 		reservations: reservations,
 		contacts:     contacts,
 		sites:        sites, locations: locations, racks: racks,
-		nics: nics, ports: ports,
+		nics: nics, ports: ports, interfaces: interfaces, addresses: addresses,
 	}
 	// Everything else is the application UI: optionally behind session auth and
 	// always behind CSRF. Grouping scopes those middlewares to these routes
@@ -905,6 +950,10 @@ func New(cfg Config) http.Handler {
 				r.Post("/users", createUser(users))
 				r.Post("/users/{id}/delete", deleteUser(users, db, authEvents))
 				r.Get("/audit", auditLogPage(authEvents, users))
+				r.Get("/health-rules", healthRuleSettingsPage(db, cfg.StaleAfterDays))
+				r.Post("/health-rules", saveHealthRuleSettings(db, cfg.StaleAfterDays))
+				r.Post("/health-rules/reset", resetHealthRuleSettings(db))
+				r.Get("/database-backups", databaseBackupsPage(cfg.DatabaseBackups, cfg.Tasks))
 				r.Post("/users/{id}/password", resetUserPassword(users, sessions, db, authEvents))
 				r.Post("/users/{id}/role", updateUserRole(users, db, authEvents))
 				r.Post("/users/{id}/2fa/reset", resetUser2FA(totp, sessions, authEvents, users, db))
@@ -962,8 +1011,11 @@ func New(cfg Config) http.Handler {
 			r.Get("/attachments/{id}", downloadAttachment(deps))
 			r.Post("/attachments/{id}/delete", deleteAttachment(cat, deps))
 			r.Get("/impact", impactView(relationships, cat))
+			r.Get("/topology", topologyPage(db, cat))
+			r.Get("/topology.svg", topologyDownload(db, cat))
 			r.Get("/history", history(cat, changelog))
 			r.Get("/checks", healthChecks(services, certificates, hardware, subscriptions, relationships))
+			r.Get("/backups/{id}/runs", backupRunsPage(db))
 			r.Get("/health-report", healthReport(repos, relationships, cat, changelog, cfg.StaleAfterDays))
 			r.Post("/health-report/acknowledge", acknowledgeStale(cat, changelog, db))
 			r.Get("/search", searchEntities(cat, db))
@@ -972,6 +1024,10 @@ func New(cfg Config) http.Handler {
 			r.Get("/export", exportData(db))
 			r.Post("/import", importData(db, cat))
 			r.Post("/import-csv", importCSV(cat, deps))
+			r.Post("/import-csv/preview", previewCSV(cat, deps, previews))
+			r.Post("/import-csv/apply", applyCSVPreview(deps, previews))
+			mountSNMPDiscovery(r, cfg.SNMPSources, db, cat, portRS, deps)
+			r.Get("/discovery/deviations", discoveryDeviations(discoverySources, db, cat))
 			r.Get("/discovery", discoverySourcesLanding(netOpts, discoverySources, cfg.DiscoveryRuns, cfg.Tasks))
 			for _, source := range discoverySources {
 				if !source.available() {
@@ -1016,6 +1072,8 @@ func New(cfg Config) http.Handler {
 		for _, rs := range resources {
 			rs.mountAPI(r, deps)
 		}
+		r.Get("/api/backups/{id}/runs", backupRunsJSON(db))
+		r.Post("/api/backups/{id}/runs", reportBackupRun(deps))
 		r.Get("/api/host-types", hostTypesJSON(hostTypes))
 		r.Get("/api/search", apiSearch(cat, db))
 		r.Get("/api/relationships", apiRelationships(db))

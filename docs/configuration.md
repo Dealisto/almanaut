@@ -11,6 +11,11 @@ liveness, certificate probing and discovery — are covered in more depth in
 |-------------------------------|----------------------|------------------------------------------------|
 | `ALMANAUT_ADDR`               | `:8080`              | TCP listen address                             |
 | `ALMANAUT_DATA_DIR`           | `./data`             | Directory for the SQLite database              |
+| `ALMANAUT_SNMP_SOURCES_FILE` | (empty) | JSON file of explicit read-only SNMP targets and secret-file references; see [SNMP and LLDP](snmp.md) |
+| `ALMANAUT_BACKUP_DIR` | (empty) | Directory for verified scheduled database snapshots; empty disables the job |
+| `ALMANAUT_BACKUP_INTERVAL` | `24h` | Delay between completed snapshot runs; a snapshot also runs at startup |
+| `ALMANAUT_BACKUP_TIMEOUT` | `10m` | Maximum duration of a scheduled snapshot and verification |
+| `ALMANAUT_BACKUP_KEEP` | `7` | Positive number of verified managed snapshots to retain; cleanup follows a successful verified snapshot |
 | `ALMANAUT_DISCOVERY_SOURCES_FILE` | (empty) | JSON file defining multiple engine/hypervisor sources; replaces the single-source settings below when set |
 | `ALMANAUT_DOCKER_SOCKET`      | `/var/run/docker.sock` | Path to the Docker or Podman compatibility socket for auto-discovery; see [Podman](podman.md) |
 | `ALMANAUT_ENABLE_NETWORK_SCAN` | `false`              | Enable the opt-in subnet scan                  |

@@ -1,0 +1,34 @@
+{{define "content"}}
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Connections &amp; views</span><h1>Physical topology</h1></div></div>
+<section class="panel">
+  <p>Explore recorded cables between hosts and hardware. Connections describe physical adjacency; they do not establish routed reachability or outage impact.</p>
+  <p>Choose a site or rack, or explore one device from the table below. Each selection includes directly connected peers.</p>
+  <form class="stack" method="get" action="/topology"><label>Site <select name="site"><option value="">All sites</option>{{range .Sites}}<option value="{{.ID}}" {{if eq .ID $.SiteID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label><div class="actions"><button class="btn" type="submit">Show site</button></div></form>
+  <form class="stack" method="get" action="/topology"><label>Rack <select name="rack"><option value="">All racks</option>{{range .Racks}}<option value="{{.ID}}" {{if eq .ID $.RackID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label><div class="actions"><button class="btn" type="submit">Show rack</button></div></form>
+  {{if .ChoicesTruncated}}<p>Selectors show up to 100 sites and racks. Scope links also accept records outside these lists.</p>{{end}}
+  {{if .Ref}}<p>Showing one device and its directly connected peers. Choose another device's Connections link to continue exploring.</p>{{end}}
+  {{if .Unassigned}}<p>Showing devices without a resolved site and their directly connected peers.</p>{{end}}
+  <div class="actions"><a class="btn" href="/topology?unassigned=1">Without a site</a><a class="btn" href="/topology">Clear scope</a><a class="btn" href="{{.DownloadURL}}">Download SVG</a></div>
+</section>
+{{if .Truncated}}<section class="panel"><p role="status">This view is limited to 60 selected devices, 100 devices including peers, and 200 cables. Narrow the scope to see additional connections.</p></section>{{end}}
+{{if .Broken}}<section class="panel"><p role="status">{{.Broken}} invalid port links were omitted because their peer is missing or not reciprocal. Review the <a href="/ports">port inventory</a>.</p></section>{{end}}
+<section class="panel">
+  <h2>Recorded connections</h2>
+  {{if .Nodes}}
+  <p>{{len .Nodes}} devices · {{len .Cables}} cables. Blue: selected devices. Yellow: peers outside the selection. Red: missing inventory records.</p>
+  <div class="table-wrap">{{.SVG}}</div>
+  {{else}}<p>No devices match this selection.</p>{{end}}
+</section>
+<section class="panel">
+  <h2>Devices</h2>
+  <div class="table-wrap"><table><thead><tr><th scope="col">Device</th><th scope="col">Placement</th><th scope="col">Selection</th><th scope="col">Explore</th></tr></thead><tbody>
+  {{range .Nodes}}<tr><td>{{if .URL}}<a href="{{.URL}}">{{.Label}}</a>{{else}}{{.Label}}{{end}}</td><td>{{if .RackName}}{{.RackName}}{{else}}No rack{{end}} · {{if .SiteName}}{{.SiteName}}{{else}}No resolved site{{end}}</td><td>{{if .Outside}}Outside selection{{else}}Selected{{end}}</td><td>{{if .FocusURL}}<a href="{{.FocusURL}}" aria-label="Explore connections for {{.Label}}">Connections</a>{{end}}</td></tr>{{else}}<tr><td colspan="4">No devices to display.</td></tr>{{end}}
+  </tbody></table></div>
+</section>
+<section class="panel">
+  <h2>Cables</h2>
+  <div class="table-wrap"><table><thead><tr><th scope="col">Device</th><th scope="col">Port</th><th scope="col">Connected device</th><th scope="col">Connected port</th></tr></thead><tbody>
+  {{range .Cables}}<tr><td>{{if .From.URL}}<a href="{{.From.URL}}">{{.From.Label}}</a>{{else}}{{.From.Label}}{{end}}</td><td><a href="{{.FromURL}}">{{.FromPort}}</a></td><td>{{if .To.URL}}<a href="{{.To.URL}}">{{.To.Label}}</a>{{else}}{{.To.Label}}{{end}}</td><td><a href="{{.ToURL}}">{{.ToPort}}</a></td></tr>{{else}}<tr><td colspan="4">No recorded cables in this selection. Add connections in the port inventory.</td></tr>{{end}}
+  </tbody></table></div>
+</section>
+{{end}}

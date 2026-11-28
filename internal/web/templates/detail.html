@@ -106,6 +106,7 @@
 {{with .Agent}}
 <section class="panel">
   <h2>Agent</h2>
+  {{if .ProtectedFields}}<p>Protected inventory fields: {{range $i, $field := .ProtectedFields}}{{if $i}}, {{end}}<code>{{$field}}</code>{{end}}. Agent reports leave these values unchanged.</p>{{end}}
   {{if .ConflictAt}}
   <div class="error" role="alert" tabindex="-1">
     <strong>Conflict:</strong> a report from <code>{{.ConflictHostname}}</code> was rejected at {{.ConflictAt}} —
@@ -129,6 +130,13 @@
     <dt>Kernel</dt><dd>{{.Kernel}}</dd>
     <dt>Uptime</dt><dd>{{.Uptime}}</dd>
   </dl>
+  {{if .ObservedFields}}
+  <h3>Latest observed values</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">Field</th><th scope="col">Observed value</th><th scope="col">Inventory synchronization</th></tr></thead>
+    <tbody>{{range .ObservedFields}}<tr><th scope="row">{{.Label}}</th><td>{{if .Value}}{{.Value}}{{else}}Unknown{{end}}</td><td>{{if .Protected}}Protected{{else}}Automatic{{end}}</td></tr>{{end}}</tbody>
+  </table></div>
+  {{end}}
   {{if .Disks}}
   <div class="table-wrap">
   <table>
@@ -176,6 +184,13 @@
 
 </div>
 <div id="connections" data-detail-panel>
+{{if or (eq .EntityType "host") (eq .EntityType "hardware")}}
+<p><a class="btn" href="/topology?ref={{.EntityType}}:{{.EntityID}}">Explore physical connections</a></p>
+{{else if eq .EntityType "rack"}}
+<p><a class="btn" href="/topology?rack={{.EntityID}}">Explore rack connections</a></p>
+{{else if eq .EntityType "site"}}
+<p><a class="btn" href="/topology?site={{.EntityID}}">Explore site connections</a></p>
+{{end}}
 {{with .IPAM}}
 <section class="panel">
   <h2>IP allocations</h2>
@@ -199,7 +214,7 @@
       {{range .Rows}}
       <tr>
         <td><code>{{.IP}}</code></td>
-        <td><a href="/hosts/{{.HostID}}">{{.HostName}}</a></td>
+        <td><a href="{{.URL}}">{{.HostName}}</a></td>
         <td>
           {{if .IsGateway}}<span class="badge">gateway</span>{{end}}
           {{if .Conflict}}<span class="badge badge-warn">conflict</span>{{end}}

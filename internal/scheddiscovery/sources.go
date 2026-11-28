@@ -29,7 +29,12 @@ type ObservationRecorder interface {
 
 // SourceDetector shares matching rules with manual imports and stores a separate
 // history baseline for every source. Scheduled runs never create bindings.
+type SnapshotRecorder interface {
+	Record(source string, attemptedAt time.Time, candidates []discovery.Candidate, scanErr error) error
+}
+
 type SourceDetector struct {
+	snapshots    SnapshotRecorder
 	source       Source
 	detector     *Detector
 	bindings     BindingLister
@@ -44,9 +49,21 @@ func NewSource(source Source, services ServiceLister, hosts HostLister, bindings
 	return detector
 }
 
+// WithSnapshotRecorder enables the operational deviations cache. Configure it
+// before registering the detector with the job runner.
+func (s *SourceDetector) WithSnapshotRecorder(recorder SnapshotRecorder) *SourceDetector {
+	s.snapshots = recorder
+	return s
+}
+
 func (s *SourceDetector) Run(ctx context.Context) error {
 	start := s.detector.now()
 	candidates, err := s.candidates(ctx)
+	if s.snapshots != nil {
+		if cacheErr := s.snapshots.Record(s.source.Key, start, candidates, err); cacheErr != nil {
+			return s.detector.finish(ctx, s.source.Key, start, len(candidates), nil, cacheErr)
+		}
+	}
 	var newKeys, observedIDs []string
 	found := len(candidates)
 	if err == nil {

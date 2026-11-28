@@ -1,0 +1,24 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Network</span>
+    <h1>{{.Heading}}</h1>
+  </div>
+</div>
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
+<form class="stack" method="post" action="{{.Action}}">
+{{ csrfField }}
+<input type="hidden" name="return_to" value="{{.ReturnURL}}">
+  <p class="muted">Explicit allocations are managed independently from agent-reported host IPs. All statuses reserve the address in IPAM.</p>
+  <label>Address<input name="address" value="{{.Item.Address}}" placeholder="192.0.2.10/24 or 2001:db8::10/64" required></label>
+  <label>Interface<select name="interface_id"><option value="0">Unassigned</option>{{$found := false}}{{range .Extras.Interfaces}}{{if eq .ID $.Item.InterfaceID}}{{$found = true}}{{end}}<option value="{{.ID}}" {{if eq .ID $.Item.InterfaceID}}selected{{end}}>{{.OwnerType}}:{{.OwnerID}} / {{.Name}}</option>{{end}}{{if and (gt .Item.InterfaceID 0) (not $found)}}<option value="{{.Item.InterfaceID}}" selected>interface {{.Item.InterfaceID}} (deleted)</option>{{end}}</select></label>
+  <label>Status<select name="status">{{range .Extras.Statuses}}<option {{if eq . $.Item.Status}}selected{{end}}>{{.}}</option>{{end}}</select></label>
+  <label>DNS name<input name="dns_name" value="{{.Item.DNSName}}"></label>
+  <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  {{template "customFieldsForm" .Extras.customFields}}
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
+    <a class="btn" data-list-return href="{{.ReturnURL}}">Cancel</a>
+  </div>
+</form>
+{{end}}

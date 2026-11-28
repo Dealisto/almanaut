@@ -80,6 +80,7 @@ type detailData struct {
 
 // ipamRow is one IP allocation as shown in the network detail IPAM table.
 type ipamRow struct {
+	URL       string
 	IP        string
 	HostID    int64
 	HostName  string
@@ -127,6 +128,7 @@ func buildIPAMSection(u domain.NetworkUsage) ipamSection {
 	for _, a := range u.Used {
 		rows = append(rows, ipamRow{
 			IP:        a.IP,
+			URL:       allocationURL(a),
 			HostID:    a.HostID,
 			HostName:  a.HostName,
 			IsGateway: a.IP == u.Network.Gateway,
@@ -241,4 +243,15 @@ func renderDetailExtra(
 		JournalKinds:   domain.JournalKinds,
 		Changelog:      events,
 	})
+}
+
+func allocationURL(a domain.Allocation) string {
+	ref := a.Ref()
+	if ref.Type == "hardware" {
+		return fmt.Sprintf("/hardware/%d", ref.ID)
+	}
+	if ref.Type == "ipaddress" {
+		return fmt.Sprintf("/ip-addresses/%d", ref.ID)
+	}
+	return fmt.Sprintf("/hosts/%d", ref.ID)
 }

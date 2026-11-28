@@ -24,6 +24,11 @@ type agentIfaceView struct {
 	Name, MAC, Addrs string
 }
 
+type agentObservedField struct {
+	Label, Value string
+	Protected    bool
+}
+
 // duplicateHostView is another host record that may track the same machine
 // as this one.
 type duplicateHostView struct {
@@ -46,6 +51,8 @@ type agentSection struct {
 	Interfaces                   []agentIfaceView
 	ConflictAt, ConflictHostname string
 	Duplicates                   []duplicateHostView
+	ProtectedFields              []string
+	ObservedFields               []agentObservedField
 }
 
 // agentSectionFor builds the hook closure for the host resource's agent
@@ -55,7 +62,7 @@ type agentSection struct {
 // it is supplied per-call by the detail handler rather than closed over here.
 func agentSectionFor(agents *store.AgentRepo, hosts *store.HostRepo) func(domain.Host, entityCatalog) *agentSection {
 	return func(h domain.Host, cat entityCatalog) *agentSection {
-		sec := &agentSection{}
+		sec := &agentSection{ProtectedFields: h.AgentProtectedFields}
 
 		binding, err := agents.ByHostID(h.ID)
 		switch {
@@ -101,6 +108,18 @@ func fillReport(sec *agentSection, agents *store.AgentRepo, hostID int64) {
 	sec.AgentVersion = rep.AgentVersion
 	sec.Kernel = rep.Kernel
 	sec.Uptime = humanizeUptime(rep.Uptime)
+	policy := domain.Host{AgentProtectedFields: sec.ProtectedFields}
+	for _, field := range []struct{ name, label, value string }{
+		{"ips", "IP addresses", strings.Join(rep.ReportedIPs(), ", ")},
+		{"os", "Operating system", rep.OS},
+		{"cpu", "CPU", rep.CPU},
+		{"ram", "RAM", rep.RAM},
+		{"disk", "Disk", rep.Disk},
+	} {
+		sec.ObservedFields = append(sec.ObservedFields, agentObservedField{
+			Label: field.label, Value: field.value, Protected: policy.AgentProtects(field.name),
+		})
+	}
 	for _, d := range rep.Disks {
 		sec.Disks = append(sec.Disks, agentDiskView{
 			Device: d.Device,

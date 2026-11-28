@@ -1,0 +1,37 @@
+{{define "content"}}
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Discovery</span><h1>{{.Title}}</h1></div><a class="btn" href="/discovery/snmp/{{.Source.ID}}">Back to source</a></div>
+<section class="panel" aria-labelledby="snmp-link-identity-heading">
+  <div class="panel-head"><h2 id="snmp-link-identity-heading">Observed LLDP identifiers</h2></div>
+  <dl class="def-grid">
+    <dt>Local port</dt><dd>{{.Neighbor.LocalID}} / {{.Neighbor.LocalDescription}} (LLDP number {{.Neighbor.LocalNumber}}, subtype {{.Neighbor.LocalSubtype}})</dd>
+    <dt>Remote chassis / system</dt><dd>{{.Neighbor.ChassisID}} / {{.Neighbor.SystemName}}</dd>
+    <dt>Remote port</dt><dd>{{.Neighbor.PortID}} / {{.Neighbor.PortDescription}}</dd>
+  </dl>
+  <p>Confirm the physical inventory association yourself. LLDP identifiers do not automatically identify either inventory port.</p>
+</section>
+{{if .Confirm}}
+<section class="panel" aria-labelledby="snmp-confirm-heading">
+  <div class="panel-head"><h2 id="snmp-confirm-heading">Selected cable endpoints</h2></div>
+  <dl class="def-grid"><dt>Local physical port</dt><dd>{{.LocalLabel}}</dd><dt>Remote physical port</dt><dd>{{.RemoteLabel}}</dd></dl>
+  <form class="stack" method="post" action="/discovery/snmp/{{.Source.ID}}/link/connect">
+    {{csrfField}}<input type="hidden" name="neighbor" value="{{.Expected}}"><input type="hidden" name="local" value="{{.LocalID}}"><input type="hidden" name="remote" value="{{.RemoteID}}"><input type="hidden" name="ports_expected" value="{{.PortsExpected}}">
+    <div class="actions"><button class="btn btn-primary" type="submit">Re-scan and confirm physical cable</button></div>
+  </form>
+</section>
+{{else}}
+<section class="panel" aria-labelledby="snmp-choose-heading">
+  <div class="panel-head"><h2 id="snmp-choose-heading">Choose known inventory ports</h2></div>
+  <form class="stack" method="get" action="/discovery/snmp/{{.Source.ID}}/link">
+    <input type="hidden" name="neighbor" value="{{.Expected}}"><label>Find remote inventory ports<input type="search" name="q" value="{{.Query}}" maxlength="160"></label>
+    <div class="actions"><button class="btn" type="submit">Search</button></div>
+  </form>
+  <p class="form-help">The remote selector shows up to 100 unconnected ports; narrow the search if needed. The local selector shows up to 512 unconnected ports of the configured owner.</p>
+  <form class="stack" method="post" action="/discovery/snmp/{{.Source.ID}}/link/review">
+    {{csrfField}}<input type="hidden" name="neighbor" value="{{.Expected}}">
+    <label>Known local physical port<select name="local" required><option value="">Choose a port</option>{{range .Local}}<option value="{{.ID}}">{{.Label}}</option>{{end}}</select></label>
+    <label>Known remote physical port<select name="remote" required><option value="">Choose a port</option>{{range .Remote}}<option value="{{.ID}}">{{.Label}}</option>{{end}}</select></label>
+    <div class="actions"><button class="btn btn-primary" type="submit">Review selected endpoints</button></div>
+  </form>
+</section>
+{{end}}
+{{end}}

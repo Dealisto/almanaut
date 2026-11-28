@@ -52,9 +52,9 @@ func (r *BackupRepo) Count() (int, error) {
 // Create inserts b and returns its new ID.
 func (r *BackupRepo) Create(b domain.Backup) (int64, error) {
 	res, err := r.db.Exec(
-		`INSERT INTO backups (source, destination, frequency, last_run, notes)
-		 VALUES (?, ?, ?, ?, ?)`,
-		b.Source, b.Destination, b.Frequency, b.LastRun, b.Notes,
+		`INSERT INTO backups (source, destination, frequency, last_run, notes, expected_interval_hours)
+		 VALUES (?, ?, ?, ?, ?, COALESCE(?, 0))`,
+		b.Source, b.Destination, b.Frequency, b.LastRun, b.Notes, b.ExpectedIntervalHours,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert backup: %w", err)
@@ -65,7 +65,7 @@ func (r *BackupRepo) Create(b domain.Backup) (int64, error) {
 // Get returns the backup with the given id.
 func (r *BackupRepo) Get(id int64) (domain.Backup, error) {
 	row := r.db.QueryRow(
-		`SELECT id, source, destination, frequency, last_run, notes FROM backups WHERE id = ?`, id,
+		`SELECT id, source, destination, frequency, last_run, notes, expected_interval_hours FROM backups WHERE id = ?`, id,
 	)
 	return scanBackup(row)
 }
@@ -73,7 +73,7 @@ func (r *BackupRepo) Get(id int64) (domain.Backup, error) {
 // List returns all backups ordered by source.
 func (r *BackupRepo) List() ([]domain.Backup, error) {
 	rows, err := r.db.Query(
-		`SELECT id, source, destination, frequency, last_run, notes FROM backups ORDER BY source`,
+		`SELECT id, source, destination, frequency, last_run, notes, expected_interval_hours FROM backups ORDER BY source`,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query backups: %w", err)
@@ -93,8 +93,8 @@ func (r *BackupRepo) List() ([]domain.Backup, error) {
 // Update overwrites the backup with b.ID with the values in b.
 func (r *BackupRepo) Update(b domain.Backup) error {
 	res, err := r.db.Exec(
-		`UPDATE backups SET source=?, destination=?, frequency=?, last_run=?, notes=? WHERE id=?`,
-		b.Source, b.Destination, b.Frequency, b.LastRun, b.Notes, b.ID,
+		`UPDATE backups SET source=?, destination=?, frequency=?, last_run=?, notes=?, expected_interval_hours=COALESCE(?, expected_interval_hours) WHERE id=?`,
+		b.Source, b.Destination, b.Frequency, b.LastRun, b.Notes, b.ExpectedIntervalHours, b.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("update backup: %w", err)
@@ -112,7 +112,7 @@ func (r *BackupRepo) Delete(id int64) error {
 
 func scanBackup(s scanner) (domain.Backup, error) {
 	var b domain.Backup
-	if err := s.Scan(&b.ID, &b.Source, &b.Destination, &b.Frequency, &b.LastRun, &b.Notes); err != nil {
+	if err := s.Scan(&b.ID, &b.Source, &b.Destination, &b.Frequency, &b.LastRun, &b.Notes, &b.ExpectedIntervalHours); err != nil {
 		return domain.Backup{}, notFound(fmt.Errorf("scan backup: %w", err))
 	}
 	return b, nil

@@ -10,6 +10,41 @@ details are listed there.
 
 ## [Unreleased]
 
+### Added
+- Add a centralized discovery deviations page using persisted successful source
+  observations, source failures, filters and fresh confirmation before updates.
+- Add transactional CSV preview with patch/replace modes, expiring per-user
+  confirmation tokens and rejection when reviewed inventory has changed.
+- Add structured logical interfaces and IPv4/IPv6 allocations, integrated with
+  inventory CRUD, IPAM, owner links, history, search and inventory exports.
+- Add opt-in read-only SNMPv3/SNMPv2c and LLDP collection, persistent observations,
+  reviewed physical-port imports and explicit confirmed cable connections.
+- Track external backup job outcomes through an authenticated idempotent report
+  API, bounded run history and expected-success interval monitoring.
+- Add administrator-controlled health rules and thresholds, shared by inventory
+  health reports and dashboard counts, with atomic configuration auditing.
+- Protect selected host fields (`ips`, `os`, `cpu`, `ram`, `disk`) from inventory
+  agent updates while retaining the observed values on the host page. Existing
+  hosts remain unprotected until explicitly configured. API and CSV updates
+  that omit the policy preserve it; explicit empty values clear it.
+- Add live database backup and read-only verification commands, optional
+  scheduled snapshots with retention, and an admin-only snapshot list that
+  survives restarts. Backups include the complete SQLite database; external
+  configuration and secret files remain separately managed.
+- Add a bounded physical topology view with device, rack and site scopes,
+  directly connected peers, accessible connection tables and SVG export.
+
+### Changed
+- Export inventory format version 4 to preserve host agent-protection policies,
+  structured interfaces/IP addresses and backup interval policies;
+  imports still accept versions 1 through 3. Older binaries reject the new
+  format, so retain a pre-upgrade database backup for rollback.
+
+### Fixed
+- Preserve the request origin on same-origin HTTP form submissions so browser
+  login works on LAN addresses, while retaining cross-origin CSRF protection
+  and suppressing referrers sent to other origins.
+
 ## [1.2.0] - 2026-11-27
 
 ### Added

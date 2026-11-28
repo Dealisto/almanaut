@@ -18,7 +18,11 @@ func (rs resource[T]) parseInput(get func(string) string, id int64) (T, error) {
 	var validation error
 	for i := 0; i < fields.NumField(); i++ {
 		field := fields.Field(i)
-		kind := field.Type.Kind()
+		scalarType := field.Type
+		if scalarType.Kind() == reflect.Pointer {
+			scalarType = scalarType.Elem()
+		}
+		kind := scalarType.Kind()
 		if kind != reflect.Bool && (kind < reflect.Int || kind > reflect.Int64) {
 			continue
 		}
@@ -37,7 +41,7 @@ func (rs resource[T]) parseInput(get func(string) string, id int64) (T, error) {
 				}
 			}
 		} else if raw != "" {
-			if _, err := strconv.ParseInt(raw, 10, field.Type.Bits()); err != nil && validation == nil {
+			if _, err := strconv.ParseInt(raw, 10, scalarType.Bits()); err != nil && validation == nil {
 				validation = fmt.Errorf("%s must be a valid integer", name)
 			}
 		}

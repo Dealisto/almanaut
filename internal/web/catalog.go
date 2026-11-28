@@ -15,6 +15,8 @@ import (
 // search handlers read directly — they need entity-specific fields the
 // relationship-option list does not expose.
 type entityRepos struct {
+	interfaces    *store.InterfaceRepo
+	addresses     *store.IPAddressRepo
 	hosts         *store.HostRepo
 	services      *store.ServiceRepo
 	networks      *store.NetworkRepo

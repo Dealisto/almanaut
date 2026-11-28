@@ -1,0 +1,20 @@
+{{define "content"}}
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Settings</span><h1>Health rules</h1><p class="page-description">Choose the built-in checks used by the health report and dashboard.</p></div></div>
+{{template "settingsnav" .}}
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
+<form class="stack" method="post" action="/health-rules">
+{{csrfField}}<input type="hidden" name="settings_present" value="1">
+<section class="panel"><h2>Enabled checks</h2><p class="muted">Disabled checks disappear from both views and contribute no findings. These settings do not change inventory records or scheduled probes.</p>
+{{range .Rules}}<label><input type="checkbox" name="enabled" value="{{.ID}}" {{if .Enabled}}checked{{end}}> {{.Title}}</label>{{end}}
+</section>
+<section class="panel"><h2>Thresholds</h2>
+<label>Staleness override (days)<input type="number" name="stale_after_days" value="{{.StaleDays}}" min="0" max="36500" placeholder="Use server setting"></label>
+<p class="muted">Leave blank to use the server setting (currently {{.DefaultStaleDays}} days). Set 0 to disable stale detection. The Stale entities check must also be enabled.</p>
+<label>Certificate expiry warning (days)<input type="number" name="certificate_warning_days" value="{{.CertificateDays}}" min="1" max="3650" required></label>
+<p class="muted">Applies only when Certificates expiring soon is enabled. Expired certificates remain a separate check and are excluded from this warning. Backup reporting uses each backup's expected interval.</p>
+</section>
+<div class="actions"><button class="btn btn-primary" type="submit">Save health rules</button><a class="btn" href="/health-report">View health report</a></div>
+</form>
+<section class="panel"><h2>Restore defaults</h2><p class="muted">Restore built-in enabled checks and the 30-day certificate warning window, and inherit server staleness again. The certificate warning check is disabled by default. Inventory is preserved. Health settings survive inventory replacement and are included only in complete database backups.</p>
+<form method="post" action="/health-rules/reset">{{csrfField}}<button class="btn" type="submit">Restore default health rules</button></form></section>
+{{end}}

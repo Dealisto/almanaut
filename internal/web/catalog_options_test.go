@@ -35,6 +35,8 @@ func legacyCatalogOptions(t testing.TB, db *sql.DB) []entityOption {
 	options = append(options, legacyRepositoryOptions(t, store.NewContactRepo(db).List, "contact", func(v domain.Contact) (int64, string) { return v.ID, v.Name })...)
 	options = append(options, legacyRepositoryOptions(t, store.NewVLANRepo(db).List, "vlan", func(v domain.VLAN) (int64, string) { return v.ID, v.Name })...)
 	options = append(options, legacyRepositoryOptions(t, store.NewReservationRepo(db).List, "reservation", func(v domain.Reservation) (int64, string) { return v.ID, v.Name })...)
+	options = append(options, legacyRepositoryOptions(t, store.NewInterfaceRepo(db).List, "interface", func(v domain.NetworkInterface) (int64, string) { return v.ID, networkInterfaceLabel(v) })...)
+	options = append(options, legacyRepositoryOptions(t, store.NewIPAddressRepo(db).List, "ipaddress", func(v domain.IPAddress) (int64, string) { return v.ID, v.Address })...)
 	options = append(options, legacyRepositoryOptions(t, store.NewNICRepo(db).List, "nic", func(v domain.NIC) (int64, string) {
 		if v.HostName == "" {
 			return v.ID, v.Name

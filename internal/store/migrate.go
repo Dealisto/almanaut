@@ -1,10 +1,10 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"time"
@@ -123,25 +123,5 @@ func backupDatabase(db *sql.DB, dbPath string) error {
 	// keeps literal filenames on the same destination reserved below, rather
 	// than leaving an empty placeholder and creating another, public file.
 	backup := fmt.Sprintf("%s.backup-%s", absolute, time.Now().UTC().Format("20060102-150405.000000000"))
-	// VACUUM INTO accepts an empty existing file but otherwise creates it
-	// with SQLite's public default mode, independent of the source's mode.
-	// Reserve this name privately and never overwrite an existing backup.
-	file, err := os.OpenFile(backup, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return fmt.Errorf("create backup %q: %w", backup, err)
-	}
-	complete := false
-	defer func() {
-		if !complete {
-			_ = os.Remove(backup)
-		}
-	}()
-	if err := file.Close(); err != nil {
-		return fmt.Errorf("close backup %q: %w", backup, err)
-	}
-	if _, err := db.Exec(`VACUUM INTO ?`, backup); err != nil {
-		return fmt.Errorf("VACUUM INTO %q: %w", backup, err)
-	}
-	complete = true
-	return nil
+	return SnapshotDatabase(context.Background(), db, backup)
 }

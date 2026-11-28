@@ -118,7 +118,7 @@ func reviewDiscoveryRebind(source DiscoverySource, db *sql.DB, cat entityCatalog
 			http.NotFound(w, req)
 			return
 		}
-		candidates, err := source.candidates(req.Context())
+		candidates, err := source.observedCandidates(req.Context(), db)
 		if err != nil {
 			http.Error(w, source.errorPrefix()+err.Error(), http.StatusBadGateway)
 			return
@@ -181,7 +181,7 @@ func replaceDiscoveryBinding(source DiscoverySource, db *sql.DB, cat entityCatal
 			http.Error(w, "invalid replacement identity", http.StatusBadRequest)
 			return
 		}
-		candidates, err := source.candidates(req.Context())
+		candidates, err := source.observedCandidates(req.Context(), db)
 		if err != nil {
 			http.Error(w, source.errorPrefix()+err.Error(), http.StatusBadGateway)
 			return
