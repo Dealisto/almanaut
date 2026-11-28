@@ -10,6 +10,8 @@ details are listed there.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-27
+
 ### Added
 - Audit successful role changes and API-token creation, revocation and rotation,
   with safe metadata and no duplicate success events for ineffective requests.
@@ -58,6 +60,11 @@ details are listed there.
   when available; discovery never automatically removes inventory records.
 
 ### Changed
+- Reuse webhook admission accounting when replacing a custom host type across
+  multiple hosts, avoiding repeated backlog scans within the same transaction.
+- Update `golang.org/x/crypto` to v0.59.0 and its required `golang.org/x/sys`
+  dependency to v0.50.0, removing module-level vulnerability warnings for
+  unused SSH and OpenPGP packages.
 - Build entity selector options from IDs and labels only, preserving the
   catalog's ordering and composite names in a read-only snapshot without loading
   full entities and their display decorations.
@@ -122,6 +129,16 @@ details are listed there.
   requires a pre-upgrade database backup.
 
 ### Fixed
+- Keep host detail pages available when agent disk sizes reach PiB or EiB,
+  including the maximum size representable by the report's integer fields.
+- Detect duplicate agent hosts across equivalent IPv6 spellings and
+  IPv4-mapped IPv6 addresses, matching the adoption rules.
+- Reject missing first-install agent credentials before installing the binary
+  or creating configuration directories. Upgrades still preserve existing
+  credentials and require no new configuration arguments.
+- Exclude Podman's virtual bridges from agent IP reports and machine identity,
+  preventing shared bridge addresses from causing ambiguous host adoption.
+  Address-read failures on excluded bridges no longer discard usable host IPs.
 - Read bulk selections and parameters, import confirmations and CSV entity types
   only from the submitted body. URL parameters cannot add unselected records or
   override the import form. CSRF tokens must also come from the form body.
@@ -584,7 +601,8 @@ capabilities that make up v1.0.
 - Versioned releases: pushing a `v*` tag publishes prebuilt binaries with
   checksums (goreleaser) and container tags `:X.Y.Z`, `:X.Y`, and `:latest`.
 
-[Unreleased]: https://github.com/Dealisto/almanaut/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/Dealisto/almanaut/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Dealisto/almanaut/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/Dealisto/almanaut/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Dealisto/almanaut/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/Dealisto/almanaut/compare/v1.0.1...v1.0.2

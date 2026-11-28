@@ -11,9 +11,14 @@ is `cmd/almanaut-agent` with `internal/{agent,agentapi}`.
 
 ## Build & test
 
-- Build: `go build` (the resulting `almanaut.exe` is gitignored).
-- Tests run in CI (GitHub Actions): `go vet ./...`, `go test ./...`, and a
-  `-race` pass. CI is the authoritative test gate.
+- Build server: `go build -o almanaut .` (use `-o almanaut.exe` on Windows);
+  both output names are gitignored. Build all packages: `go build ./...`.
+- Build agent separately: `go build -o /tmp/almanaut-agent ./cmd/almanaut-agent`.
+- CI (`.github/workflows/ci.yml`) checks formatting, `go vet`, `staticcheck`,
+  `govulncheck`, tests with coverage, a `-race` pass, CGO-free builds, and a
+  non-root container smoke test. CI is the authoritative test gate.
+- Browser regressions: `node tests/browser/run.mjs` (a separate local check).
+  Prerequisites, scope, and benchmarks are in [docs/testing.md](docs/testing.md).
 
 ## Conventions
 
@@ -24,8 +29,11 @@ plus a `*XRepo`. The generic CRUD handlers, the relationship catalog, and
 global search all iterate that list — do not hand-write per-type handlers or
 search blocks. Adding an entity means:
 
-- the `resource[T]` literal (incl. its `search:` field list, which feeds
-  `/search`) and the repo, which must satisfy `crud[T]`
+- the `resource[T]` literal, including its `search:` SQL expressions and
+  `query:` metadata (table, label, ordering and filterable fields). Lists,
+  global search, entity selectors and reference labels share that SQL metadata;
+  keep it consistent with the resource's display labels and fields. The repo
+  must satisfy `crud[T]`
   (`internal/web/resource.go`), `*Tx` methods included;
 - its singular type in `domain.EntityTypes` (`internal/domain/relationship.go`),
   which gates relationships, tags, journal entries and custom fields;
@@ -57,6 +65,16 @@ Reads whose result drives a write must run on the tx-bound repo *inside* the
 transaction — the discovery import handlers list existing entities inside
 `WithTx`, and `Export` reads all tables in one read tx for a consistent
 snapshot.
+
+### Durable mutation events
+
+Stage webhook events with `webhook.Stage` inside the same transaction as the
+inventory and history writes, including changes to related records. Propagate
+staging errors so a full outbox rolls back the mutation; call `Dispatch` only
+after commit. Bulk writers reuse `webhook.ForTransaction(tx, dispatcher)` for
+all staging in that transaction. Keep the returned dispatcher on one goroutine,
+discard it when the transaction ends, and do not interleave other outbox or
+endpoint writes or savepoint rollbacks that would invalidate its cached counts.
 
 ### Shared domain helpers (don't re-implement)
 
@@ -108,11 +126,16 @@ contains it with the **longest prefix** (most specific), so computing one
 network's occupancy correctly requires knowing every network — an IP that
 belongs to a more-specific subnet must not be counted in a broader one.
 
-- Use `BuildIPAM(networks, hosts)` for the full report (all networks).
-- Use `BuildNetworkUsage(targetID, networks, hosts)` for a single-network view
-  (the network detail page): it still attributes across all networks via the
-  shared `attribute` helper, but runs the expensive per-network capacity /
-  next-free enumeration (up to 2^16 addresses) only for the target.
+- Use `BuildIPAM(networks, hosts, reservations)` for the full report (all networks).
+- Use `BuildNetworkUsage(targetID, networks, hosts, reservations)` for a
+  single-network view (the network detail page): it still attributes across all
+  networks via the shared `attribute` helper, but calculates capacity and searches
+  for a next-free address only for the target. The search is limited to subnets
+  with at most 2^16 addresses and skips reserved intervals as ranges.
 
 When changing attribution, keep both paths going through `attribute` so their
 longest-prefix and tie-breaking rules stay identical.
+
+Pass all reservations too: next-free suggestions exclude allocated IPs,
+gateways, reserved ranges and reserved endpoints across overlapping networks,
+even when local capacity attributes those addresses elsewhere.

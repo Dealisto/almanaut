@@ -55,10 +55,10 @@ To stamp a version into a build, pass it at build time:
 
 ```bash
 # from source
-go build -ldflags "-X main.version=v0.2.0" -o almanaut .
+go build -ldflags "-X main.version=dev-local" -o almanaut .
 
 # Docker
-docker build --build-arg VERSION=v0.2.0 -t almanaut .
+docker build --build-arg VERSION=dev-local -t almanaut .
 ```
 
 ---

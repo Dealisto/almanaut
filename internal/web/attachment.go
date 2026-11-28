@@ -137,7 +137,8 @@ func deleteAttachment(cat entityCatalog, d handlerDeps) http.HandlerFunc {
 	}
 }
 
-// humanizeBytes renders a byte count as B / KiB / MiB for the detail list.
+// humanizeBytes renders attachment and agent disk sizes through EiB, covering
+// the full positive int64 range accepted by agent reports.
 func humanizeBytes(n int64) string {
 	const unit = 1024
 	if n < unit {
@@ -148,5 +149,5 @@ func humanizeBytes(n int64) string {
 		div *= unit
 		exp++
 	}
-	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGT"[exp])
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }

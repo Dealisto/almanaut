@@ -135,6 +135,14 @@ if [ ! -f ./systemd/almanaut-agent.timer ]; then
 	exit 1
 fi
 
+# Reject incomplete first-time setup before installing files or creating
+# directories. Upgrades keep the existing configuration and need no arguments.
+if [ ! -f "$CONFIG_FILE" ] && { [ -z "$SERVER_URL" ] || [ -z "$TOKEN" ]; }; then
+	echo "install.sh: no existing config, so --server and --token are required" >&2
+	usage >&2
+	exit 1
+fi
+
 install -m 0755 ./almanaut-agent "$BIN_DIR/almanaut-agent"
 
 mkdir -p "$CONFIG_DIR"
@@ -143,11 +151,6 @@ chmod 700 "$CONFIG_DIR"
 if [ -f "$CONFIG_FILE" ]; then
 	echo "install.sh: keeping the existing $CONFIG_FILE"
 else
-	if [ -z "$SERVER_URL" ] || [ -z "$TOKEN" ]; then
-		echo "install.sh: no existing config, so --server and --token are required" >&2
-		usage >&2
-		exit 1
-	fi
 	# Write with a restrictive umask so the token is never briefly world-readable
 	# between creation and chmod. Use printf %s to emit values literally, without
 	# shell expansion — a token containing $(…) or backticks must not execute as root.

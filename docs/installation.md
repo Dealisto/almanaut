@@ -38,7 +38,7 @@ services:
       - "8080:8080"
     volumes:
       - almanaut-data:/data
-      # Uncomment to enable Docker container auto-discovery (read-only):
+      # Optional Docker discovery socket; requires matching access permissions:
       # - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       # All optional — see docs/configuration.md. A few common ones:
@@ -56,6 +56,12 @@ volumes:
 The image ships its own `HEALTHCHECK`, so `docker compose ps` reports the
 container's health directly.
 
+For socket discovery, the container's non-root user must have permission to
+connect to the mounted socket; mounting it alone does not grant access. Almanaut
+only reads the container list, but `:ro` does not restrict the socket API to
+read-only operations. See the [socket access guidance](podman.md#run-almanaut-in-a-container)
+for permissions and the distinction between a read-only mount and API access.
+
 ## Prebuilt binaries
 
 Each tagged release has a [GitHub Release](https://github.com/Dealisto/almanaut/releases)
@@ -65,7 +71,7 @@ platform, verify it, and run it:
 
 ```bash
 sha256sum -c checksums.txt --ignore-missing
-tar xzf almanaut_1.1.0_linux_amd64.tar.gz
+tar xzf almanaut_1.2.0_linux_amd64.tar.gz
 ALMANAUT_DATA_DIR=./data ./almanaut
 ```
 
@@ -118,9 +124,11 @@ account:
 Want to see the app populated before entering your own data? This repo ships a
 small example homelab (three hosts, some services, a network, a certificate, a
 backup, and the relationships between them). Grab
-[`examples/inventory.yaml`](../examples/inventory.yaml), then go to **Data →
-Import**, upload it, tick the confirmation box, and import. You'll land on a
-populated dashboard with a browsable relationship graph.
+[`examples/inventory.yaml`](../examples/inventory.yaml), then open **Settings &
+data → Import & export** (`/data`). Under **Replace the inventory**, open
+**Restore from a YAML file**, upload it, tick the confirmation box, and select
+**Import & replace**. After the success message, open **Overview** to explore
+the populated inventory and its relationship graphs.
 
 Since import wipes existing data, only load the sample into a fresh instance
 (or export your real data first).

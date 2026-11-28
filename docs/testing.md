@@ -8,6 +8,40 @@ go test ./...
 go test -race ./...
 ```
 
+The repository's CI also checks `gofmt`, runs `staticcheck` and `govulncheck`,
+collects test coverage, builds all Go packages with CGO disabled, and builds and
+smoke-tests the non-root container. See
+[the CI workflow](../.github/workflows/ci.yml) for the exact commands.
+Browser regressions are currently a separate local check, not a CI job.
+
+## Before publishing a release
+
+Validate the exact revision intended for release, including the CI checks above,
+and review the [release notes](../CHANGELOG.md), installation instructions,
+configuration defaults, and [backup and rollback compatibility](export-import.md#export-format-compatibility).
+Use a copy of existing data to verify upgrades and restoration with the matching
+old binary and database backup.
+
+To validate the distribution configuration and generate local archives without
+publishing, run GoReleaser v2 from a checkout containing the Git tags:
+
+```sh
+goreleaser check
+goreleaser release --snapshot --skip=publish,announce
+```
+
+The snapshot version is derived from Git metadata; it does not select the next
+release number. Verify the eight server/agent archives in `dist/`, their
+`checksums.txt`, and the agent archive's installer, systemd units and `agent.md`.
+Test container builds for both `linux/amd64` and `linux/arm64`, including a fresh
+data volume, the configured healthcheck and restart persistence.
+
+Pushing a `v*` tag immediately starts the separate
+[binary release](../.github/workflows/release.yml) and
+[container publication](../.github/workflows/publish.yml) workflows. These
+workflows do not wait for the CI workflow, so confirm CI has passed on the exact
+commit before pushing a release tag. A local snapshot does not publish anything.
+
 ## Browser regressions
 
 The browser runner uses Go, Chromium, and Node.js 22.4 or newer. It uses only
@@ -164,8 +198,9 @@ go test ./internal/webhook -run '^$' -bench '^BenchmarkDurableStageBacklog$' -be
 ```
 
 Each sample rolls back so the backlog stays constant. Capacity accounting is
-shared within a single staging call. CSV imports, bulk actions, port generation
-and discovery imports additionally use an explicit transaction scope across rows.
+shared within a single staging call. CSV imports, bulk actions, port generation,
+host-type replacements and discovery imports additionally use an explicit
+transaction scope across rows.
 Regression tests cover concurrent database
 writers, exact byte limits, endpoint invalidation between staging calls, and
 rollback of both inventory and deliveries after failed admission.
@@ -192,6 +227,17 @@ go test ./internal/web -run '^$' -bench '^BenchmarkCSVWebhookStaging$' -benchmem
 
 Both variants roll back after the last staged row, preserving the same backlog
 between samples. Commit and delivery wake-up are excluded from this measurement.
+
+Measure custom host-type replacement with 1 or 100 hosts and 9,000 pending
+deliveries:
+
+```sh
+go test ./internal/web -run '^$' -bench '^BenchmarkHostTypeReassignment$' -benchmem
+```
+
+This includes host reads, updates, history and webhook staging. Each sample
+rolls back after the last host, preserving the inventory and backlog without
+sending notifications. Commit and delivery wake-up are excluded.
 
 ## Entity selector benchmark
 

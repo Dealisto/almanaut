@@ -37,6 +37,8 @@ func TestInterfaceAddressFailureOnExcludedInterfacesDoesNotLoseHostIPs(t *testin
 	interfaces := []net.Interface{
 		{Name: "loopback-alt-name", Flags: net.FlagLoopback},
 		{Name: "docker0"},
+		{Name: "podman0"},
+		{Name: "podman13"},
 		{Name: "veth123"},
 		{Name: "eth0"},
 		{Name: "tailscale0"},

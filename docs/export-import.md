@@ -145,9 +145,10 @@ select the corrected file again before retrying.
 - Boolean fields (`auto_renew`, `mgmt_only`) accept `true`/`false` (also
   `1`/`0`, `yes`/`no`, `on`/`off`, `y`/`n`), ignoring case and surrounding
   whitespace. Empty values mean false; other values abort the import.
-- Updating a row is a **full replace** of that row's columns present in the
-  file — an omitted column is written as empty, same as clearing it in the
-  edit form.
+- Updating a row is a **full replacement**, not a patch of only the columns
+  present in the file. Omitted fields are parsed as empty inputs, applying the
+  form's defaults and validation instead of preserving their previous values.
+  Include every field you want to retain.
 - The import is **all-or-nothing**: if any row is invalid, the page lists
   every bad row and writes nothing. Each created/updated row is recorded in
   the entity's history.
