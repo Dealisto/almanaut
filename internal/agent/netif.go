@@ -22,7 +22,7 @@ type InterfaceLister func() ([]NetInterface, error)
 // noisyPrefixes are interfaces that describe container plumbing rather than
 // the machine. tailscale is deliberately absent: that address is often the
 // only way the machine is actually reachable.
-var noisyPrefixes = []string{"docker", "br-", "veth", "virbr", "cni", "flannel", "kube-", "cali"}
+var noisyPrefixes = []string{"docker", "podman", "br-", "veth", "virbr", "cni", "flannel", "kube-", "cali"}
 
 // SystemInterfaces lists the real machine's reportable interfaces. If any
 // interface's addresses cannot be read, all addresses are left unknown while

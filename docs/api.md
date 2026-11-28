@@ -31,10 +31,13 @@ kind, only when the report creates the host; a host renamed by hand (or
 re-typed) afterwards keeps that value forever, since later reports never touch
 either field again.
 
-**`ips` is replaced, not merged.** Each report overwrites the host's address
-list with exactly what the agent saw, after dropping loopback and link-local
-addresses. Anything the machine cannot see from inside its own OS therefore
-disappears from the record on the first report — most commonly an out-of-band
+**A nonempty reported IP list replaces `ips`; it is not merged.** The server
+normalizes addresses and keeps only valid global-unicast addresses (including
+private addresses). If none remain, it preserves the host's existing IPs.
+The agent also leaves all addresses unknown when any reportable interface's
+addresses cannot be read, preventing a partial list from erasing known IPs.
+Once a report supplies a nonempty usable list, anything the machine cannot see
+from inside its own OS disappears from the record — most commonly an out-of-band
 management address such as IPMI, iDRAC or iLO. That matters beyond the host
 page: `host.ips` feeds IPAM attribution, so a dropped BMC address will show as
 free capacity and could be handed out as the next free address while the

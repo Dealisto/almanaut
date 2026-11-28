@@ -30,7 +30,8 @@ beyond the staleness window. The dashboard's summary counter is produced by the
 same builder as this page, so the two can never disagree about how many
 findings exist.
 
-The last three rules are the IPAM conflict checks. They are worth reading
+The duplicate-IP, unassigned-IP, and overlapping-network rules are the IPAM
+conflict checks. They are worth reading
 alongside [IPAM](inventory-model.md#ipam-vlans--ip-reservations): "duplicate IP
 assignments" and "host IPs outside every network" are the two ways an address
 can be recorded wrongly, and "overlapping networks" deliberately tolerates a

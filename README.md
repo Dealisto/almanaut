@@ -24,12 +24,11 @@ It is deliberately small: a single binary, SQLite storage, and a server-rendered
 UI. Export the inventory as YAML, or stop the server and copy the database for a
 complete backup; see the [backup guide](docs/export-import.md#complete-backups).
 
-> **Status:** stable — **v1.1.0** is released. The NetBox-parity and
-> automation/quality/security roadmap (M1–M9) is complete: RBAC, TOTP 2FA,
-> reverse-proxy SSO, an audit log, live liveness/TLS probing, scheduled
-> discovery, inventory-health reports, an OpenAPI 3 spec, and versioned
-> releases all shipped. See [CHANGELOG.md](CHANGELOG.md) for what's in each
-> release; the export/import path keeps upgrades and migrations safe.
+> **Status:** stable — **v1.2.0** is the latest release recorded in this
+> repository. This README and the guides describe the current source tree,
+> including changes under [Unreleased](CHANGELOG.md#unreleased). The `:dev`
+> image follows `master`; versioned images contain only their release's changes.
+> Before upgrading, read the [backup and rollback guidance](docs/export-import.md#export-format-compatibility).
 
 ## Features
 
@@ -63,13 +62,17 @@ complete backup; see the [backup guide](docs/export-import.md#complete-backups).
   Proxmox VE, and XCP-ng via Xen Orchestra — review and import without
   overwriting manual records
 - **Multiple discovery sources** with independent schedules, persistent source
-  identities that survive renames, and a summary after each engine import
+  identities that survive renames, reviewed field updates and replacement
+  identities, and a summary after each engine import
+- **Inventory agent** — report Linux host facts with `almanaut-agent`, preserving
+  manually maintained fields
 - **Expiry notifications** via [ntfy](https://ntfy.sh) and/or Discord for
   certificates, warranties, and renewals
-- **Outbound webhooks** — signed HTTP payloads on entity create/update/delete
+- **Outbound webhooks** — signed HTTP payloads on entity create/update/delete,
+  with persistent retries that survive restarts
 - **Uptime Kuma sync** — one-way sync of your services to Kuma HTTP monitors
-- **Read-write JSON API** with per-user, scoped API tokens, a built-in
-  reference page, and a generated OpenAPI 3 spec
+- **Read-write JSON API** with pagination, per-user scoped tokens, optional
+  token expiry and guided rotation, a built-in reference, and an OpenAPI 3 spec
 - **Prometheus `/metrics`** endpoint
 
 **Operations**
@@ -80,7 +83,8 @@ complete backup; see the [backup guide](docs/export-import.md#complete-backups).
   **reverse-proxy SSO**, and an **authentication audit log**
 - **Inventory health report** with fixed audit rules, IPAM conflict detection,
   stale-entity tracking, and **impact analysis**
-- **Filter, sort and save views** per user; **bulk actions** on list pages
+- **Filter, sort and save views** per user; paginated lists and search, with
+  **bulk actions** on the current list page
 - **Live checks** — TCP liveness for hosts and services, TLS certificate
   probing, and scheduled discovery runs, all on one scheduled-tasks page
 - **YAML export/import** of the whole inventory, plus additive per-entity
@@ -127,13 +131,14 @@ The full documentation lives in [`docs/`](docs/README.md):
 | [Lists, saved views & bulk editing](docs/lists-and-views.md) | Filtering and sorting, saved views, bulk actions on list pages |
 | [Inventory health](docs/inventory-health.md) | The health report and its audit rules, stale entities, the checks page, impact analysis |
 | [Auto-discovery](docs/discovery.md) | Docker / Podman containers, network scan, Proxmox VE, XCP-ng via Xen Orchestra |
+| [Podman discovery](docs/podman.md) | Rootful/rootless sockets and container setup |
 | [Inventory agent](docs/agent.md) | Installing `almanaut-agent`, what it reports, conflicts and duplicates |
 | [Background jobs](docs/background-jobs.md) | The scheduled-tasks page, liveness checks, certificate probing, scheduled discovery |
 | [Notifications & integrations](docs/integrations.md) | ntfy & Discord expiry alerts, outbound webhooks, Uptime Kuma sync |
 | [Export & import](docs/export-import.md) | Whole-inventory YAML round-trip, additive CSV import |
 | [JSON API](docs/api.md) | Tokens and scopes, endpoints, the OpenAPI 3 spec |
 | [Monitoring](docs/monitoring.md) | Prometheus metrics, `/healthz`, `/version` |
-| [Testing](docs/testing.md) | Go checks and repeatable Chromium browser regressions |
+| [Testing](docs/testing.md) | Go checks, Chromium browser regressions, release validation |
 
 ## License
 

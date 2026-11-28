@@ -2,6 +2,10 @@
 
 # Documentation
 
+These guides describe the current source tree, including changes listed under
+[Unreleased](../CHANGELOG.md#unreleased). When running a tagged release, use
+the documentation from the same tag; the `:dev` container follows `master`.
+
 | Page | What's in it |
 |---|---|
 | [Installation](installation.md) | Docker, Compose, prebuilt binaries, from source, first login, sample data |
@@ -18,7 +22,7 @@
 | [Export & import](export-import.md) | Whole-inventory YAML round-trip, additive CSV import |
 | [JSON API](api.md) | Tokens and scopes, endpoints, the OpenAPI 3 spec |
 | [Monitoring](monitoring.md) | Prometheus metrics, `/healthz`, `/version` |
-| [Testing](testing.md) | Go checks and repeatable Chromium browser regressions |
+| [Testing](testing.md) | Go checks, Chromium browser regressions, release validation |
 
 Release notes live in [CHANGELOG.md](../CHANGELOG.md); repository conventions
 for contributors are in [CLAUDE.md](../CLAUDE.md).

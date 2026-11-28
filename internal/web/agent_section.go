@@ -138,7 +138,7 @@ func duplicatesOf(h domain.Host, agents *store.AgentRepo, hosts *store.HostRepo,
 	name := discovery.NormalizeName(h.Name)
 	ips := make(map[string]bool, len(h.IPs))
 	for _, ip := range h.IPs {
-		ips[ip] = true
+		ips[discovery.NormalizeIP(ip)] = true
 	}
 
 	var out []duplicateHostView
@@ -168,10 +168,11 @@ func duplicatesOf(h domain.Host, agents *store.AgentRepo, hosts *store.HostRepo,
 	return out
 }
 
-// sharedIP returns the first address in otherIPs that is also in ips, or ""
-// when there is no overlap.
+// sharedIP returns the first canonical address in otherIPs that is also in
+// the normalized ips set, using the same equivalence rules as agent adoption.
 func sharedIP(ips map[string]bool, otherIPs []string) string {
 	for _, ip := range otherIPs {
+		ip = discovery.NormalizeIP(ip)
 		if ips[ip] {
 			return ip
 		}

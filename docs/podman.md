@@ -21,10 +21,13 @@ Renaming a container or its Almanaut record preserves an existing association.
 Recreating a container gives it a different external ID. If its name still
 matches an already-associated record from the same source, the preview reports
 **Name or identity conflict** and skips it. Discovery neither creates a silent
-duplicate nor reassigns the old association. Review the old record before
-removing it and importing the replacement; deleting a local record releases its
-association but does not delete the real container. A same-name record associated
-with a different source does not cause this conflict.
+duplicate nor reassigns the old association. Use
+[Resolve replacements](discovery.md#replacing-a-source-identity) to review a
+proposed identity replacement while preserving the inventory record and its
+relationships. Proposals require an unambiguous match and the old ID to be absent
+from the scan; a stopped container is also absent, so check the engine before
+confirming. A same-name record associated with a different source does not cause
+this conflict.
 
 Unassociated manual records can be matched by name and associated only after
 confirmation. See [persistent identity](discovery.md#sources-and-persistent-identity)

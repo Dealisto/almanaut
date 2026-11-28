@@ -1,6 +1,11 @@
 package agent
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+
+	"github.com/Dealisto/almanaut/internal/agentapi"
+)
 
 func fakeLister(ifaces ...NetInterface) InterfaceLister {
 	return func() ([]NetInterface, error) { return ifaces, nil }
@@ -30,6 +35,30 @@ func TestCollectInterfacesKeepsTailscale(t *testing.T) {
 	))
 	if len(got) != 1 || got[0].Name != "tailscale0" {
 		t.Fatalf("got %+v, want tailscale0 kept", got)
+	}
+}
+
+func TestPodmanBridgesDoNotPolluteHostIdentityOrAdoption(t *testing.T) {
+	report := agentapi.Report{Hostname: "container-host", Interfaces: CollectInterfaces(fakeLister(
+		NetInterface{Name: "eth0", MAC: "02:00:00:00:00:01", Addrs: []string{"192.0.2.10/24"}},
+		NetInterface{Name: "podman0", MAC: "02:00:00:00:00:02", Addrs: []string{"10.88.0.1/16"}},
+		NetInterface{Name: "podman13", MAC: "02:00:00:00:00:03", Addrs: []string{"10.89.12.1/24"}},
+		NetInterface{Name: "cni-podman0", MAC: "02:00:00:00:00:04", Addrs: []string{"10.90.0.1/16"}},
+	))}
+	if got := report.ReportedIPs(); !reflect.DeepEqual(got, []string{"192.0.2.10"}) {
+		t.Errorf("container bridge addresses leaked into host inventory: %v", got)
+	}
+	if got := report.Fingerprint(); got != "container-host|02:00:00:00:00:01" {
+		t.Errorf("container bridge MACs leaked into host identity: %q", got)
+	}
+	// Separate Podman hosts commonly reuse these private bridge addresses.
+	// They must not turn the real host match into an ambiguous adoption.
+	decision := agentapi.Resolve(report, nil, []agentapi.HostRef{
+		{ID: 1, Name: "container-host", IPs: []string{"192.0.2.10"}},
+		{ID: 2, Name: "another-host", IPs: []string{"10.88.0.1"}},
+	})
+	if decision.Kind != agentapi.DecideAdopt || decision.HostID != 1 {
+		t.Fatalf("Podman bridge caused incorrect adoption: %+v", decision)
 	}
 }
 

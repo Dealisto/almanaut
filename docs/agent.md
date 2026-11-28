@@ -51,6 +51,10 @@ also be supplied as `ALMANAUT_SERVER_URL`/`ALMANAUT_AGENT_TOKEN` environment
 variables — worth doing for the token, since a command-line argument is
 visible to every user on the box via `ps` and may end up in shell history.
 
+A first installation without both the server URL and token fails before
+installing files or creating configuration directories. An upgrade with an
+existing configuration needs neither argument.
+
 ## What it reports, and what it never touches
 
 Each report replaces the host's `os`, `cpu`, `ram`, `disk`, and `ips` with
@@ -89,11 +93,16 @@ Existing host types remain unchanged by agent updates; a newly created host
 with undetermined virtualization still uses the server's `physical` default
 and can be classified manually.
 
-**`ips` is replaced, not merged**, exactly as described under
-[API tokens](api.md#api-tokens): an out-of-band management address such as
-IPMI, iDRAC, or iLO is invisible from inside the OS, so it disappears from
-the host record on the very first agent report. That warning applies in
-full here — an agent-managed host is exactly where it bites.
+**A nonempty usable IP list replaces `ips`; it is not merged.** An empty list
+preserves the existing addresses. If the agent cannot read the addresses of any
+reportable interface, it leaves all addresses unknown while retaining interface
+names and MACs, so a partial collection does not erase known IPs.
+Loopback and common container interfaces (`docker*`, `podman*`, `br-*`,
+`veth*`, `virbr*`, `cni*`, `flannel*`, `kube-*`, and `cali*`) are excluded
+from both addresses and machine identity. Tailscale interfaces remain included.
+As described under [API tokens](api.md#api-tokens), a successful nonempty report
+still removes out-of-band management addresses such as IPMI, iDRAC, or iLO that
+the OS cannot see. Keep those on a separate host or in a network reservation.
 
 ## Checking on it
 
@@ -174,9 +183,10 @@ id. Fix it on the **clone**:
 sudo almanaut-agent reset-id
 ```
 
-This discards the stored id and generates a fresh one; the next report (the
-next scheduled run, or `sudo systemctl start almanaut-agent.service` to
-force it) then registers as a new host.
+This discards the stored id and generates a fresh one. The next report (the
+next scheduled run, or `sudo systemctl start almanaut-agent.service` to force it)
+uses the first-report matching rules: it adopts a unique matching unbound host,
+creates a host when none matches, or rejects an ambiguous match.
 
 A rejected report is not just a `4` in the logs: the host page for the
 machine that *kept* the binding shows a **Conflict** banner naming the
@@ -226,8 +236,8 @@ not the agent's).
 The concrete cause is almost always one of two things happening on the
 machine that already has a bound host record:
 
-- its agent state file, `/var/lib/almanaut-agent`, was lost — a reinstalled
-  OS or a restored VM with no persisted state — so the agent starts fresh
+- its agent identity file, `/var/lib/almanaut-agent/agent-id`, was lost — a
+  reinstalled OS or a restored VM with no persisted state — so the agent starts fresh
   with a brand-new id; or
 - `reset-id` was run on the **original** machine instead of the clone.
 

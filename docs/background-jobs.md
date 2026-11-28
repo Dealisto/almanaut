@@ -58,9 +58,10 @@ address** (`host:port`, e.g. `192.168.1.10:443`) on the host's or service's edit
 form. An entity with an empty check address is simply not monitored — enabling
 the job does not start probing your whole inventory.
 
-The host and service list pages gain a **Liveness** column reading `up` or
-`down`, or `unknown` when an address is set but no result has come in yet. That
-third state matters: `unknown` means "not checked", not "reachable".
+The host and service lists show a **Liveness** column reading `up` or `down`,
+**Not checked** when an address is set but no result has come in yet, or
+**Not monitored** when no address is configured. **Not checked** does not mean
+the target is reachable.
 
 Transitions are pushed through the same notification channels as expiry alerts,
 so a host going down reaches the same ntfy topic or Discord webhook. Each accepted

@@ -90,6 +90,8 @@ func deleteHostType(repo *store.HostTypeRepo, hosts *store.HostRepo, rs resource
 		name, replacement := chi.URLParam(req, "name"), req.FormValue("replacement")
 		var events []webhook.Event
 		err := store.WithTx(d.db, func(tx *sql.Tx) error {
+			batchDeps := d
+			batchDeps.webhooks = webhook.ForTransaction(tx, d.webhooks)
 			types := repo.WithTx(tx)
 			t, err := types.Get(name)
 			if err != nil {
@@ -115,7 +117,7 @@ func deleteHostType(repo *store.HostTypeRepo, hosts *store.HostRepo, rs resource
 					}
 					h.Type = replacement
 					// Use the normal host update path for history, custom fields and webhooks.
-					if err := rs.updateEntityTx(tx, d, h, nil, actor(req), &events); err != nil {
+					if err := rs.updateEntityTx(tx, batchDeps, h, nil, actor(req), &events); err != nil {
 						return err
 					}
 				}

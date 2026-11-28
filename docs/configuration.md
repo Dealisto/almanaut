@@ -58,6 +58,15 @@ On Unix, new data directories use owner-only permissions (`0700`), and new
 database files and pre-migration backups use `0600`. Existing directory,
 database, and backup permissions are preserved.
 
+Environment settings are read at startup; restart Almanaut after changing them.
+Boolean values accept `1`, `true`, or `yes` (case-insensitive, ignoring surrounding
+whitespace); other nonempty values mean false. Invalid or negative integer values
+fall back to the defaults above. Durations must be positive Go durations;
+invalid values and `0` fall back to the default. For discovery intervals that
+default is `0`, which disables scheduling; other recurring jobs have separate
+enable switches. The discovery source JSON file uses stricter validation and
+rejects invalid intervals instead of falling back.
+
 ## Multiple discovery sources
 
 Set `ALMANAUT_DISCOVERY_SOURCES_FILE` to a JSON file readable by Almanaut:
@@ -155,7 +164,10 @@ This keeps the secret out of the process environment, where it would otherwise
 be visible via `docker inspect`, `/proc`, or inherited by child processes. It
 pairs directly with [Docker secrets](https://docs.docker.com/engine/swarm/secrets/)
 and Kubernetes secrets, which are mounted as files. The `_FILE` variant takes
-precedence over the plain variable, and a single trailing newline is stripped.
+precedence over the plain variable, and trailing CR/LF characters are stripped.
+An unreadable secret file prevents startup rather than falling back to the plain
+variable. The file must be readable by the process user (`65532` in the container
+image); a host path must be mounted and referenced by its container-side path.
 
 ## Behind a reverse proxy (TLS)
 
