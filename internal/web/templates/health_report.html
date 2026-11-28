@@ -5,7 +5,8 @@
     <h1>Health report</h1><p class="page-description">Find incomplete records, conflicts, and documentation that needs a second look.</p>
   </div>
   <div class="ph-actions">
-    {{if .Total}}<span class="badge badge-warn">{{.Total}} finding{{if ne .Total 1}}s{{end}}</span>{{else}}<span class="badge badge-ok">All clear</span>{{end}}
+    {{if isAdmin}}<a class="btn" href="/health-rules">Configure rules</a>{{end}}
+    {{if .Total}}<span class="badge badge-warn">{{.Total}} finding{{if ne .Total 1}}s{{end}}</span>{{else if .Rules}}<span class="badge badge-ok">All clear</span>{{else}}<span class="badge">No checks enabled</span>{{end}}
   </div>
 </div>
 

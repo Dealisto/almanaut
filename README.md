@@ -21,8 +21,9 @@ one place, with the operational extras that usually require three more tools:
 IPAM, expiry alerts, auto-discovery, a JSON API, and Prometheus metrics.
 
 It is deliberately small: a single binary, SQLite storage, and a server-rendered
-UI. Export the inventory as YAML, or stop the server and copy the database for a
-complete backup; see the [backup guide](docs/export-import.md#complete-backups).
+UI. Export the inventory as YAML, or create and verify a complete database
+snapshot while the server runs; see the [backup guide](docs/export-import.md#complete-backups)
+for scheduled snapshots and the external configuration to preserve separately.
 
 > **Status:** stable — **v1.2.0** is the latest release recorded in this
 > repository. This README and the guides describe the current source tree,
@@ -34,6 +35,12 @@ complete backup; see the [backup guide](docs/export-import.md#complete-backups).
 
 **Inventory**
 
+- **Structured network inventory** — logical interfaces and explicit IPv4/IPv6
+  allocations, physical topology and reviewed SNMP/LLDP observations.
+- **Review before changing inventory** — centralized discovery deviations and
+  CSV patch previews with stale-change detection.
+- **Backup evidence and health policy** — verified database snapshots, external
+  backup run reports and configurable inventory health rules.
 - **17 entity types** — hosts, services, networks, domains, certificates,
   backups, hardware, subscriptions, accounts, sites, locations, racks,
   contacts, VLANs, IP reservations, NICs, and ports
@@ -55,6 +62,8 @@ complete backup; see the [backup guide](docs/export-import.md#complete-backups).
 - **Sites → locations → racks** hierarchy, with a rendered **U elevation** for
   each rack showing its occupants at their positions
 - **NICs & ports** — record which switch port each machine is cabled to
+- **Physical topology** — explore recorded cables by device, rack or site,
+  follow connected peers, and export the view as SVG
 
 **Automation & integrations**
 
@@ -65,7 +74,8 @@ complete backup; see the [backup guide](docs/export-import.md#complete-backups).
   identities that survive renames, reviewed field updates and replacement
   identities, and a summary after each engine import
 - **Inventory agent** — report Linux host facts with `almanaut-agent`, preserving
-  manually maintained fields
+  manually maintained fields, with optional protection for IPs, OS, CPU, RAM
+  and disk while observed values remain visible
 - **Expiry notifications** via [ntfy](https://ntfy.sh) and/or Discord for
   certificates, warranties, and renewals
 - **Outbound webhooks** — signed HTTP payloads on entity create/update/delete,
@@ -89,6 +99,8 @@ complete backup; see the [backup guide](docs/export-import.md#complete-backups).
   probing, and scheduled discovery runs, all on one scheduled-tasks page
 - **YAML export/import** of the whole inventory, plus additive per-entity
   **CSV import**
+- **Database backups** — verified live snapshots, optional scheduling and
+  retention, a persistent snapshot list, and offline verification commands
 - **Dark mode** (System / Light / Dark), Docker `HEALTHCHECK`, multi-arch
   images (`amd64` / `arm64`), distroless non-root container
 
@@ -125,6 +137,8 @@ The full documentation lives in [`docs/`](docs/README.md):
 | Page | What's in it |
 |---|---|
 | [Installation](docs/installation.md) | Docker, Compose, prebuilt binaries, from source, first login, sample data |
+| [External backup jobs](docs/backup-jobs.md) | Report job outcomes and monitor expected successful runs |
+| [SNMP and LLDP](docs/snmp.md) | Configure read-only collection and review inventory changes |
 | [Configuration](docs/configuration.md) | Every environment variable, secrets from files, reverse proxy & TLS, the security model |
 | [Authentication & access control](docs/authentication.md) | Roles, sessions, login throttling, lockout recovery, TOTP 2FA, reverse-proxy SSO, the audit log |
 | [The inventory model](docs/inventory-model.md) | The 17 entity types, sites/locations/racks, NICs & ports, IPAM, custom fields, attachments, history |

@@ -132,6 +132,7 @@ type auditLogData struct {
 
 // auditEventTypes is the closed set offered in the filter dropdown.
 var auditEventTypes = []string{
+	"health_rules_updated", "health_rules_reset",
 	domain.AuthLoginSuccess, domain.AuthLoginFailure, domain.AuthLogout,
 	domain.Auth2FASuccess, domain.Auth2FAFailure, domain.AuthSSOLogin,
 	domain.AuthTokenUsed, domain.AuthSessionRevoked,

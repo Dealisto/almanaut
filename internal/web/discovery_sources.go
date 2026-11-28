@@ -213,7 +213,7 @@ func scanDiscoverySource(source DiscoverySource, db *sql.DB, cat entityCatalog) 
 		}
 		data := discoverySourcePage{Title: source.Name + " discovery", Source: source, Filter: filter, Query: strings.TrimSpace(req.URL.Query().Get("q"))}
 		scannedAt := time.Now().UTC()
-		candidates, err := source.candidates(req.Context())
+		candidates, err := source.observedCandidates(req.Context(), db)
 		if err != nil {
 			data.Error = source.errorPrefix() + err.Error()
 			render(w, req, "discovery_source.html", data)
@@ -321,7 +321,7 @@ func importDiscoverySource(source DiscoverySource, db *sql.DB, dispatcher webhoo
 			}
 			hostID = id
 		}
-		candidates, err := source.candidates(req.Context())
+		candidates, err := source.observedCandidates(req.Context(), db)
 		if err != nil {
 			http.Error(w, source.errorPrefix()+err.Error(), http.StatusBadGateway)
 			return

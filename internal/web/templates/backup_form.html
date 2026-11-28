@@ -12,7 +12,10 @@
   <label>Source (what is backed up)<input name="source" value="{{.Item.Source}}" required></label>
   <label>Destination<input name="destination" value="{{.Item.Destination}}" placeholder="Backblaze B2"></label>
   <label>Frequency<input name="frequency" value="{{.Item.Frequency}}" placeholder="daily"></label>
-  <label>Last run<input type="{{dateInputType .Item.LastRun}}" name="last_run" value="{{.Item.LastRun}}"></label>
+  <label>Expected interval (hours)<input type="number" name="expected_interval_hours" min="0" max="87600" value="{{if .Item.ExpectedIntervalHours}}{{.Item.ExpectedIntervalHours}}{{else}}0{{end}}"></label>
+  <input type="hidden" name="backup_policy_present" value="1">
+  <p class="form-help">Set the maximum age of a successful external job report. Zero disables monitoring. The descriptive frequency and last-run date do not determine job health.</p>
+  <label>Documented last run<input type="{{dateInputType .Item.LastRun}}" name="last_run" value="{{.Item.LastRun}}"></label>
   <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
   {{template "customFieldsForm" .Extras.customFields}}
   <div class="actions">

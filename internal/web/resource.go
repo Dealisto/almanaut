@@ -100,6 +100,10 @@ type resource[T validatable] struct {
 	loadExtras func() (map[string]any, error)                    // fallible form lookups, preferred when set
 	extras     func() map[string]any                             // form selects (Types, Kinds…); may be nil
 
+	// restoreDraft fills omitted fields when a failed edit is redisplayed.
+	// Explicitly submitted values must remain in the draft.
+	restoreDraft func(current T, draft *T)
+
 	// captureEffects snapshots related rows before a write. A nil old/new
 	// denotes creation/deletion. Entity-specific behavior stays in the catalog.
 	captureEffects func(tx *sql.Tx, old, next *T) (mutationEffects, error)
@@ -569,6 +573,14 @@ func (rs resource[T]) update(d handlerDeps) http.HandlerFunc {
 // renderUpdateError re-renders the edit form preserving submitted custom field
 // values.
 func (rs resource[T]) renderUpdateError(w http.ResponseWriter, req *http.Request, d handlerDeps, id int64, item T, cause error) {
+	if rs.restoreDraft != nil {
+		current, err := rs.repo.Get(id)
+		if err != nil {
+			notFoundOrServerError(w, req, rs.sing, err)
+			return
+		}
+		rs.restoreDraft(current, &item)
+	}
 	rows, err := d.customFieldFormRows(rs.sing, id, req.FormValue)
 	if err != nil {
 		serverError(w, req, err)
@@ -656,6 +668,10 @@ func (rs resource[T]) del(d handlerDeps) http.HandlerFunc {
 			return
 		}
 		if err := rs.deleteEntity(d, id, actor(req)); err != nil {
+			if c := constraintError(err); c != nil {
+				http.Error(w, c.Error(), http.StatusConflict)
+				return
+			}
 			notFoundOrServerError(w, req, rs.sing, err)
 			return
 		}
@@ -855,6 +871,10 @@ func (rs resource[T]) deleteJSON(d handlerDeps) http.HandlerFunc {
 			return
 		}
 		if err := rs.deleteEntity(d, id, actor(req)); err != nil {
+			if c := constraintError(err); c != nil {
+				writeJSONError(w, http.StatusConflict, c.Error())
+				return
+			}
 			if errors.Is(err, store.ErrNotFound) {
 				writeJSONError(w, http.StatusNotFound, rs.sing+" not found")
 				return
@@ -888,6 +908,7 @@ type mountable interface {
 	searchHeading() string
 	querySpec() store.InventoryQuery
 	importCSVContext(ctx context.Context, d handlerDeps, r io.Reader, actor string) (int, int, []string, error)
+	prepareCSVPreview(ctx context.Context, d handlerDeps, r io.Reader, mode csvImportMode) (*csvPreparedPreview, []string, error)
 }
 
 // parseFormBool interprets a checkbox ("on") or a CSV-style boolean cell.
@@ -903,22 +924,40 @@ func parseHost(get func(string) string, id int64) domain.Host {
 	rackID, _ := strconv.ParseInt(get("rack_id"), 10, 64)
 	rackPos, _ := strconv.Atoi(strings.TrimSpace(get("rack_position")))
 	uHeight, _ := strconv.Atoi(strings.TrimSpace(get("u_height")))
+	protected := parseIPs(get("agent_protected_fields"))
+	if protected == nil && get("agent_protection_present") == "1" {
+		protected = []string{}
+	}
+	for _, field := range []string{"ips", "os", "cpu", "ram", "disk"} {
+		if get("agent_protect_"+field) == "on" {
+			protected = append(protected, field)
+		}
+	}
 	return domain.Host{
-		ID:           id,
-		Name:         strings.TrimSpace(get("name")),
-		Type:         get("type"),
-		OS:           get("os"),
-		CPU:          get("cpu"),
-		RAM:          get("ram"),
-		Disk:         get("disk"),
-		Status:       get("status"),
-		Notes:        get("notes"),
-		IPs:          parseIPs(get("ips")),
-		CheckAddress: strings.TrimSpace(get("check_address")),
+		ID:                   id,
+		Name:                 strings.TrimSpace(get("name")),
+		Type:                 get("type"),
+		OS:                   get("os"),
+		CPU:                  get("cpu"),
+		RAM:                  get("ram"),
+		Disk:                 get("disk"),
+		Status:               get("status"),
+		Notes:                get("notes"),
+		IPs:                  parseIPs(get("ips")),
+		CheckAddress:         strings.TrimSpace(get("check_address")),
+		AgentProtectedFields: protected,
 
 		RackID:       rackID,
 		RackPosition: rackPos,
 		UHeight:      uHeight,
+	}
+}
+
+// restoreHostProtectionDraft keeps a legacy form's omitted policy intact when
+// the current form adds explicit protection controls during error redisplay.
+func restoreHostProtectionDraft(current domain.Host, draft *domain.Host) {
+	if draft.AgentProtectedFields == nil {
+		draft.AgentProtectedFields = append([]string{}, current.AgentProtectedFields...)
 	}
 }
 
@@ -980,12 +1019,13 @@ func parseCertificate(get func(string) string, id int64) domain.Certificate {
 
 func parseBackup(get func(string) string, id int64) domain.Backup {
 	return domain.Backup{
-		ID:          id,
-		Source:      strings.TrimSpace(get("source")),
-		Destination: strings.TrimSpace(get("destination")),
-		Frequency:   strings.TrimSpace(get("frequency")),
-		LastRun:     strings.TrimSpace(get("last_run")),
-		Notes:       get("notes"),
+		ExpectedIntervalHours: parseBackupExpectedInterval(get),
+		ID:                    id,
+		Source:                strings.TrimSpace(get("source")),
+		Destination:           strings.TrimSpace(get("destination")),
+		Frequency:             strings.TrimSpace(get("frequency")),
+		LastRun:               strings.TrimSpace(get("last_run")),
+		Notes:                 get("notes"),
 	}
 }
 

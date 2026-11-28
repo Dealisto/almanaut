@@ -164,7 +164,7 @@ func TestDiscoveryBindingsSnapshotRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.Version != 3 || len(snapshot.DiscoveryBindings) != 2 {
+	if snapshot.Version != snapshotVersion || len(snapshot.DiscoveryBindings) != 2 {
 		t.Fatalf("snapshot identity format = %+v", snapshot)
 	}
 	data, err := yaml.Marshal(snapshot)

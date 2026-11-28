@@ -99,6 +99,21 @@ func metricsHandler(repos entityRepos, rels *store.RelationshipRepo) http.Handle
 			serverError(w, req, err)
 			return
 		}
+		interfaceCount, addressCount := 0, 0
+		if repos.interfaces != nil {
+			interfaceCount, err = repos.interfaces.Count()
+			if err != nil {
+				serverError(w, req, err)
+				return
+			}
+		}
+		if repos.addresses != nil {
+			addressCount, err = repos.addresses.Count()
+			if err != nil {
+				serverError(w, req, err)
+				return
+			}
+		}
 		relList, err := rels.List()
 		if err != nil {
 			serverError(w, req, err)
@@ -134,6 +149,7 @@ func metricsHandler(repos entityRepos, rels *store.RelationshipRepo) http.Handle
 			{"reservation", len(reservations)},
 			{"nic", len(nics)},
 			{"port", len(ports)},
+			{"interface", interfaceCount}, {"ipaddress", addressCount},
 		}
 		for _, c := range counts {
 			fmt.Fprintf(&b, "almanaut_entities_total{type=%q} %d\n", c.typ, c.n)

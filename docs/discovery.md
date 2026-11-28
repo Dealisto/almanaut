@@ -213,6 +213,43 @@ Review and remove the obsolete local record before importing the replacement;
 deleting that local record releases its association. This does not delete the
 machine in Proxmox.
 
+
+## Central deviations review
+
+Open **Discover → Discovery deviations** (`/discovery/deviations`) to compare
+all configured Docker, Podman, Proxmox and Xen Orchestra sources with current
+inventory. Filter by source, state or name/identity. The center shows changed
+fields, new resources, unconfirmed matches, identity conflicts and tracked
+resources not observed in the latest successful scan. Unchanged tracked records
+are omitted; results are paginated in groups of 100.
+
+The center reads cached observations and does not contact remote sources.
+Opening a source review, importing, reviewing or applying field changes,
+reviewing/rebinding an identity, and scheduled source scans refresh the cache.
+A source without a successful scan cannot establish whether resources are
+missing. Failed scans retain the last complete success and show failed source
+health. Observations older than 24 hours, or followed by a failed attempt, are
+marked stale; timestamps remain visible. This age indicator is independent of
+the configured schedule and is not a liveness check.
+
+Select individual fields to apply a reviewed difference. This uses the same
+source change handler as the individual review: it fetches the source again,
+checks the current binding and both old and observed values, and rejects stale
+reviews. Existing write permissions, CSRF checks, transaction history and
+webhooks apply. Notes, relationships and unselected fields are preserved. New
+records and identity conflicts link to the existing live source review rather
+than being imported automatically.
+
+**Not observed** describes only the last complete successful scan; it never
+means deleted or offline and never removes inventory. In particular, container
+sources list running containers only. An empty successful scan is evidence of
+no observed resources; a failed or oversized scan is not. The cache accepts at
+most 10,000 candidates and 8 MiB of serialized observations per source; exceeding
+either limit preserves the previous complete observation and reports failure.
+Cache data is operational: it is excluded from JSON/YAML inventory export and
+cleared when replacing inventory. Network probing, LLDP and agent reports keep
+their existing review flows; they do not produce these engine candidate snapshots.
+
 ## XCP-ng via Xen Orchestra
 
 Configure the Xen Orchestra server that manages your XCP-ng hosts:

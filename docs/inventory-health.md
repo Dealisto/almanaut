@@ -8,7 +8,7 @@ to expire, and what breaks if one thing goes away.
 
 ## The health report (`/health-report`)
 
-A fixed set of audit rules, each with its offender count and a drill-down list
+A configurable selection of built-in audit rules, each with its offender count and a drill-down list
 of the entities that tripped it:
 
 | Rule | Finds |
@@ -20,20 +20,41 @@ of the entities that tripped it:
 | Hardware without a warranty date | Hardware whose warranty end is unknown |
 | Subscriptions without a renewal date | Subscriptions whose renewal date is unknown |
 | Orphaned entities | Entities with no relationships at all |
-| Duplicate IP assignments | The same IP address claimed by more than one host |
-| Host IPs outside every network | Host addresses that fall in no known network |
+| Duplicate IP assignments | The same IP address claimed by multiple inventory owners |
+| IP allocations outside every network | Allocated addresses that fall in no known network |
 | Overlapping networks | Networks occupying the same CIDR block (parent/child subnets excluded) |
 | Stale entities | Entities untouched for longer than the staleness window (see below) |
 
-The rules are fixed — there is no rule editor, and nothing here is configurable
-beyond the staleness window. The dashboard's summary counter is produced by the
-same builder as this page, so the two can never disagree about how many
-findings exist.
+Administrators can open **Settings → Health rules** (`/health-rules`) to enable
+or disable individual checks. The dashboard summary and health report use the
+same settings and evaluator. Disabled checks disappear from the report and
+contribute no findings. These settings do not change inventory, scheduled
+probes, notification windows or the separate `/checks` page.
+
+An optional **Certificates expiring soon** check is disabled by default. Its
+warning window defaults to 30 days and accepts 1–3650 days. It includes dates
+through the last day of the window, excluding certificates already expired
+(including today's expiry), which remain covered by the expired-certificates
+check. **Backup job health** reports configured backup jobs that have never
+reported, failed, or exceeded their expected interval; each backup controls its
+own interval, independently of inventory staleness.
+
+A blank staleness override inherits `ALMANAUT_STALE_AFTER_DAYS`. A value of 0
+disables stale detection; 1–36500 sets a local override. The Stale entities
+check must also be enabled. **Restore default health rules** restores the
+built-in selection, the 30-day certificate warning window and server staleness
+inheritance. With no saved settings, existing report behavior is preserved.
+
+Settings writes and resets require an administrator and CSRF protection. They
+are recorded in the administrative audit log with before/after values. Settings
+persist across restarts and inventory replacement; they are excluded from
+JSON/YAML inventory exports and included in complete database backups. Rules
+are built in; administrators cannot submit SQL, scripts or expressions.
 
 The duplicate-IP, unassigned-IP, and overlapping-network rules are the IPAM
 conflict checks. They are worth reading
 alongside [IPAM](inventory-model.md#ipam-vlans--ip-reservations): "duplicate IP
-assignments" and "host IPs outside every network" are the two ways an address
+assignments" and "IP allocations outside every network" are the two ways an address
 can be recorded wrongly, and "overlapping networks" deliberately tolerates a
 parent/child subnet pair, because a `/24` containing a `/27` is normal
 practice, not a mistake.
@@ -42,7 +63,8 @@ practice, not a mistake.
 
 An entity counts as stale when nothing has changed on it for longer than
 `ALMANAUT_STALE_AFTER_DAYS` (default 90; set it to `0` to switch the rule off
-entirely — see [Configuration](configuration.md)).
+entirely — see [Configuration](configuration.md)). Administrators can override
+this window or disable the check in Health rules.
 
 Staleness is about *your* attention, not the machine's, so the stale rule is the
 only one with an **acknowledge** button next to each finding. Acknowledging

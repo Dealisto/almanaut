@@ -1,0 +1,25 @@
+{{define "content"}}
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Administration</span><h1>Database backups</h1><p class="page-description">Verified snapshots of Almanaut, including inventory, attachments and accounts.</p></div><a class="btn" href="/tasks">Scheduled tasks</a></div>
+{{template "settingsnav" .}}
+<section class="panel">
+  <h2>Backup coverage</h2>
+  <p>These snapshots contain the complete database. Back up external configuration and secret files separately. This page is separate from the backup jobs documented in your homelab inventory.</p>
+  {{if .Enabled}}
+  <p>Completed snapshot manifests remain available after a restart. Verification checks database integrity and schema when each snapshot is created; it does not replace a restoration test.</p>
+  <div class="actions"><a class="btn" href="/database-backups">Refresh snapshots</a>{{if .CanRun}}<form method="post" action="/tasks/database-backup/run">{{csrfField}}<button class="btn btn-primary" type="submit">Run backup now</button></form>{{end}}</div>
+  {{else}}
+  <p>Scheduled database backups are not configured. Set <code>ALMANAUT_BACKUP_DIR</code> to a writable backup directory to enable them.</p>
+  <p>You can also create a snapshot with <code>almanaut backup --source /path/to/almanaut.db --destination /path/to/new-backup.db</code>.</p>
+  {{end}}
+</section>
+{{if .Enabled}}
+<section class="panel">
+  <div class="panel-head"><h2>Completed snapshots</h2></div>
+  {{if .AdditionalSnapshots}}<p>Showing the latest 50 snapshots. {{.AdditionalSnapshots}} older snapshots remain in the backup directory.</p>{{end}}
+  <div class="table-wrap"><table><caption class="sr-only">Completed database backups, newest first; timestamps in UTC</caption><thead><tr><th scope="col">Created (UTC)</th><th scope="col">Snapshot directory</th><th scope="col">Bytes</th><th scope="col">Server version</th><th scope="col">Schema version</th></tr></thead><tbody>
+    {{range .Snapshots}}<tr><th scope="row">{{.CreatedAt.UTC.Format "2006-01-02 15:04:05"}}</th><td class="mono wrap-cell">{{.Directory}}</td><td>{{.Verification.Bytes}}</td><td>{{.ServerVersion}}</td><td class="wrap-cell">{{.Verification.SchemaVersion}}</td></tr>{{else}}<tr><td colspan="5">No completed snapshots found. Run a backup and check Scheduled tasks for its outcome.</td></tr>{{end}}
+  </tbody></table></div>
+  <p>Each directory contains <code>database.sqlite</code> and <code>manifest.json</code>. Before an offline restore, verify the selected file with <code>almanaut backup-verify --source /path/to/database.sqlite</code> and use a compatible server version.</p>
+</section>
+{{end}}
+{{end}}

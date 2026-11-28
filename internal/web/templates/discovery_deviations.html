@@ -1,0 +1,34 @@
+{{define "content"}}
+<div class="page-header"><div class="ph-titles"><span class="ph-eyebrow">Discovery</span><h1>Discovery deviations</h1><p class="page-description">Review observations from configured container and virtualization sources together.</p></div></div>
+<div class="actions"><a class="btn" href="/discovery">All sources</a></div>
+<p class="muted">This page reads saved observations without contacting your sources. Scans and scheduled discovery refresh them. Observations older than 24 hours, or followed by a failed scan, are marked stale. Applying selected fields always rescans the source and checks that both saved and observed values still match your review.</p>
+<section class="panel"><h2>Source health</h2><div class="table-wrap"><table><thead><tr><th scope="col">Source</th><th scope="col">Health</th><th scope="col">Latest attempt</th><th scope="col">Last successful observation</th><th scope="col">Review</th></tr></thead><tbody>
+{{range .Sources}}<tr data-discovery-source="{{.Key}}"><th scope="row">{{.Name}} <small class="muted">{{.Kind}}</small></th><td>{{.Health}}{{if .Error}}<br><span class="muted">{{.Error}}</span>{{end}}</td><td>{{if .Attempted}}{{displayTime .Attempted}}{{else}}—{{end}}</td><td>{{if .Succeeded}}{{displayTime .Succeeded}}{{else}}No successful scan{{end}}</td><td><a href="{{.Path}}">Scan source</a></td></tr>{{else}}<tr><td colspan="5">No container or virtualization sources configured.</td></tr>{{end}}
+</tbody></table></div></section>
+<form method="get" action="/discovery/deviations" class="filters">
+<label>Source <select name="source"><option value="">All sources</option>{{range .Sources}}<option value="{{.Key}}" {{if eq $.SourceFilter .Key}}selected{{end}}>{{.Name}} ({{.Kind}})</option>{{end}}</select></label>
+<label>State <select name="state"><option value="">All deviations</option><option value="changed" {{if eq .StateFilter "changed"}}selected{{end}}>Changed fields</option><option value="missing" {{if eq .StateFilter "missing"}}selected{{end}}>Not observed</option><option value="conflict" {{if eq .StateFilter "conflict"}}selected{{end}}>Identity conflict</option><option value="new" {{if eq .StateFilter "new"}}selected{{end}}>New resource</option><option value="matched" {{if eq .StateFilter "matched"}}selected{{end}}>Unconfirmed match</option></select></label>
+<label>Search <input type="search" name="q" value="{{.Query}}" placeholder="Name, identity, source or type"></label><button type="submit" class="btn">Filter</button>
+</form>
+<p class="muted">{{.Total}} deviation(s). Up to 100 shown per page. Unchanged tracked records are omitted.</p>
+{{range .Rows}}
+<section class="panel" data-discovery-resource="{{.ExternalID}}" data-deviation-state="{{.State}}">
+<h2 class="discovery-identity">{{if .Path}}<a href="{{.Path}}">{{.Name}}</a>{{else}}{{.Name}}{{end}}</h2>
+<p class="muted">{{.Source.Name}} · {{.EntityType}} · <code class="discovery-identity">{{.ExternalID}}</code>{{if .LastSeen}} · Last observed {{displayTime .LastSeen}}{{end}}{{if .Stale}} · <strong>Stale observation</strong>{{end}}</p>
+{{if .Missing}}<p><strong>Not observed in the last successful scan.</strong> This does not mean the resource was deleted. Container discovery lists running containers only. The inventory record is preserved.</p><a href="{{.Source.Path}}">Review source</a>
+{{else if .Conflict}}<p><strong>Identity conflict.</strong> Review the source and its bindings before changing this record.</p><a href="{{.Source.Path}}">Review source</a>
+{{else if eq .State "new"}}<p><strong>New resource.</strong> Review the live source to select records for import.</p><a href="{{.Source.Path}}">Review source</a>
+{{else if eq .State "matched"}}<p><strong>Unconfirmed match.</strong> Confirm this existing inventory record from the live source before tracking changes.</p><a href="{{.Source.Path}}">Review source</a>
+{{else}}
+<form method="post" action="{{.Source.Path}}/changes" data-selection-form>
+{{csrfField}}<input type="hidden" name="external_id" value="{{.ExternalID}}"><input type="hidden" name="entity_type" value="{{.EntityType}}"><input type="hidden" name="entity_id" value="{{.EntityID}}">
+<div class="table-wrap"><table><thead><tr><th scope="col">Apply</th><th scope="col">Field</th><th scope="col">Saved inventory</th><th scope="col">Last observed source</th></tr></thead><tbody>
+{{range .Fields}}<tr><td>{{if and .Editable canWrite}}<input type="checkbox" data-selection-item name="field" value="{{.Name}}" aria-label="Apply {{.Label}}"><input type="hidden" name="expected_{{.Name}}" value="{{.Expected}}">{{else}}—{{end}}</td><th scope="row">{{.Label}}</th><td>{{if .Current}}{{.Current}}{{else}}—{{end}}</td><td>{{if .Observed}}{{.Observed}}{{else}}—{{end}}</td></tr>{{end}}
+</tbody></table></div>
+{{if and .Editable canWrite}}<p class="muted js-only" data-selection-count role="status"></p><button class="btn btn-primary" type="submit">Apply selected fields</button>{{end}}
+</form>
+{{end}}
+</section>
+{{else}}<section class="panel"><p>No deviations match these filters. Sources without a successful observation cannot be compared; scan them first.</p></section>{{end}}
+<div class="actions">{{if .PreviousURL}}<a class="btn" href="{{.PreviousURL}}">Previous page</a>{{end}}{{if .NextURL}}<a class="btn" href="{{.NextURL}}">Next page</a>{{end}}</div>
+{{end}}

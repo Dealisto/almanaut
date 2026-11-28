@@ -1,0 +1,52 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles"><span class="ph-eyebrow">Discovery</span><h1>{{.Source.Name}} — SNMP</h1><p class="page-description">Review observed interfaces and LLDP neighbors before changing inventory.</p></div>
+  <div class="actions"><a class="btn" href="/discovery/snmp">SNMP sources</a>{{if isAdmin}}<form method="post" action="/discovery/snmp/{{.Source.ID}}/scan">{{csrfField}}<button class="btn btn-primary" type="submit">Scan now</button></form>{{end}}</div>
+</div>
+<p>Observations describe the last successful scan. They do not establish reachability, physical ownership, or a verified cable connection.</p>
+{{if .Snapshot.LastError}}<div class="error" role="alert">{{.Snapshot.LastError}}{{if not .Snapshot.ConfigurationChanged}} Previous observations remain visible.{{end}}</div>{{end}}
+<section class="panel" aria-labelledby="snmp-identity-heading">
+  <div class="panel-head"><h2 id="snmp-identity-heading">Observed identity</h2>{{if .Snapshot.ObservedAt}}<span>Observed {{displayTime .Snapshot.ObservedAt}}</span>{{end}}</div>
+  <dl class="def-grid">
+    <dt>Configured inventory owner</dt><dd>{{if .Owner}}<a href="{{.OwnerURL}}">{{.Owner}}</a>. Confirm this association before importing.{{else}}No existing inventory owner is configured. Observations remain informational.{{end}}</dd>
+    <dt>Observed system name</dt><dd>{{.Snapshot.Observation.SystemName}}</dd>
+    <dt>Description</dt><dd>{{.Snapshot.Observation.Description}}</dd>
+    <dt>Object ID</dt><dd class="mono">{{.Snapshot.Observation.ObjectID}}</dd>
+    <dt>Manufacturer</dt><dd>{{.Snapshot.Observation.Manufacturer}}</dd>
+    <dt>Model</dt><dd>{{.Snapshot.Observation.Model}}</dd>
+    <dt>Serial</dt><dd>{{.Snapshot.Observation.Serial}}</dd>
+  </dl>
+  {{range .Snapshot.Observation.Warnings}}<p role="status">{{.}}</p>{{end}}
+</section>
+<section class="panel" aria-labelledby="snmp-interfaces-heading">
+  <div class="panel-head"><h2 id="snmp-interfaces-heading">Observed interfaces</h2></div>
+  <p>Ethernet type is an import candidate, not proof of a physical connector. Select only physical ports belonging to the configured owner. Existing port names are never overwritten.</p>
+  <p class="form-help">Admin/oper status values are raw IF-MIB enums (1 = up, 2 = down).</p>
+  <form class="stack" method="post" action="/discovery/snmp/{{.Source.ID}}/import">
+    {{csrfField}}<input type="hidden" name="owner_expected" value="{{.OwnerExpected}}">
+    <div class="table-wrap" role="region" aria-label="Observed interfaces" tabindex="0">
+      <table><caption class="sr-only">Observed interfaces and physical port import candidates</caption>
+        <thead><tr><th scope="col">Select</th><th scope="col">Index / type</th><th scope="col">Name</th><th scope="col">Description / alias</th><th scope="col">MAC</th><th scope="col">Mbps</th><th scope="col">Admin / oper</th></tr></thead>
+        <tbody>{{range .Interfaces}}<tr>
+          <td>{{if and canWrite .Importable}}<input type="checkbox" name="interface" value="{{.Expected}}" aria-label="Create physical port {{.Name}}">{{end}}</td>
+          <td>{{.Index}} / {{.Type}}</td><th scope="row" class="wrap-cell">{{.Name}}</th><td class="wrap-cell">{{.Description}} / {{.Alias}}</td><td class="mono">{{.MAC}}</td><td>{{.SpeedMbps}}</td><td>{{.AdminStatus}} / {{.OperStatus}}</td>
+        </tr>{{else}}<tr><td colspan="7">No interfaces observed.</td></tr>{{end}}</tbody>
+      </table>
+    </div>
+    {{if and canWrite .Owner}}<div class="actions"><button class="btn btn-primary" type="submit">Re-scan and create selected physical ports</button></div>{{end}}
+  </form>
+</section>
+<section class="panel" aria-labelledby="snmp-neighbors-heading">
+  <div class="panel-head"><h2 id="snmp-neighbors-heading">Observed LLDP neighbors</h2></div>
+  <p>Local LLDP port numbers are not interface indexes. Names and chassis IDs are observations; choose both known inventory ports explicitly before confirming a cable.</p>
+  <div class="table-wrap" role="region" aria-label="Observed LLDP neighbors" tabindex="0">
+    <table><caption class="sr-only">Observed neighbor identifiers, without inferred inventory associations</caption>
+      <thead><tr><th scope="col">Local port number / ID</th><th scope="col">Local description</th><th scope="col">Remote chassis / system</th><th scope="col">Remote port</th><th scope="col">Review</th></tr></thead>
+      <tbody>{{range .Neighbors}}<tr>
+        <th scope="row" class="wrap-cell">{{.LocalNumber}} / {{.LocalID}} (type {{.LocalSubtype}})</th><td class="wrap-cell">{{.LocalDescription}}</td><td class="wrap-cell">{{.ChassisID}} (type {{.ChassisSubtype}}) / {{.SystemName}}</td><td class="wrap-cell">{{.PortID}} (type {{.PortSubtype}}) / {{.PortDescription}}</td>
+        <td>{{if and canWrite $.Owner $.Snapshot.Observation.LLDPComplete}}<a href="/discovery/snmp/{{$.Source.ID}}/link?neighbor={{.Expected}}">Review connection</a>{{end}}</td>
+      </tr>{{else}}<tr><td colspan="5">No complete LLDP neighbor observations.</td></tr>{{end}}</tbody>
+    </table>
+  </div>
+</section>
+{{end}}

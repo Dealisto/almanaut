@@ -61,6 +61,9 @@ func TestTagLabelsMatchCatalogAcrossAllEntityTypes(t *testing.T) {
 			t.Fatalf("fixture missing catalog label for %s", key)
 		}
 		base := ref.Type + "s"
+		if ref.Type == "ipaddress" {
+			base = "ip-addresses"
+		}
 		if ref.Type == "hardware" {
 			base = "hardware"
 		}
@@ -92,6 +95,8 @@ func seedCatalogLabelFixtures(t *testing.T, db *sql.DB) {
 	t.Helper()
 	snapshot := store.Snapshot{
 		Version:       1,
+		Interfaces:    []domain.NetworkInterface{{ID: 1, OwnerType: "host", OwnerID: 1, Name: "eth0", Kind: "physical", Enabled: true}},
+		IPAddresses:   []domain.IPAddress{{ID: 1, Address: "192.0.2.1/24", InterfaceID: 1, Status: "active"}},
 		Hosts:         []domain.Host{{ID: 1, Name: "Owner <&>", Type: "physical"}},
 		Services:      []domain.Service{{ID: 1, Name: "Service", Kind: "container"}},
 		Networks:      []domain.Network{{ID: 1, Name: "Network", CIDR: "192.0.2.0/24"}},

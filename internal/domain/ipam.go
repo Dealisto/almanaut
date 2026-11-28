@@ -13,9 +13,27 @@ const maxEnumerableHostBits = 16
 
 // Allocation is one host IP and the host that claims it.
 type Allocation struct {
-	IP       string
-	HostID   int64
-	HostName string
+	EntityType string
+	EntityID   int64
+	IP         string
+	HostID     int64
+	HostName   string
+}
+
+// Ref identifies the inventory record displaying this allocation.
+func (a Allocation) Ref() EntityRef {
+	if a.EntityType != "" {
+		return EntityRef{Type: a.EntityType, ID: a.EntityID}
+	}
+	return EntityRef{Type: "host", ID: a.HostID}
+}
+func hostAllocation(h Host, ip string) Allocation {
+	a := Allocation{IP: ip, HostID: h.ID, HostName: h.Name}
+	if h.IPAMEntity != nil {
+		a.EntityType = h.IPAMEntity.Type
+		a.EntityID = h.IPAMEntity.ID
+	}
+	return a
 }
 
 // NetworkUsage is the derived IP occupancy of a single network.
@@ -111,12 +129,12 @@ func attribute(networks []Network, hosts []Host, onlyIdx int) (map[int][]Allocat
 			best := index.lookup(ip)
 			if best < 0 {
 				if onlyIdx < 0 {
-					unassigned = append(unassigned, Allocation{IP: canonical, HostID: h.ID, HostName: h.Name})
+					unassigned = append(unassigned, hostAllocation(h, canonical))
 				}
 				continue
 			}
 			if onlyIdx < 0 || best == onlyIdx {
-				used[best] = append(used[best], Allocation{IP: canonical, HostID: h.ID, HostName: h.Name})
+				used[best] = append(used[best], hostAllocation(h, canonical))
 			}
 		}
 	}

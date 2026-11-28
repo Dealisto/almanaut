@@ -143,7 +143,7 @@ func reviewDiscoveryChanges(source DiscoverySource, db *sql.DB, cat entityCatalo
 		}
 		data := discoveryChangesPage{Title: source.Name + " changes", Source: source}
 		scannedAt := time.Now().UTC()
-		candidates, err := source.candidates(req.Context())
+		candidates, err := source.observedCandidates(req.Context(), db)
 		if err != nil {
 			data.Error = source.errorPrefix() + err.Error()
 			render(w, req, "discovery_changes.html", data)
@@ -216,7 +216,7 @@ func applyDiscoveryChanges(source DiscoverySource, db *sql.DB, cat entityCatalog
 			http.Error(w, errDiscoveryChangesSelection.Error(), http.StatusBadRequest)
 			return
 		}
-		candidates, err := source.candidates(req.Context())
+		candidates, err := source.observedCandidates(req.Context(), db)
 		if err != nil {
 			http.Error(w, source.errorPrefix()+err.Error(), http.StatusBadGateway)
 			return

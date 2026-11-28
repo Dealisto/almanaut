@@ -69,6 +69,10 @@ Almanaut instance or load the application's environment configuration.
 Checks exercise the production JavaScript and CSS, plus real server-rendered
 inventory and search pages:
 
+- Host agent-protection checkboxes survive validation, save through the normal
+  mutation path, and explicitly clear protection when all are unchecked.
+- Physical topology restores scope, navigates between devices, exports valid
+  standalone SVG, and keeps its diagram inside a scrolling panel on mobile.
 - Detail-tab selection, keyboard navigation, modified clicks, browser history,
   and preservation of modified keyboard shortcuts such as Alt+Left.
 - Revealing a hidden panel and scrolling to a deep-link heading.
@@ -320,3 +324,26 @@ Streaming avoids retaining the raw record list; valid imports still retain a
 typed write plan and post-commit events proportional to the number of rows.
 Regression tests check error precedence, cancellation, BOM/CRLF/multiline input,
 and that no inventory is written before the complete file has been read.
+
+## Integrated inventory and discovery acceptance
+
+The automated suites cover protected agent fields, transactional CSV preview and
+stale confirmation, cached discovery deviations, structured interfaces/IPAM,
+external backup outcomes, health policy, database snapshots and physical topology.
+The browser fixture also renders escaped, long SNMP/LLDP observations from a fake
+collector; it never contacts a device. SNMP wire tests use a loopback UDP fixture.
+
+For an isolated deployment rehearsal, use a copied database and explicitly
+configure only the integrations being exercised. Confirm real authentication,
+create a protected host and a structured interface/address, report an external
+backup run, change a health rule, and upload an attachment. Create and verify a
+database snapshot, restart to check manifest persistence, then restore the
+snapshot into a separate instance. Check the same login, inventory, run history,
+health settings and exact attachment bytes. Inventory YAML alone intentionally
+does not contain credentials, attachment blobs, operational outcomes or policy.
+
+Real-device acceptance remains separate from loopback tests: verify supported
+SNMPv3 credentials, device-specific MIB responses, interface naming and both
+physical endpoints before confirming LLDP-derived cable associations. An absent
+or incomplete LLDP table must remain an observation limitation, never proof that
+inventory ports or cables should be deleted.

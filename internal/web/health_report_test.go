@@ -43,7 +43,7 @@ func TestHealthReportEmpty(t *testing.T) {
 		"Expired certificates", "Certificates linked to nothing",
 		"Hardware without a warranty date", "Subscriptions without a renewal date",
 		"Orphaned entities",
-		"Duplicate IP assignments", "Host IPs outside every network", "Overlapping networks",
+		"Duplicate IP assignments", "IP allocations outside every network", "Overlapping networks",
 		"Stale entities",
 	} {
 		if !strings.Contains(body, want) {

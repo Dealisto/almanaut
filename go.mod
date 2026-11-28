@@ -5,6 +5,7 @@ go 1.26.11
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/go-chi/chi/v5 v5.3.0
+	github.com/gosnmp/gosnmp v1.47.0
 	github.com/yuin/goldmark v1.8.2
 	golang.org/x/crypto v0.59.0
 	gopkg.in/yaml.v3 v3.0.1

@@ -210,3 +210,25 @@ func TestSourceDetectorFailuresPreserveSuccessfulBaseline(t *testing.T) {
 		})
 	}
 }
+
+func TestSourceDetectorCachesCompleteObservationsAndFailures(t *testing.T) {
+	db := sourceTestDB(t)
+	scanner := &observationDocker{containers: []discovery.Container{{ID: "container", Name: "app"}}}
+	cache := store.NewDiscoverySnapshotRepo(db)
+	detector := NewSource(Source{Key: "docker:lab", Kind: "docker", Docker: scanner}, store.NewServiceRepo(db), store.NewHostRepo(db), store.NewDiscoveryBindingRepo(db), store.NewDiscoveryRunRepo(db), &countSender{}).WithSnapshotRecorder(cache)
+	if err := detector.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := cache.Get("docker:lab")
+	if err != nil || len(got.Candidates) != 1 || got.Candidates[0].ID != "container" {
+		t.Fatalf("scheduled evidence: %+v, %v", got, err)
+	}
+	scanner.err = errors.New("unavailable")
+	if err := detector.Run(context.Background()); err == nil {
+		t.Fatal("failed scan succeeded")
+	}
+	failed, err := cache.Get("docker:lab")
+	if err != nil || len(failed.Candidates) != 1 || failed.LastError == "" || !failed.SucceededAt.Equal(got.SucceededAt) {
+		t.Fatalf("failed scan lost baseline: %+v %v", failed, err)
+	}
+}

@@ -11,13 +11,14 @@
     <div class="panel-heading"><span class="entity-icon">{{icon "plus"}}</span><div><h2 id="csv-heading">Add or update records</h2><p>Import a CSV file for one entity type.</p></div></div>
     {{if .CSVErrors}}<div class="error" role="alert" tabindex="-1"><strong>Import aborted — no changes were made.</strong><p>Fix these rows, select your file again, and retry:</p><ul>{{range .CSVErrors}}<li>{{.}}</li>{{end}}</ul></div>{{end}}
     {{if canWrite}}
-    <form class="stack" method="post" action="/import-csv" enctype="multipart/form-data">
+    <form class="stack" method="post" action="/import-csv/preview" enctype="multipart/form-data">
       {{ csrfField }}
       <label>Record type<select name="type" required>{{range .Types}}<option value="{{.Value}}"{{if eq .Value $.CSVType}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
       <label>CSV file<input type="file" name="file" accept=".csv,text/csv" aria-describedby="csv-help" required></label>
       <p class="form-help" id="csv-help">Use export field names in the header, such as <code>name</code> and <code>status</code>. Include an <code>id</code> to update a record; leave it blank to create one. Other records are kept.</p>
-      <label class="check"><input type="checkbox" name="confirm" required><span>Add or update records from this file.</span></label>
-      <div class="actions"><button class="btn btn-primary" type="submit">Import CSV</button></div>
+      <label>Update mode<select name="mode"><option value="patch">Patch — preserve omitted columns</option><option value="replace">Replace — reset omitted fields to defaults</option></select></label>
+      <p class="form-help">Review changes before applying. An empty cell explicitly clears a value or applies its field default. Maximum 500 rows and 8 MiB per preview.</p>
+      <div class="actions"><button class="btn btn-primary" type="submit">Preview CSV</button></div>
     </form>
     {{else}}<p class="muted">An editor or admin can import records. You can export the inventory below.</p>{{end}}
   </section>

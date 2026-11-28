@@ -13,28 +13,30 @@ import (
 
 // Snapshot is the full inventory in a form that round-trips through YAML.
 type Snapshot struct {
-	Version        int                   `yaml:"version"`
-	HostTypes      []domain.HostType     `yaml:"host_types"`
-	Hosts          []domain.Host         `yaml:"hosts"`
-	Services       []domain.Service      `yaml:"services"`
-	Networks       []domain.Network      `yaml:"networks"`
-	Domains        []domain.Domain       `yaml:"domains"`
-	Certificates   []domain.Certificate  `yaml:"certificates"`
-	Backups        []domain.Backup       `yaml:"backups"`
-	Hardware       []domain.Hardware     `yaml:"hardware"`
-	Subscriptions  []domain.Subscription `yaml:"subscriptions"`
-	Accounts       []domain.Account      `yaml:"accounts"`
-	VLANs          []domain.VLAN         `yaml:"vlans"`
-	Reservations   []domain.Reservation  `yaml:"reservations"`
-	Contacts       []domain.Contact      `yaml:"contacts"`
-	Sites          []domain.Site         `yaml:"sites"`
-	Locations      []domain.Location     `yaml:"locations"`
-	Racks          []domain.Rack         `yaml:"racks"`
-	NICs           []domain.NIC          `yaml:"nics"`
-	Ports          []domain.Port         `yaml:"ports"`
-	Relationships  []domain.Relationship `yaml:"relationships"`
-	Tags           []domain.Tag          `yaml:"tags"`
-	JournalEntries []domain.JournalEntry `yaml:"journal_entries"`
+	Interfaces     []domain.NetworkInterface `yaml:"network_interfaces"`
+	IPAddresses    []domain.IPAddress        `yaml:"ip_addresses"`
+	Version        int                       `yaml:"version"`
+	HostTypes      []domain.HostType         `yaml:"host_types"`
+	Hosts          []domain.Host             `yaml:"hosts"`
+	Services       []domain.Service          `yaml:"services"`
+	Networks       []domain.Network          `yaml:"networks"`
+	Domains        []domain.Domain           `yaml:"domains"`
+	Certificates   []domain.Certificate      `yaml:"certificates"`
+	Backups        []domain.Backup           `yaml:"backups"`
+	Hardware       []domain.Hardware         `yaml:"hardware"`
+	Subscriptions  []domain.Subscription     `yaml:"subscriptions"`
+	Accounts       []domain.Account          `yaml:"accounts"`
+	VLANs          []domain.VLAN             `yaml:"vlans"`
+	Reservations   []domain.Reservation      `yaml:"reservations"`
+	Contacts       []domain.Contact          `yaml:"contacts"`
+	Sites          []domain.Site             `yaml:"sites"`
+	Locations      []domain.Location         `yaml:"locations"`
+	Racks          []domain.Rack             `yaml:"racks"`
+	NICs           []domain.NIC              `yaml:"nics"`
+	Ports          []domain.Port             `yaml:"ports"`
+	Relationships  []domain.Relationship     `yaml:"relationships"`
+	Tags           []domain.Tag              `yaml:"tags"`
+	JournalEntries []domain.JournalEntry     `yaml:"journal_entries"`
 
 	DiscoveryBindings []domain.DiscoveryBinding    `yaml:"discovery_bindings"`
 	CustomFieldDefs   []domain.CustomFieldDef      `yaml:"custom_field_defs"`
@@ -72,6 +74,8 @@ func ExportContext(ctx context.Context, db *sql.DB) (Snapshot, error) {
 	var listErr error
 	snap := Snapshot{
 		Version:           snapshotVersion,
+		Interfaces:        exportList(&listErr, NewInterfaceRepo(db).WithTx(tx).List),
+		IPAddresses:       exportList(&listErr, NewIPAddressRepo(db).WithTx(tx).List),
 		DiscoveryBindings: exportList(&listErr, NewDiscoveryBindingRepo(db).WithTx(tx).List),
 		HostTypes:         exportList(&listErr, NewHostTypeRepo(db).WithTx(tx).List),
 		Hosts:             exportList(&listErr, NewHostRepo(db).WithTx(tx).List),
@@ -128,7 +132,7 @@ func exportList[T any](err *error, list func() ([]T, error)) []T {
 }
 
 // snapshotVersion is the Snapshot format Export writes and Import reads.
-const snapshotVersion = 3
+const snapshotVersion = 4
 
 // ImportValidationError identifies invalid snapshot input whose message can be
 // shown to the user. Database and transaction failures remain ordinary errors
@@ -168,10 +172,15 @@ func ImportContext(ctx context.Context, db *sql.DB, snap Snapshot) error {
 	if err := validateDiscoveryBindings(snap); err != nil {
 		return &ImportValidationError{err}
 	}
+	if err := validateStructuredNetwork(snap); err != nil {
+		return &ImportValidationError{err}
+	}
 	if err := validateHostTypes(snap); err != nil {
 		return &ImportValidationError{err}
 	}
 	for _, err := range []error{
+		validateAll("interface", snap.Interfaces, func(v domain.NetworkInterface) int64 { return v.ID }),
+		validateAll("ipaddress", snap.IPAddresses, func(v domain.IPAddress) int64 { return v.ID }),
 		validateAll("host", snap.Hosts, func(h domain.Host) int64 { return h.ID }),
 		validateAll("service", snap.Services, func(s domain.Service) int64 { return s.ID }),
 		validateAll("network", snap.Networks, func(n domain.Network) int64 { return n.ID }),
@@ -301,7 +310,7 @@ func validateUniqueImportKeys[T any, K comparable](label string, items []T, id f
 // Import clears and refills exactly these. TestEveryTableIsClassified fails
 // when a migration adds a table that is in neither this list nor one of the
 // documented exclusions, so a new entity cannot silently miss the export.
-var inventoryTables = []string{"discovery_bindings", "hosts", "host_types", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "nics", "ports", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"}
+var inventoryTables = []string{"ip_addresses", "network_interfaces", "discovery_bindings", "hosts", "host_types", "services", "networks", "domains", "certificates", "backups", "hardware", "subscriptions", "accounts", "vlans", "ip_reservations", "contacts", "sites", "locations", "racks", "nics", "ports", "relationships", "tags", "journal_entries", "custom_field_values", "custom_field_definitions"}
 
 // replaceInventory clears every table and re-inserts snap within tx. It must run
 // inside WithTx, which owns begin/commit/rollback and is panic-safe, so any
@@ -321,6 +330,17 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 		return nil
 	}
 
+	for _, v := range snap.Interfaces {
+		if err := insert("interface", v.ID, `INSERT INTO network_interfaces (id,owner_type,owner_id,name,kind,port_id,vlan_id,mac,mtu,enabled,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?)`, v.ID, v.OwnerType, v.OwnerID, v.Name, v.Kind, v.PortID, v.VLANID, v.MAC, v.MTU, v.Enabled, v.Notes); err != nil {
+			return err
+		}
+	}
+	for _, v := range snap.IPAddresses {
+		prefix, _ := domain.ParseInterfaceAddress(v.Address)
+		if err := insert("ipaddress", v.ID, `INSERT INTO ip_addresses (id,address,interface_id,status,dns_name,notes) VALUES (?,?,?,?,?,?)`, v.ID, prefix.String(), v.InterfaceID, v.Status, v.DNSName, v.Notes); err != nil {
+			return err
+		}
+	}
 	for _, t := range snap.HostTypes {
 		if _, err := tx.Exec(`INSERT INTO host_types (name, label) VALUES (?, ?)`, t.Name, t.Label); err != nil {
 			return fmt.Errorf("insert host type %q: %w", t.Name, err)
@@ -336,9 +356,9 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 			return fmt.Errorf("marshal ips for host %d: %w", h.ID, err)
 		}
 		if err := insert("host", h.ID,
-			`INSERT INTO hosts (id, name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height, check_address)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			h.ID, h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(raw), h.Notes, h.RackID, h.RackPosition, h.UHeight, h.CheckAddress); err != nil {
+			`INSERT INTO hosts (id, name, type, os, cpu, ram, disk, status, ips, notes, rack_id, rack_position, u_height, check_address, agent_protected_fields)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			h.ID, h.Name, h.Type, h.OS, h.CPU, h.RAM, h.Disk, h.Status, string(raw), h.Notes, h.RackID, h.RackPosition, h.UHeight, h.CheckAddress, encodeAgentProtection(h.AgentProtectedFields)); err != nil {
 			return err
 		}
 	}
@@ -395,9 +415,9 @@ func replaceInventory(tx *sql.Tx, snap Snapshot) error {
 	}
 	for _, b := range snap.Backups {
 		if err := insert("backup", b.ID,
-			`INSERT INTO backups (id, source, destination, frequency, last_run, notes)
-			 VALUES (?, ?, ?, ?, ?, ?)`,
-			b.ID, b.Source, b.Destination, b.Frequency, b.LastRun, b.Notes); err != nil {
+			`INSERT INTO backups (id, source, destination, frequency, last_run, notes, expected_interval_hours)
+			 VALUES (?, ?, ?, ?, ?, ?, COALESCE(?,0))`,
+			b.ID, b.Source, b.Destination, b.Frequency, b.LastRun, b.Notes, b.ExpectedIntervalHours); err != nil {
 			return err
 		}
 	}
@@ -520,7 +540,7 @@ var entityTables = map[string]string{
 	"certificate": "certificates", "backup": "backups", "hardware": "hardware",
 	"subscription": "subscriptions", "account": "accounts", "site": "sites",
 	"location": "locations", "rack": "racks", "contact": "contacts", "vlan": "vlans",
-	"reservation": "ip_reservations", "nic": "nics", "port": "ports",
+	"reservation": "ip_reservations", "nic": "nics", "port": "ports", "interface": "network_interfaces", "ipaddress": "ip_addresses",
 }
 
 // derivedStateTables hold state that the background jobs recompute from the
@@ -528,7 +548,7 @@ var entityTables = map[string]string{
 // may describe whatever entity used to have that id, and a stale "down" status
 // or probe result on the new one is worse than none. Clearing never causes a
 // spurious alert: liveness only notifies on a change from a known status.
-var derivedStateTables = []string{"liveness_state", "liveness_notifications", "cert_probe_state", "notification_state", "discovery_observations"}
+var derivedStateTables = []string{"snmp_observations", "discovery_snapshots", "liveness_state", "liveness_notifications", "cert_probe_state", "notification_state", "discovery_observations"}
 
 // reconcileSideTables brings the tables that are keyed by entity id but not
 // part of a Snapshot in line with the inventory Import just wrote, inside its
@@ -575,6 +595,12 @@ func dropDanglingRefs(snap Snapshot) (Snapshot, int) {
 			ids[typ] = map[int64]bool{}
 		}
 		ids[typ][id] = true
+	}
+	for _, x := range snap.Interfaces {
+		collect("interface", x.ID)
+	}
+	for _, x := range snap.IPAddresses {
+		collect("ipaddress", x.ID)
 	}
 	for _, x := range snap.Hosts {
 		collect("host", x.ID)
@@ -804,4 +830,19 @@ func validateDiscoveryBindings(snap Snapshot) error {
 		}
 	}
 	return nil
+}
+
+// Missing references remain soft (and visibly repairable), but present records
+// must agree about port ownership. The same rule applies to ordinary writes.
+func validateStructuredNetwork(snap Snapshot) error {
+	ports := map[int64]domain.Port{}
+	for _, p := range snap.Ports {
+		ports[p.ID] = p
+	}
+	for _, v := range snap.Interfaces {
+		if p, ok := ports[v.PortID]; ok && (p.OwnerType != v.OwnerType || p.OwnerID != v.OwnerID) {
+			return fmt.Errorf("interface %d: port belongs to another owner", v.ID)
+		}
+	}
+	return validateUniqueImportKeys("interface", snap.Interfaces, func(v domain.NetworkInterface) int64 { return v.ID }, func(v domain.NetworkInterface) string { return fmt.Sprintf("%s:%d:%s", v.OwnerType, v.OwnerID, v.Name) })
 }

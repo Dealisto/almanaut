@@ -132,6 +132,39 @@ count for correction, together with the original list filters. The single-port
 form on the same page remains independent. Duplicate-name checks read only
 the selected owner's names inside the generation transaction.
 
+## Physical topology
+
+Open **Topology** (`/topology`) to explore recorded cables between hosts and
+hardware. Select a site or rack, show devices without a resolved site, or follow
+a device's **Connections** link in the topology table to focus on that device.
+Each selection includes directly connected peers, marked **Outside selection**
+when they are not among the selected devices. Following another device's link
+continues the exploration one hop at a time. Scope is kept in the URL.
+
+Site membership follows the device's rack, its location, and its site. Devices
+without that complete hierarchy are shown by **Without a site**; a hardware
+record's free-text location is not treated as a site assignment.
+
+The diagram and accessible cable table show both port endpoints, with links to
+their inventory records. Reciprocal port records represent one cable; parallel
+cables and connections between two ports on the same device remain distinct.
+Missing device records are labelled without a dead link. Missing or nonreciprocal
+port links are omitted with a warning. **Download SVG** exports the current
+scope as a standalone diagram.
+
+Views contain at most 60 selected devices, 100 devices including their peers,
+and 200 cables. A notice identifies a partial view and asks you to narrow the
+scope. Site and rack selectors contain at most 100 entries, always retaining
+the selected existing record. Device labels and port names are limited to 160
+characters in this view; diagram labels are shortened further, with the full
+display label in each node's title and the table. These bounds limit loaded data
+and output, rather than promising a fixed database query cost.
+
+Only recorded physical port connections are drawn. The topology does not infer
+VLANs, routing, reachability, redundancy, or outage impact from adjacency. The
+separate [impact view](inventory-health.md#impact-analysis-impact) continues to
+use declared dependency relationships.
+
 ## IPAM: VLANs & IP reservations
 
 A network can reference a **VLAN** (name + 802.1Q ID) from its edit form; the
@@ -236,3 +269,31 @@ unlinked.
 ---
 
 **See also:** [Lists, saved views & bulk editing](lists-and-views.md) · [Inventory health](inventory-health.md) · [JSON API](api.md) · [Export & import](export-import.md)
+
+### Structured interfaces and IP addresses
+
+Network → Interfaces models physical, virtual, bridge, bond, VLAN and loopback
+interfaces independently from physical NIC cards and cable ports. Each interface
+belongs to a host or hardware item; its optional physical port must belong to the
+same owner. The VLAN, MAC, MTU and administrative enabled flag are documented
+inventory, not live reachability measurements. Interface names are unique within
+an owner. Unassign addresses before deleting their interface.
+
+Network → IP addresses stores IPv4/IPv6 allocations with optional interface
+assignment, DNS name and active/reserved/deprecated status. Bare IPs become /32
+or /128; a supplied prefix preserves host bits. All statuses occupy the address
+until the record is removed. Unassigned allocations still block next-free
+suggestions. VLAN association does not create a separate address space: IPAM
+remains global, with longest-prefix attribution across all configured networks.
+
+Legacy host IP lists and agent reports continue unchanged. Explicit allocations
+are independently maintained; agents do not modify interfaces or address records.
+IPAM combines both sources in one read snapshot and counts repeated addresses on
+one actual host or hardware owner once. Different owners claiming an address
+are conflicts. Separate unassigned allocations remain separate claims. Interface
+and IP address details, API CRUD, tags, custom fields, history, CSV and inventory
+exports use the same entity catalog as existing inventory.
+
+Missing references in imported snapshots remain visible for repair. An existing
+port and interface cannot disagree about ownership, including during imports or
+port moves. An edit does not silently clear a missing selected reference.

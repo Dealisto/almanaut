@@ -110,6 +110,18 @@ func (rs resource[T]) importCSVContext(ctx context.Context, d handlerDeps, r io.
 			continue
 		}
 		get := func(field string) string {
+			if field == "backup_policy_present" && rs.sing == "backup" {
+				if _, present := columns["expected_interval_hours"]; present {
+					return "1"
+				}
+			}
+			// Host protection is a safety policy: omitted columns preserve it,
+			// while a present empty cell explicitly clears the policy.
+			if field == "agent_protection_present" && rs.sing == "host" {
+				if _, exists := columns["agent_protected_fields"]; exists {
+					return "1"
+				}
+			}
 			if index, exists := columns[field]; exists {
 				return rec[index]
 			}

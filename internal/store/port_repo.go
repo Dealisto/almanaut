@@ -161,6 +161,13 @@ func (r *PortRepo) Update(v domain.Port) error {
 	if db, ok := r.db.(*sql.DB); ok {
 		return WithTx(db, func(tx *sql.Tx) error { return r.UpdateTx(tx, v) })
 	}
+	var assigned int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM network_interfaces WHERE port_id=? AND (owner_type!=? OR owner_id!=?)`, v.ID, v.OwnerType, v.OwnerID).Scan(&assigned); err != nil {
+		return err
+	}
+	if assigned > 0 {
+		return &ConstraintError{Reason: "unlink this port from its interfaces before moving it to another owner"}
+	}
 	if err := r.checkNIC(v); err != nil {
 		return err
 	}

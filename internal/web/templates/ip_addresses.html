@@ -1,0 +1,46 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Network</span>
+    <h1>IP addresses</h1>
+  </div>
+  <div class="ph-actions">
+    {{if canWrite}}<a class="btn btn-primary" href="{{listFormURL .Controls.BasePath (printf "%s/new" .Controls.BasePath)}}">+ New IP address</a>{{end}}
+  </div>
+</div>
+{{template "listcontrols" .Controls}}
+{{template "pagination" .Controls.Pagination}}
+{{if .Items}}
+{{template "bulkactions" .Controls}}
+<div class="table-wrap">
+<table>
+  <thead><tr><th scope="col" class="bulk-col"><span class="sr-only">Selection</span>{{if canWrite}}<input type="checkbox" class="js-only" data-select-all aria-label="Select all rows on this page">{{end}}</th><th scope="col">Address</th><th scope="col">Interface ID</th><th scope="col">Status</th><th scope="col">DNS name</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+  <tbody>
+  {{range .Items}}
+    <tr><td class="bulk-col">{{if canWrite}}<input type="checkbox" name="ids" value="{{.ID}}" form="bulkform" aria-label="Select {{.Address}}">{{end}}</td>
+      <td><a href="{{listRecordURL $.Controls.BasePath .ID}}">{{.Address}}</a></td>
+      <td>{{.InterfaceID}}</td>
+      <td>{{.Status}}</td>
+      <td>{{.DNSName}}</td>
+      <td>
+        {{if canWrite}}
+        <details class="row-menu"><summary>Actions</summary>
+        <a class="btn" href="{{listFormURL $.Controls.BasePath (printf "%s/%d/edit" $.Controls.BasePath .ID)}}">Edit</a>
+        <form class="form-inline" method="post" action="/ip-addresses/{{.ID}}/delete"
+              data-confirm="Delete this IP address?">
+          {{ csrfField }}
+          <button class="btn btn-danger" type="submit">Delete</button>
+        </form>
+        </details>
+        {{end}}
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<div class="table-wrap"><div class="empty">{{if gt .Controls.Pagination.Total 0}}{{template "listpageempty" .Controls.Pagination}}{{else if .Controls.Active}}{{icon "search"}}<strong>No matching records.</strong><p>Try a different search or clear your filters.</p><a class="btn" href="{{.Controls.BasePath}}">Clear filters</a>{{else}}{{icon "box"}}<strong>No IP addresses yet.</strong><p>Add your first record to start documenting your inventory.</p>{{if canWrite}}<a class="btn" href="{{listFormURL .Controls.BasePath (printf "%s/new" .Controls.BasePath)}}">Add a record</a>{{end}}{{end}}</div></div>
+{{end}}
+{{template "pagination" .Controls.Pagination}}
+{{end}}

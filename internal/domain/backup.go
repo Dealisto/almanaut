@@ -13,12 +13,17 @@ type Backup struct {
 	Frequency   string `yaml:"frequency" json:"frequency"`
 	LastRun     string `yaml:"last_run" json:"last_run"` // optional YYYY-MM-DD
 	Notes       string `yaml:"notes" json:"notes"`
+	// Nil preserves existing policy on updates; explicit zero disables monitoring.
+	ExpectedIntervalHours *int64 `yaml:"expected_interval_hours" json:"expected_interval_hours"`
 }
 
 // Validate checks the source and (if present) the last-run date.
 func (b Backup) Validate() error {
 	if strings.TrimSpace(b.Source) == "" {
 		return fmt.Errorf("source is required")
+	}
+	if b.ExpectedIntervalHours != nil && (*b.ExpectedIntervalHours < 0 || *b.ExpectedIntervalHours > 87600) {
+		return fmt.Errorf("expected_interval_hours must be between 0 and 87600")
 	}
 	return validateOptionalDate("last run", b.LastRun)
 }

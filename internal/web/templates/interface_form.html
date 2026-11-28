@@ -1,0 +1,31 @@
+{{define "content"}}
+<div class="page-header">
+  <div class="ph-titles">
+    <span class="ph-eyebrow">Network</span>
+    <h1>{{.Heading}}</h1>
+  </div>
+</div>
+{{if .Error}}<div class="error" role="alert" tabindex="-1">{{.Error}}</div>{{end}}
+<form class="stack" method="post" action="{{.Action}}">
+{{ csrfField }}
+<input type="hidden" name="return_to" value="{{.ReturnURL}}">
+  <label>Name<input name="name" value="{{.Item.Name}}" placeholder="eth0, br0, vlan10" required></label>
+  <label>Owner
+    <select name="owner">
+      {{$ownerValue := printf "%s:%d" .Item.OwnerType .Item.OwnerID}}{{$foundOwner := false}}{{range .Extras.Owners}}{{if eq .Value $ownerValue}}{{$foundOwner = true}}{{end}}<option value="{{.Value}}"{{if eq .Value $ownerValue}} selected{{end}}>{{.Label}}</option>{{end}}{{if and (gt .Item.OwnerID 0) (not $foundOwner)}}<option value="{{$ownerValue}}" selected>{{$ownerValue}} (deleted)</option>{{end}}
+    </select>
+  </label>
+  <label>Kind<select name="kind">{{range .Extras.Kinds}}<option {{if eq . $.Item.Kind}}selected{{end}}>{{.}}</option>{{end}}</select></label>
+  <label>Physical port<select name="port_id"><option value="0">None</option>{{$found := false}}{{range .Extras.Ports}}{{if eq .ID $.Item.PortID}}{{$found = true}}{{end}}<option value="{{.ID}}" {{if eq .ID $.Item.PortID}}selected{{end}}>{{.OwnerName}} / {{.Name}}</option>{{end}}{{if and (gt .Item.PortID 0) (not $found)}}<option value="{{.Item.PortID}}" selected>port {{.Item.PortID}} (deleted)</option>{{end}}</select></label>
+  <label>VLAN<select name="vlan_id"><option value="0">None</option>{{$found := false}}{{range .Extras.VLANs}}{{if eq .ID $.Item.VLANID}}{{$found = true}}{{end}}<option value="{{.ID}}" {{if eq .ID $.Item.VLANID}}selected{{end}}>{{.Name}} ({{.VID}})</option>{{end}}{{if and (gt .Item.VLANID 0) (not $found)}}<option value="{{.Item.VLANID}}" selected>VLAN {{.Item.VLANID}} (deleted)</option>{{end}}</select></label>
+  <label>MAC<input name="mac" value="{{.Item.MAC}}"></label>
+  <label>MTU (0 = unknown)<input type="number" name="mtu" value="{{.Item.MTU}}" min="0" max="65535"></label>
+  <label><input type="checkbox" name="enabled" {{if .Item.Enabled}}checked{{end}}> Enabled</label>
+  <label>Notes<textarea name="notes">{{.Item.Notes}}</textarea></label>
+  {{template "customFieldsForm" .Extras.customFields}}
+  <div class="actions">
+    <button class="btn btn-primary" type="submit">{{.SubmitLabel}}</button>
+    <a class="btn" data-list-return href="{{.ReturnURL}}">Cancel</a>
+  </div>
+</form>
+{{end}}

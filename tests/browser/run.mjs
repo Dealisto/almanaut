@@ -177,7 +177,10 @@ try {
   }
   await navigate("/browser-fixture");
   const results = await evaluate(await readFile(join(directory, "checks.js"), "utf8"));
-  const viewport = (width) => client.send("Emulation.setDeviceMetricsOverride", {width, height: 844, deviceScaleFactor: 1, mobile: false}, sessionId);
+  const viewport = async (width) => {
+    await client.send("Emulation.setDeviceMetricsOverride", {width, height: 844, deviceScaleFactor: 1, mobile: false}, sessionId);
+    await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+  };
   await viewport(1200);
   const listOrigin = "/hosts?dir=desc&page=1&per_page=1&q=Browser&sort=id";
   await navigate(listOrigin);
@@ -868,6 +871,117 @@ try {
   await waitForPage(actionListOrigin);
   results.push({name: "Back to list restores filters after child record mutations", passed:
     await evaluate(`location.pathname + location.search === ${JSON.stringify(actionListOrigin)} && document.querySelector('.list-controls [name="q"]').value === "Browser"`)});
+  await navigate("/hosts/1/edit");
+  await evaluate(`(() => {
+    const form = document.querySelector('main form[action="/hosts/1"]');
+    form.elements.agent_protect_ips.checked = true;
+    form.elements.agent_protect_os.checked = true;
+  })()`);
+  await submitForm('main form[action="/hosts/1"]', {name: " "});
+  results.push({name: "host validation preserves selected agent protections", passed:
+    await evaluate(`Boolean(document.querySelector('main .error')) &&
+      document.querySelector('[name="agent_protect_ips"]').checked && document.querySelector('[name="agent_protect_os"]').checked`)});
+  await submitForm('main form[action="/hosts/1"]', {name: originalHostName, ips: "192.0.2.10, 192.0.2.11"});
+  results.push({name: "host form saves agent protection through the normal mutation path", passed:
+    await evaluate(`(async () => {
+      const host = await (await fetch('/api/hosts/1')).json();
+      return host.agent_protected_fields.includes('ips') && host.agent_protected_fields.includes('os') && host.ips.includes('192.0.2.11');
+    })()`)});
+  await navigate("/hosts/1/edit");
+  await evaluate(`document.querySelectorAll('input[name^="agent_protect_"]').forEach(input => {input.checked = false;})`);
+  await submitForm('main form[action="/hosts/1"]', {});
+  results.push({name: "clearing every protection checkbox explicitly resumes synchronization", passed:
+    await evaluate(`(async () => (await (await fetch('/api/hosts/1')).json()).agent_protected_fields.length === 0)()`)});
+
+  await navigate("/topology?site=1");
+  results.push({name: "topology restores scope and offers navigable device connections", passed:
+    await evaluate(`document.querySelector('select[name="site"]').value === '1' &&
+      Boolean(document.querySelector('main a[href^="/topology?ref="]')) &&
+      !window.injected && !document.querySelector('main svg script')`)});
+  const topologyFocusPath = await clickPath('main a[href^="/topology?ref="]');
+  await waitForPage(topologyFocusPath);
+  results.push({name: "topology device exploration produces a bookmarkable scoped view", passed:
+    await evaluate(`new URLSearchParams(location.search).has('ref') &&
+      document.querySelector('main').textContent.includes('directly connected peers')`)});
+  results.push({name: "topology export preserves scope and produces standalone SVG", passed:
+    await evaluate(`(async () => {
+      const link = document.querySelector('main a[href^="/topology.svg?"]');
+      const response = await fetch(link.href);
+      const doc = new DOMParser().parseFromString(await response.text(), 'image/svg+xml');
+      return response.ok && response.headers.get('content-disposition').includes('attachment') &&
+        new URL(link.href).search === location.search && doc.documentElement.localName === 'svg' &&
+        !doc.querySelector('parsererror, script') && Boolean(doc.querySelector('title'));
+    })()`)});
+  await viewport(390);
+  results.push({name: "topology graph scrolls inside its panel on narrow screens", passed:
+    await evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1 &&
+      document.querySelector('main svg').parentElement.scrollWidth >= document.querySelector('main svg').parentElement.clientWidth`)});
+  await viewport(1200);
+  await navigate("/interfaces/new");
+  await submitForm('main form[action="/interfaces"]', {owner: "host:1", name: "Browser interface", kind: "bridge", mtu: "1500"});
+  const interfacePath = await evaluate(`new URL([...document.querySelectorAll("main table a")].find(a => a.textContent === "Browser interface").href).pathname`);
+  await navigate(interfacePath);
+  results.push({name: "structured interface form creates a linked inventory record", passed:
+    await evaluate(`location.pathname.startsWith('/interfaces/') && document.querySelector('main').textContent.includes('Browser interface') && Boolean(document.querySelector('main a[href="/hosts/1"]'))`)});
+  await navigate("/ip-addresses/new");
+  await submitForm('main form[action="/ip-addresses"]', {address: "2001:0DB8::20/64", interface_id: interfacePath.split('/').at(-1), status: "reserved", dns_name: "browser.example.test"});
+  const addressPath = await evaluate(`new URL([...document.querySelectorAll("main table a")].find(a => a.textContent === "2001:db8::20/64").href).pathname`);
+  await navigate(addressPath);
+  results.push({name: "structured address form preserves prefix and canonicalizes IPv6", passed:
+    await evaluate(`document.querySelector('main').textContent.includes('2001:db8::20/64') && Boolean(document.querySelector('main a[href="' + ${JSON.stringify(interfacePath)} + '"]'))`)});
+  await navigate("/data");
+  await evaluate(`(() => {
+    const form = document.querySelector('form[action="/import-csv/preview"]');
+    const files = new DataTransfer();
+    files.items.add(new File(['id,notes\\n1,Browser CSV preview note\\n'], 'patch.csv', {type:'text/csv'}));
+    form.elements.file.files = files.files;
+  })()`);
+  await submitForm('form[action="/import-csv/preview"]', {type:"host",mode:"patch"});
+  results.push({name: "CSV patch preview shows reviewed changes without writing inventory", passed:
+    await evaluate(`(async () => document.querySelector('main').textContent.includes('Browser CSV preview note') &&
+      (await (await fetch('/api/hosts/1')).json()).notes !== 'Browser CSV preview note')()`)});
+  await viewport(390);
+  results.push({name:"CSV review contains wide changes within the panel on narrow screens", passed:
+    await evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1 && Boolean(document.querySelector('main .table-wrap'))`)});
+  await viewport(1200);
+  await evaluate(`document.querySelector('form[action="/import-csv/apply"] input[name="confirm"]').checked = true`);
+  await submitForm('form[action="/import-csv/apply"]', {});
+  results.push({name: "applying CSV patch preserves omitted host fields", passed:
+    await evaluate(`(async () => {const h=await (await fetch('/api/hosts/1')).json();return h.notes==='Browser CSV preview note' && h.name===${JSON.stringify(originalHostName)} && h.ips.includes('192.0.2.11');})()`)});
+  await navigate("/discovery/deviations");
+  results.push({name: "discovery deviations center renders cached source review", passed:
+    await evaluate(`document.querySelector('h1').textContent.includes('Discovery deviations') && !document.querySelector('main .error')`)});
+  await navigate("/discovery/snmp");
+  results.push({name: "SNMP discovery lists explicitly configured sources", passed:
+    await evaluate(`Boolean(document.querySelector('main a[href="/discovery/snmp/browser"]'))`)});
+  const snmpPortCount = await evaluate(`(async () => (await (await fetch('/api/ports')).json()).length)()`);
+  await navigate("/discovery/snmp/browser");
+  results.push({name: "SNMP observations are escaped and linked to the explicit inventory owner", passed:
+    await evaluate(`!window.injected && !document.querySelector('main script') && document.querySelector('main').textContent.includes('<script>window.injected = true</script>') && Boolean(document.querySelector('main a[href="/hardware/1"]'))`)});
+  await viewport(390);
+  results.push({name: "SNMP long identities and tables stay within the mobile viewport", passed:
+    await evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1 && document.querySelectorAll('main .table-wrap[tabindex="0"]').length === 2`)});
+  await viewport(1200);
+  const lldpPath = await clickPath('main a[href*="/link?neighbor="]');
+  await waitForPage(lldpPath);
+  results.push({name: "LLDP review requires explicit endpoint choices without creating ports on GET", passed:
+    await evaluate(`(async () => document.querySelector('select[name="local"]').value === '' && document.querySelector('select[name="remote"]').value === '' && (await (await fetch('/api/ports')).json()).length === ${snmpPortCount})()`)});
+  await navigate("/backups/1/edit");
+  await submitForm('main form[action="/backups/1"]', {expected_interval_hours:"24"});
+  await navigate("/backups/1/runs");
+  results.push({name: "external backup policy requires reported evidence instead of a documented date", passed:
+    await evaluate(`document.querySelector('main').textContent.includes('No completed backup run has been reported')`)});
+  results.push({name: "external backup report API stores a run and deduplicates retries", passed:
+    await evaluate(`(async () => {
+      const payload=JSON.stringify({run_id:'browser-run-1',status:'success',completed_at:new Date().toISOString(),message:'Browser outcome'});
+      const first=await fetch('/api/backups/1/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:payload});
+      const retry=await fetch('/api/backups/1/runs',{method:'POST',headers:{'Content-Type':'application/json'},body:payload});
+      const runs=await (await fetch('/api/backups/1/runs')).json();
+      return first.status===201 && retry.status===200 && runs.length===1 && runs[0].run_id==='browser-run-1';
+    })()`)});
+  await navigate("/backups/1/runs");
+  results.push({name: "backup run page displays the recorded result", passed:
+    await evaluate(`document.querySelector('main').textContent.includes('Browser outcome') && document.querySelector('main').textContent.includes('success')`)});
   assert(Array.isArray(results) && results.length > 0, "Browser returned no assertions");
   for (const result of results) {
     console.log(`${result.passed ? "PASS" : "FAIL"} ${result.name}${!result.passed && result.details ? `: ${result.details}` : ""}`);
